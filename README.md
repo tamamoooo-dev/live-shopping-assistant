@@ -1,5 +1,7 @@
 # Panda Live Search
 
+**v1.0.0** · License: [MIT](LICENSE) · [Changelog](CHANGELOG.md)
+
 A tiny personal shopping assistant that searches the **live Panda Saudi**
 website every time and shows the current product image, name, price, previous
 price (when on offer) and a link.
