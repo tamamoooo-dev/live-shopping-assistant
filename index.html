@@ -14,6 +14,14 @@
   </header>
 
   <main class="main">
+    <div class="store-row">
+      <label class="store-label" for="store-select">Store</label>
+      <select id="store-select" class="store-select" aria-label="Store">
+        <option value="panda" selected>Panda</option>
+        <option value="amazon">Amazon (Experimental)</option>
+      </select>
+    </div>
+
     <form id="search-form" class="search" role="search" autocomplete="off">
       <input
         id="search-input"
@@ -29,7 +37,7 @@
 
     <div id="loading" class="loading" hidden>
       <span class="spinner" aria-hidden="true"></span>
-      <span>Searching Panda…</span>
+      <span id="loading-text">Searching Panda…</span>
     </div>
 
     <p id="status" class="status" role="status" aria-live="polite"></p>

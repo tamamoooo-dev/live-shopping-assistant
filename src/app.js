@@ -3,13 +3,23 @@
 
 import { createMemory, adaptiveSearch } from './core.js';
 import { pandaProvider } from './providers/panda.js';
+import { amazonProvider } from './providers/amazon.js';
 
 const memory = createMemory('app');
+
+// Available stores. The dropdown selects which provider id the connector is
+// asked for; everything else (Core, UI flow) is identical.
+const PROVIDERS = {
+  panda: pandaProvider,
+  amazon: amazonProvider,
+};
 
 const form = document.getElementById('search-form');
 const input = document.getElementById('search-input');
 const button = document.getElementById('search-button');
+const storeSelect = document.getElementById('store-select');
 const loading = document.getElementById('loading');
+const loadingText = document.getElementById('loading-text');
 const status = document.getElementById('status');
 const results = document.getElementById('results');
 
@@ -27,20 +37,31 @@ async function runSearch(query) {
     return;
   }
 
+  const providerId = (storeSelect && storeSelect.value) || 'panda';
+  const provider = PROVIDERS[providerId] || pandaProvider;
+
   const token = {};
   inFlight = token;
 
+  if (loadingText) loadingText.textContent = `Searching ${provider.label}…`;
   setBusy(true);
   status.textContent = '';
   results.innerHTML = '';
 
   try {
-    const { results: items } = await adaptiveSearch(pandaProvider, q, memory);
+    const { results: items } = await adaptiveSearch(provider, q, memory);
     if (inFlight !== token) return; // a newer search took over
     render(items, q);
   } catch (err) {
     if (inFlight !== token) return;
-    showError(err);
+    if (providerId === 'amazon') {
+      // Amazon is experimental: a bot challenge or empty result is expected
+      // occasionally — show a friendly note rather than an error.
+      status.textContent = 'Amazon temporarily unavailable. Please try again, or switch to Panda.';
+      console.warn('Amazon search failed:', err && err.details ? err.details : err);
+    } else {
+      showError(err);
+    }
   } finally {
     if (inFlight === token) setBusy(false);
   }
