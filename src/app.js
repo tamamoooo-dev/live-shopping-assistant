@@ -4,6 +4,7 @@
 import { createMemory, adaptiveSearch } from './core.js';
 import { pandaProvider } from './providers/panda.js';
 import { amazonProvider } from './providers/amazon.js';
+import { tamimiProvider } from './providers/tamimi.js';
 
 const memory = createMemory('app');
 
@@ -12,6 +13,7 @@ const memory = createMemory('app');
 const PROVIDERS = {
   panda: pandaProvider,
   amazon: amazonProvider,
+  tamimi: tamimiProvider,
 };
 
 const form = document.getElementById('search-form');
@@ -60,7 +62,7 @@ async function runSearch(query) {
       status.textContent = 'Amazon temporarily unavailable. Please try again, or switch to Panda.';
       console.warn('Amazon search failed:', err && err.details ? err.details : err);
     } else {
-      showError(err);
+      showError(err, provider.label);
     }
   } finally {
     if (inFlight === token) setBusy(false);
@@ -73,9 +75,9 @@ function setBusy(busy) {
   input.setAttribute('aria-busy', String(busy));
 }
 
-function showError(err) {
+function showError(err, label = 'the store') {
   status.textContent =
-    'Could not reach Panda right now. Please check your connection and try again.';
+    `Could not reach ${label} right now. Please check your connection and try again.`;
   if (err && err.details) console.warn('Search failed:', err.details);
   else console.warn('Search failed:', err);
 }
