@@ -159,13 +159,11 @@ async function runSingle(query) {
       status.textContent = `No results for “${q}” in ${store.label}.`;
       return;
     }
-    // Smart ranking: reorder by relevance to the query, then show the top few.
-    const items = rankItems(found, q).slice(0, DEFAULT_LIMIT);
-    status.textContent =
-      found.length > items.length
-        ? `Top ${items.length} of ${found.length} for “${q}” in ${store.label}`
-        : `${items.length} result${items.length > 1 ? 's' : ''} for “${q}” in ${store.label}`;
-    results.appendChild(grid(items));
+    // Smart ranking: reorder by relevance; the block shows the top few and a
+    // "Show all" toggle for the rest (already fetched — no new search).
+    const ranked = rankItems(found, q);
+    status.textContent = `${ranked.length} result${ranked.length > 1 ? 's' : ''} for “${q}” in ${store.label}`;
+    results.appendChild(resultsBlock(ranked));
   } catch (err) {
     if (inFlight !== token) return;
     status.textContent = BEST_EFFORT.has(store.id)
@@ -210,10 +208,10 @@ async function runMulti(query) {
       try {
         const { results: found } = await adaptiveSearch(s.provider, q, memory);
         if (inFlight !== token) return;
-        // Smart ranking: top few most-relevant per store, grouped.
-        const items = rankItems(found, q).slice(0, DEFAULT_LIMIT);
-        total += items.length;
-        fillSection(sections.get(s.id), items, found.length);
+        // Smart ranking per store; the section shows the top few + "Show all".
+        const ranked = rankItems(found, q);
+        total += ranked.length;
+        fillSection(sections.get(s.id), ranked);
       } catch (err) {
         if (inFlight !== token) return;
         failSection(sections.get(s.id), s);
@@ -231,11 +229,43 @@ async function runMulti(query) {
 }
 
 // --- rendering -----------------------------------------------------------
-function grid(items) {
+// Render a ranked result list: the top `limit` up front, plus a "Show all"
+// toggle that reveals the rest. Everything is already fetched, so expanding
+// never triggers a new search — it just renders more of the same list.
+function resultsBlock(items, limit = DEFAULT_LIMIT) {
+  const wrap = document.createElement('div');
   const g = document.createElement('div');
   g.className = 'results-grid';
-  for (const item of items) g.appendChild(card(item));
-  return g;
+  wrap.appendChild(g);
+
+  const render = (n) => {
+    g.innerHTML = '';
+    for (const item of items.slice(0, n)) g.appendChild(card(item));
+  };
+
+  if (items.length <= limit) {
+    render(items.length);
+    return wrap;
+  }
+
+  let expanded = false;
+  render(limit);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'show-all';
+  const sync = () => {
+    btn.textContent = expanded ? 'Show fewer' : `Show all ${items.length}`;
+    btn.setAttribute('aria-expanded', String(expanded));
+  };
+  btn.addEventListener('click', () => {
+    expanded = !expanded;
+    render(expanded ? items.length : limit);
+    sync();
+  });
+  sync();
+  wrap.appendChild(btn);
+  return wrap;
 }
 
 function storeSection(store) {
@@ -266,9 +296,9 @@ function storeSection(store) {
   return { el, body, count };
 }
 
-function fillSection(sec, items, foundCount = items.length) {
-  // Badge shows how many we display; a trailing "+" means more were found.
-  sec.count.textContent = foundCount > items.length ? `${items.length}+` : String(items.length);
+function fillSection(sec, items) {
+  // Badge shows the full count found; the body shows the top few + "Show all".
+  sec.count.textContent = String(items.length);
   sec.body.innerHTML = '';
   if (!items.length) {
     const note = document.createElement('div');
@@ -277,7 +307,7 @@ function fillSection(sec, items, foundCount = items.length) {
     sec.body.appendChild(note);
     return;
   }
-  sec.body.appendChild(grid(items));
+  sec.body.appendChild(resultsBlock(items));
 }
 
 function failSection(sec, store) {
