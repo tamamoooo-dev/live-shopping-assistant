@@ -4,11 +4,13 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-01 · **Phase just completed:** Brochure Engine
-> **M1** — `PdfIndexCollector` for Othaim, **deployed & verified in production**
-> at `https://brochure-engine.tamamoooo.workers.dev` (see §11, esp. §11.E)
-> · **Next phase:** M2 (`AggregatorCollector`, one aggregator) — see §11.G. The
-> Brochure Engine Discovery report is §10; the M1 implementation record is §11.
+> **Last updated:** 2026-07-02 · **Phase just completed:** Brochure Engine
+> **M2** — the reusable `AggregatorCollector` (OffersInMe adapter) covering 7
+> more stores for Riyadh, **deployed & verified in production** at
+> `https://brochure-engine.tamamoooo.workers.dev` (see §12). M1
+> (`PdfIndexCollector`, Othaim) remains live and intact (§11). · **Next phase:**
+> M3 (`StoreSessionCollector`, feeds Pillar 3) — see §12.G / ARCHITECTURE §9.
+> The Brochure Engine Discovery report is §10; M1 record is §11; M2 record is §12.
 >
 > **Project vision (context for the next phases):** Souq is becoming a Saudi
 > **shopping assistant**, not just a live search engine. Three pillars:
@@ -78,7 +80,7 @@ Key architectural facts:
 | Role | GitHub | Local path | HEAD at handoff |
 |---|---|---|---|
 | Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | `cbf6389` Show all toggle |
-| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `0baa0b5` Danube retry |
+| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `d227889` Brochure Engine M2 (AggregatorCollector) |
 
 > Note: the connector's **local folder** is `serverless-connector` but its GitHub
 > **repo name** is `shopping-connector`. Both `origin` remotes are under the
@@ -238,14 +240,16 @@ wired into the UI (dropdown + checkbox chips).
 
 ## 9. Remaining TODOs (priority order)
 
-1. **Brochure Engine — M1 is DONE & LIVE (§11).** `PdfIndexCollector` for Othaim
-   (Central/Riyadh) is built, **deployed, and verified in production** at
-   `https://brochure-engine.tamamoooo.workers.dev` (detect → download → dedupe →
-   store → index → expose). It lives **inside the connector repo** as a second,
-   self-contained Worker under `brochure-engine/` (decision: no third repo). The
-   **next step is M2** — the `AggregatorCollector` (one aggregator, covers the
-   other 8 stores for Riyadh). See **§11.G** for the M2 plan; deployment details
-   and production verification are in **§11.E**.
+1. **Brochure Engine — M1 & M2 are DONE & LIVE (§11, §12).** M1
+   `PdfIndexCollector` (Othaim) and M2 `AggregatorCollector` (OffersInMe, 7 more
+   stores) are built, **deployed, and verified in production** at
+   `https://brochure-engine.tamamoooo.workers.dev`. Eight brochures are held
+   (Othaim PDF + Hyper Panda / Carrefour / LuLu / Danube / Tamimi / Manuel /
+   Nesto image-sets for Central/Riyadh). It lives **inside the connector repo**
+   as a second, self-contained Worker under `brochure-engine/`. The **next step
+   is M3** — the `StoreSessionCollector` reusing the search connector's sessions
+   for structured promos (feeds Pillar 3, OCR-free). See **§12.G** / ARCHITECTURE
+   §9; M2 deployment + verification are in **§12**.
 2. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
    account with PA-API access) so `pa-api` becomes the active path and results stop
    depending on the fragile HTML scraper — or formally accept Amazon as best-effort.
@@ -508,6 +512,143 @@ Per ARCHITECTURE.md §7.2 / §9. One new collector + one adapter unlocks the oth
 Deferred beyond M2 (unchanged from §9/§10.E): `StoreSessionCollector` (M3, feeds
 Pillar 3, OCR-free), Farm as a second `PdfIndexCollector` config, R2/long-term
 storage, and PDF→page-image rendering for PDF sources.
+
+---
+
+## 12. Brochure Engine — M2 Implementation (AggregatorCollector, OffersInMe)
+
+> **Status:** M2 **deployed & verified in production** (2026-07-02) at
+> `https://brochure-engine.tamamoooo.workers.dev`, against the live aggregator.
+> One reusable `AggregatorCollector` + one adapter covers 7 additional stores for
+> Central/Riyadh. Source of truth for the design is `brochure-engine/ARCHITECTURE.md`
+> §7.2/§9; this section records what was actually built and how it refines the plan.
+
+### 12.A What M2 delivers
+The second reusable collector, proving the aggregator pattern end-to-end:
+**detect → download page images → dedupe → store → index → expose** for 7 stores
+that have no reliable official web brochure, via a **fully generic
+`AggregatorCollector`** driven by an **adapter** (one per aggregator) and
+**per-store region config**. Only M2 was built — **no** OCR, Price Intelligence,
+`StoreSessionCollector`, or frontend. M1 (Othaim PDF) was not modified.
+
+**Stores now covered (all Central/Riyadh):** Othaim (M1, official PDF) + **Hyper
+Panda, Carrefour, LuLu, Danube, Tamimi, Manuel, Nesto** (M2, aggregator images).
+= **8 providers held in production.**
+
+### 12.B Aggregator chosen: OffersInMe (not the Discovery's ClicFlyer)
+ARCHITECTURE §12.3 *recommended* ClicFlyer "confirm before building." On
+inspection **ClicFlyer's web frontend returns HTTP 503 to every datacenter
+request** (WAF-blocks non-residential IPs) — unusable from a Cloudflare Worker.
+**OffersInMe** (`ksa.offersinme.com`) server-renders clean, fetchable pages for
+all target stores and was reachable, so it is the M2 adapter. The collector is
+adapter-driven precisely so this is a **one-line swap** (§10.F risk #1: "don't
+hard-depend on one aggregator"); adding ClicFlyer/Tiendeo later = a new adapter,
+zero collector change.
+
+**OffersInMe shape (verified live):** store page
+`ksa.offersinme.com/hypermarkets/<slug>-offers` → links to
+`/leaflet/<slug>-<leafletId>`; each leaflet page carries `Valid from/to` dates and
+page images at `offersin.me/leaflet/Y/M/D/<leafletId>/<leafletId>-<n>-<slug>.<ext>`
+(`<ext>` = webp or jpeg; `<n>` = 0-based page index).
+
+### 12.C New/changed files (all under `brochure-engine/`)
+```
+src/collectors/aggregator.js          NEW  generic AggregatorCollector factory (§7.2)
+src/collectors/adapters/offersinme.js NEW  the OffersInMe adapter (aggregator-generic)
+src/providers/{hyperpanda,carrefour,lulu,danube,tamimi,manuel,nesto}.js  NEW  PURE CONFIG
+src/pipeline.js                       EDIT additive image-set path (PDF path byte-unchanged)
+src/engine.js                         EDIT + pickStalestStore() for the rotating cron
+src/index.js                          EDIT register 7 providers; rotating scheduled()
+dev.mjs                               EDIT register providers; selftest now M1 + M2
+wrangler.toml                         EDIT cron cadence weekly→daily (see §12.E)
+```
+- **Discipline preserved:** store knowledge lives ONLY in the 7 provider files
+  (each ~15 lines: OffersInMe slug + region matcher). The collector is
+  aggregator-agnostic; the adapter is store-agnostic; Core/pipeline/storage never
+  learn a store name. Adding an aggregator store = one provider file + one
+  registry line (§10.D.1).
+- **Region map (§5.3) is per-provider and non-uniform, by necessity:** LuLu tags
+  leaflets `central-province` (provider sets `include:/central-province/`); Manuel
+  publishes per-city `riyadh-…`/`jeddah-…` (`include:/riyadh/`); Hyper Panda /
+  Carrefour / Danube / Tamimi are national (default other-region `exclude`); Nesto
+  mixes national + Dammam (default `exclude` drops the Eastern flyers). This is
+  exactly the "region bundling not uniform" risk (§10.F) that the region map answers.
+
+### 12.D Architectural refinements discovered during implementation
+1. **Image-set pipeline path (additive).** A collector may now emit
+   `{ doc, pages:[{index,bytes,contentType,url}] }` (images) as well as the M1
+   `{ doc, bytes, contentType }` (PDF). The pipeline stores each page as
+   `…/<edition>/pageNN.<ext>`, sets `doc.pages=[{index,imageUrl}]`, and computes the
+   **checksum over the page bytes concatenated in page order** (§4/§7.2). The PDF
+   branch is byte-for-byte unchanged (M1 intact). Realizes §5.1 "original.pdf … or
+   /pageNN.jpg for image sets."
+2. **`pages[]` live in `meta.json`, not the D1 row.** The `brochures` table has no
+   pages column (M1 schema, unchanged — no migration). So `GET /brochures` returns
+   `pages:[]` (the row projection), and the populated `pages[]` (with object keys)
+   is in the stored **`meta.json`**: fetch `GET /asset/brochures/<storageKey>/meta.json`,
+   then stream any page via `GET /asset/<imageUrl>`. Verified in production.
+3. **One brochure per store+region+edition (§4).** A store may run several
+   concurrent leaflets; the collector selects the single **most current** one
+   (validity window contains today → else latest `validTo` → else newest id), which
+   keeps the contract's one-per-store+region identity and avoids `id` collisions.
+4. **Panda ≡ Hyper Panda on the aggregator.** OffersInMe merges Panda into a single
+   `hyper-panda-offers` listing (plain `panda-offers` redirects away), and Discovery
+   §10.B records they share promos. Modeled as **one** `hyperpanda` provider (also
+   required by the global `ux_checksum` dedupe: two providers ingesting identical
+   bytes could not both be stored). Panda is covered *through* Hyper Panda.
+5. **Bounded work per run:** collector caps `maxCandidates=4` leaflet fetches +
+   `maxPages=40` image downloads (≈45 subrequests/store) — gentle (§10.F legal
+   posture) and within the Worker subrequest budget (see §12.E).
+
+### 12.E Cron redesign — rotating one-store-per-fire (Free-plan subrequest limit)
+The account is on the **Workers Free plan (50 subrequests / invocation)**.
+M1's weekly **all-stores** cron worked for one PDF store (~2 subrequests) but
+**M2 breaks it**: an image-set store pulls ~45 subrequests, so ingesting all 8 at
+once overflows the budget (verified: an all-stores `POST /ingest` returns
+`Too many subrequests` for every store after the first ~1.5). This is a real bug
+M2 introduces, so the scheduler was fixed:
+- **Cron is now daily** (`0 6 * * *`) and refreshes **one store per fire** — the
+  **stalest** (or not-yet-held) one, chosen by `pickStalestStore()` (store-agnostic;
+  reasons over registry keys + `detected_at`). With 8 stores each refreshes ~weekly,
+  matching brochure cadence; dedupe makes re-fetches free of extra writes.
+- **On-demand refresh:** `POST /ingest?store=<id>` (single store) is the reliable
+  path and fits the budget. `POST /ingest` (all stores) is best-effort and only
+  completes on a **paid plan** (1000-subrequest limit) — noted, not required.
+
+### 12.F Production verification (all ✅, 2026-07-02)
+- **Deployed:** `npx wrangler deploy` (D1 + KV bindings unchanged; no schema
+  migration). Health `GET /` → 200, 8 providers listed.
+- **All 7 aggregator stores ingested** via `POST /ingest?store=<id>`: each
+  `detected:1, new:1, failed:0`. `GET /brochures` → **8 current brochures held**
+  (7 `sourceType:images` + Othaim `pdf`), each with a distinct `sha256:` checksum.
+- **Dedupe:** re-ingesting LuLu → `deduped:1, new:0` (checksum gate + `ux_checksum`).
+- **Expose:** an image brochure's `meta.json` lists 40 page keys; `GET /asset/…/page00.webp`
+  streams `image/webp` (168 KB).
+- **M1 intact:** Othaim still `sourceType:pdf`, edition `2026-W27`, PDF streams
+  929,931 bytes `%PDF-` with the **same checksum `3ec0bce0…`** recorded in §11.E.
+- **No search-connector regression:** `GET /` ok (6 providers), `panda` "milk"
+  search returns 30 live results.
+- **Local proof:** `node dev.mjs selftest` runs M1 (Othaim PDF) **and** M2 (LuLu
+  images) end-to-end (dedupe, read, page-asset). `node dev.mjs selftest <store>`
+  targets any aggregator store.
+
+### 12.G Notes, caveats & M3 roadmap
+- **INGEST_SECRET was rotated this session** to run the production verification
+  ingests (the prior value was unknown/uncommitted). It remains a Worker secret
+  (not committed); rotate again with `npx wrangler secret put INGEST_SECRET`.
+- **Aggregator data freshness (expected, not a bug):** as of 2026-07-02 OffersInMe's
+  freshest Central flyers pre-date today (marked internally by `validTo`); **Danube
+  and Manuel lag notably** (~2025-09 on the aggregator). The engine faithfully stores
+  the **latest available** flyer and records `validFrom/validTo`, so staleness is
+  visible. A **freshness monitor** (ARCHITECTURE §11) — alert when a store hasn't
+  refreshed in N weeks — is the natural follow-up.
+- **M3 — `StoreSessionCollector`** (next, ARCHITECTURE §7.3/§9): reuse the search
+  connector's Panda/LuLu/Danube/Tamimi sessions for **structured** promo items
+  (`sourceType:"api"`, OCR-free) → direct Pillar 3 input. Requires extracting the
+  shared fetch/session helpers into a package both repos consume (§12.5 decision).
+- **Also deferred (unchanged):** Farm as a second `PdfIndexCollector` config, R2 /
+  long-term storage, PDF→page-image rendering, and a second aggregator adapter
+  (e.g. Tiendeo) for cross-checking freshness.
 
 ---
 
