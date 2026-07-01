@@ -5,9 +5,9 @@
 > current state. Keep it updated at the end of each phase.
 >
 > **Last updated:** 2026-07-01 · **Phase just completed:** Brochure Engine
-> **Discovery** (10-retailer investigation, no code — see §10) · **Next phase:**
-> Brochure Engine implementation, starting with the `PdfIndexCollector`
-> (Othaim + Farm) — see §10.E roadmap.
+> **M1** — `PdfIndexCollector` for Othaim, built + verified end-to-end (see §11)
+> · **Next phase:** M2 (`AggregatorCollector`, one aggregator) — see §11.G. The
+> Brochure Engine Discovery report is §10; the M1 implementation record is §11.
 >
 > **Project vision (context for the next phases):** Souq is becoming a Saudi
 > **shopping assistant**, not just a live search engine. Three pillars:
@@ -82,6 +82,12 @@ Key architectural facts:
 > Note: the connector's **local folder** is `serverless-connector` but its GitHub
 > **repo name** is `shopping-connector`. Both `origin` remotes are under the
 > `tamamoooo-dev` org.
+>
+> **Brochure Engine lives in the connector repo** (decision, §11.E): it is a
+> **second, self-contained Worker** at `serverless-connector/brochure-engine/`
+> with its own `wrangler.toml`, D1/KV bindings and weekly Cron. The stateless
+> search Worker at the repo root is **untouched** — the two share a repo, not a
+> deployment or state (this is ARCHITECTURE.md §12.2's in-repo alternative).
 
 ---
 
@@ -231,15 +237,13 @@ wired into the UI (dropdown + checkbox chips).
 
 ## 9. Remaining TODOs (priority order)
 
-1. **Brochure Engine (next phase — start here).** Discovery is **done** — read
-   **§10** for the full report. Scope is now defined. **Start with the
-   `PdfIndexCollector` for Othaim + Farm** (Central/Riyadh), then the
-   `AggregatorCollector`. Do **not** build one collector per store. Note the
-   Brochure Engine is **stateful** (must remember which week it already has +
-   keep history for price-intelligence), so it is a **separate subsystem**, not
-   part of the stateless search connector — see §10.D. The store-agnostic-core /
-   normalized-contract discipline still applies; the thin-*stateless*-connector
-   rule applies to **search only**, not to brochures.
+1. **Brochure Engine — M1 is DONE (§11).** `PdfIndexCollector` for Othaim
+   (Central/Riyadh) is built and verified end-to-end (detect → download → dedupe
+   → store → index → expose). It lives **inside the connector repo** as a second,
+   self-contained Worker under `brochure-engine/` (decision: no third repo). The
+   **next step is M2** — the `AggregatorCollector` (one aggregator, covers the
+   other 8 stores for Riyadh). See **§11.G** for the M2 plan. **Deployment of M1
+   is ready but not yet run** (needs explicit authorization) — see §11.E.
 2. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
    account with PA-API access) so `pa-api` becomes the active path and results stop
    depending on the fragile HTML scraper — or formally accept Amazon as best-effort.
@@ -351,6 +355,123 @@ Reuse the proven **Provider → Strategy → normalized-contract** discipline, a
 - **Storage growth & dedupe:** checksum-dedupe from day one.
 - **Legal posture:** personal tool over public endpoints — keep snapshots
   private, poll gently (weekly Cron, not aggressive).
+
+---
+
+## 11. Brochure Engine — M1 Implementation (PdfIndexCollector, Othaim)
+
+> **Status:** M1 **built and verified end-to-end** (2026-07-01) against the live
+> Othaim site. Lives in the connector repo; deployment wired but not yet run.
+> Source of truth for the design is `brochure-engine/ARCHITECTURE.md`; this
+> section records what was actually implemented and how it deviates from/refines
+> that design.
+
+### 11.A What M1 delivers
+The reference vertical slice proving the architecture: **detect → download →
+dedupe → store → index → expose** for Othaim's Central (= Riyadh) weekly brochure,
+via a **fully generic `PdfIndexCollector`**. Only M1 was built — **no** OCR, price
+intelligence, frontend, `AggregatorCollector`, or `StoreSessionCollector`.
+
+### 11.B Layout (all under `serverless-connector/brochure-engine/`)
+```
+src/
+  contract.js              normalized BrochureDoc + edition/id/row helpers (§4/§5.2)
+  engine.js                Core: CORS, routing, best-first collector dispatch, ingestAll, cron (§3/§6/§8)
+  pipeline.js              checksum → dedupe → store → index, idempotent (§6.1)
+  collectors/pdfIndex.js   the GENERIC PdfIndexCollector factory (§7.1)
+  providers/othaim.js      PURE CONFIG: region map + Othaim-specific resolve (§5.3)
+  storage/objectStore.js   ObjectStore interface: R2 impl + KV impl (§5)
+  storage/metadataStore.js MetadataStore interface: D1 impl (§5.2)
+  storage/local.js         fs + in-memory impls (dev/verify only)
+  index.js                 Worker entry: registry + binding wiring + scheduled()
+schema.sql                 D1 schema (§5.2) with ux_checksum unique index
+dev.mjs                    local harness; `node dev.mjs selftest` runs the full E2E proof
+wrangler.toml              second Worker: D1 + KV bindings + weekly cron
+```
+- **Discipline preserved exactly:** store-specific knowledge lives ONLY in
+  `providers/othaim.js`. Core, collector, pipeline and storage never learn a
+  store name. Provider→Strategy→normalized-contract mirrors the search connector.
+- **Generic collector, Farm-ready:** adding Farm = a new `providers/farm.js`
+  (its own `resolve`) + one registry line. **Zero** collector changes (§10.D.1).
+
+### 11.C Verified behaviour (`node dev.mjs selftest`)
+Run 1: detects `central-region-offers-corner`, downloads a real 908 KB `%PDF-`,
+stores + indexes it as edition `2026-W27`. Run 2 (same week): **`deduped: 1,
+new: 0`** — the checksum gate + `ux_checksum` unique index prevent a re-store.
+`GET /brochures?store=othaim&region=central` returns the BrochureDoc;
+`GET /asset/brochures/othaim/central/2026-W27/original.pdf` streams the PDF.
+
+### 11.D Architectural refinements discovered during implementation
+1. **Othaim's index moved.** The Discovery URL `…/othaim-promotions/?pid=18` is
+   gone (404). The promotions index is now **`othaimmarkets.com/offers`**, a
+   **Next.js App-Router** page backed by **Contentful**. The region→brochure map
+   is delivered in the page's **RSC "flight" payload**; the weekly PDF is at
+   `/api/pdfOffers/<brochureId>-<version>.pdf`. **Both** the id and version
+   rotate weekly. Othaim's `resolve` therefore, every run: decodes the flight →
+   finds the region by its **stable human slug** (`central-region-offers-corner`)
+   → reads the current brochure id → locates the full weekly PDF filename. This
+   is the §10.F "never hardcode the PDF URL" rule, realized. The old
+   `pid`/`(\d+)\.pdf` regex from the design is obsolete; the slug is the durable
+   key. (This churn is exactly why the collector resolves fresh each run.)
+2. **Storage backend for M1 = D1 + KV, not R2.** R2 is **not enabled** on the
+   Cloudflare account (`code: 10042`, dashboard action required) and the OAuth
+   token lacks R2 scope. Per the storage-interface design (§5) and the
+   architecture's own KV fallback (§5.2/§12), M1 uses **D1 for metadata + KV for
+   bytes**. A ~1 MB brochure fits KV's 25 MiB limit comfortably. **Swapping to R2
+   later is a one-line binding change + swapping `createKvObjectStore` for
+   `createR2ObjectStore`** in `index.js` — nothing upstream changes. R2 /
+   long-term storage is deferred to a later milestone (per direction).
+3. **Repo placement = inside the connector repo** (no third repo), as a second
+   self-contained Worker. Search Worker at root is untouched.
+4. **Transient-retry hardening.** Othaim's origin occasionally returns a
+   transient 502 (observed during verification) — same behaviour the connector
+   already hardens for Danube (§5). The collector's fetch now retries **once** on
+   5xx/429/network with a short backoff; 4xx (except 429) is final.
+
+### 11.E Deployment (wired, not yet run — needs authorization)
+Resources already **created** on Cloudflare: D1 db `brochure-engine`
+(`50bbe1ea-…`) and KV namespace `BROCHURES_KV` (`38b06392…`), both pasted into
+`wrangler.toml`. Remaining steps (run from `brochure-engine/`):
+```
+npx wrangler d1 execute brochure-engine --remote --file=./schema.sql   # apply schema
+npx wrangler secret put INGEST_SECRET                                    # guard POST /ingest
+npx wrangler deploy                                                      # deploy Worker + weekly cron
+# smoke test:
+curl https://brochure-engine.<subdomain>.workers.dev/
+curl -X POST -H "X-Ingest-Secret: <secret>" "https://…/ingest?store=othaim"
+curl "https://…/brochures?store=othaim&region=central"
+```
+Local dev needs no cloud: `node dev.mjs` (server) or `node dev.mjs selftest` (E2E).
+
+### 11.F API surface implemented (§8)
+- `GET /` — health + `held` (current store/region/edition list).
+- `GET /brochures?store=&region=` — current BrochureDoc(s); omit `store` → all current.
+- `GET /brochures/history?store=&region=` — prior editions (Pillar 3 substrate).
+- `GET /asset/<key>` — streams stored PDF/meta bytes.
+- `POST /ingest?store=` — guarded by `X-Ingest-Secret`; cron calls `ingestAll` directly.
+
+### 11.G M2 roadmap — `AggregatorCollector` (next)
+Per ARCHITECTURE.md §7.2 / §9. One new collector + one adapter unlocks the other
+8 stores for Riyadh in one unit of code.
+1. **Add `collectors/aggregator.js`** — a second collector factory emitting the
+   same `Candidate[]` (`{ doc, bytes, contentType }`), `sourceType: "images"`,
+   checksum over concatenated page-image bytes. Adapter interface:
+   `{ name, listBrochures(storeKey, city) → { pages:[imageUrl], validFrom, validTo, sourceUrl } }`.
+2. **Pick one aggregator** — recommend **ClicFlyer** (broadest KSA coverage,
+   Discovery §10.B); confirm before building. One adapter first.
+3. **Wire as a fallback, never sole** — for stores that also have an official
+   collector, the aggregator sits *after* it in the provider's `strategies`
+   (best-first dispatch already supports this: `collectBestFirst` in engine.js
+   tries the next collector only if the prior yields nothing). New aggregator-only
+   stores (e.g. Manuel) get a provider with `strategies: [aggregator]`.
+4. **`pages[]` now populated** — the contract already carries `pages:[{index,
+   imageUrl}]`; store each page image in the object store under the edition prefix.
+5. **No collector/pipeline/Core changes needed** beyond the new collector +
+   provider configs — that's the payoff of the M1 abstractions.
+
+Deferred beyond M2 (unchanged from §9/§10.E): `StoreSessionCollector` (M3, feeds
+Pillar 3, OCR-free), Farm as a second `PdfIndexCollector` config, R2/long-term
+storage, and PDF→page-image rendering for PDF sources.
 
 ---
 
