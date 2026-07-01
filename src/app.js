@@ -1,5 +1,9 @@
-// app.js — wires the UI to the Core + Panda provider.
-// Pure DOM, no framework. Keep it small.
+// app.js — wires the UI to the Core + providers.
+//
+// Two search modes, both built on the SAME Core (adaptiveSearch) and the SAME
+// providers and normalized result contract — nothing below this file changes:
+//   • All stores  — search every selected store in parallel, grouped by store.
+//   • Single store — search one store (the dropdown), flat grid.
 
 import { createMemory, adaptiveSearch } from './core.js';
 import { pandaProvider } from './providers/panda.js';
@@ -11,76 +15,82 @@ import { noonProvider } from './providers/noon.js';
 
 const memory = createMemory('app');
 
-// Available stores. The dropdown selects which provider id the connector is
-// asked for; everything else (Core, UI flow) is identical.
-const PROVIDERS = {
-  panda: pandaProvider,
-  amazon: amazonProvider,
-  tamimi: tamimiProvider,
-  danube: danubeProvider,
-  lulu: luluProvider,
-  noon: noonProvider,
-};
+// Ordered store list — drives the dropdown, the chips, and grouped results.
+const STORES = [
+  { id: 'panda', label: 'Panda', color: '#16a34a', provider: pandaProvider },
+  { id: 'amazon', label: 'Amazon', color: '#f59e0b', provider: amazonProvider },
+  { id: 'tamimi', label: 'Tamimi', color: '#0ea5e9', provider: tamimiProvider },
+  { id: 'danube', label: 'Danube', color: '#ef4444', provider: danubeProvider },
+  { id: 'lulu', label: 'Lulu', color: '#6366f1', provider: luluProvider },
+  { id: 'noon', label: 'Noon', color: '#eab308', provider: noonProvider },
+];
+const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
+// Best-effort stores get a friendlier "temporarily unavailable" message.
+const BEST_EFFORT = new Set(['amazon', 'noon']);
 
-const form = document.getElementById('search-form');
-const input = document.getElementById('search-input');
-const button = document.getElementById('search-button');
-const storeSelect = document.getElementById('store-select');
-const loading = document.getElementById('loading');
-const loadingText = document.getElementById('loading-text');
-const status = document.getElementById('status');
-const results = document.getElementById('results');
+const $ = (id) => document.getElementById(id);
+const form = $('search-form');
+const input = $('search-input');
+const button = $('search-button');
+const loading = $('loading');
+const loadingText = $('loading-text');
+const status = $('status');
+const results = $('results');
+const empty = $('empty');
+const modeAllBtn = $('mode-all');
+const modeSingleBtn = $('mode-single');
+const singleControls = $('single-controls');
+const multiControls = $('multi-controls');
+const storeSelect = $('store-select');
+const chkAll = $('chk-all');
+const storeChks = [...document.querySelectorAll('.store-chk')];
 
-let inFlight = null; // lets a newer search cancel an older one's rendering
+let mode = 'all'; // 'all' | 'single'
+let inFlight = null; // token so a newer search cancels an older one's rendering
 
+// --- mode toggle ---------------------------------------------------------
+function setMode(next) {
+  mode = next;
+  const isAll = next === 'all';
+  modeAllBtn.classList.toggle('is-active', isAll);
+  modeSingleBtn.classList.toggle('is-active', !isAll);
+  modeAllBtn.setAttribute('aria-selected', String(isAll));
+  modeSingleBtn.setAttribute('aria-selected', String(!isAll));
+  multiControls.hidden = !isAll;
+  singleControls.hidden = isAll;
+}
+modeAllBtn.addEventListener('click', () => setMode('all'));
+modeSingleBtn.addEventListener('click', () => setMode('single'));
+
+// --- checkbox chips ------------------------------------------------------
+function syncChip(cb) {
+  const chip = cb.closest('.chip');
+  if (chip) chip.classList.toggle('is-checked', cb.checked);
+}
+chkAll.addEventListener('change', () => {
+  storeChks.forEach((c) => {
+    c.checked = chkAll.checked;
+    syncChip(c);
+  });
+});
+storeChks.forEach((c) =>
+  c.addEventListener('change', () => {
+    chkAll.checked = storeChks.every((x) => x.checked);
+    syncChip(c);
+    syncChip(chkAll);
+  }),
+);
+[chkAll, ...storeChks].forEach(syncChip);
+
+function selectedStores() {
+  return STORES.filter((s) => storeChks.find((c) => c.value === s.id)?.checked);
+}
+
+// --- dispatch ------------------------------------------------------------
 form.addEventListener('submit', (e) => {
   e.preventDefault();
-  runSearch(input.value);
+  (mode === 'all' ? runMulti : runSingle)(input.value);
 });
-
-async function runSearch(query) {
-  const q = (query || '').trim();
-  if (!q) {
-    input.focus();
-    return;
-  }
-
-  const providerId = (storeSelect && storeSelect.value) || 'panda';
-  const provider = PROVIDERS[providerId];
-  // If the selected store isn't known to this (possibly cached) script, say so
-  // instead of silently searching a different store.
-  if (!provider) {
-    results.innerHTML = '';
-    status.textContent = 'This store isn’t available yet — please reload the page.';
-    return;
-  }
-
-  const token = {};
-  inFlight = token;
-
-  if (loadingText) loadingText.textContent = `Searching ${provider.label}…`;
-  setBusy(true);
-  status.textContent = '';
-  results.innerHTML = '';
-
-  try {
-    const { results: items } = await adaptiveSearch(provider, q, memory);
-    if (inFlight !== token) return; // a newer search took over
-    render(items, q);
-  } catch (err) {
-    if (inFlight !== token) return;
-    if (providerId === 'amazon') {
-      // Amazon is experimental: a bot challenge or empty result is expected
-      // occasionally — show a friendly note rather than an error.
-      status.textContent = 'Amazon temporarily unavailable. Please try again, or switch to Panda.';
-      console.warn('Amazon search failed:', err && err.details ? err.details : err);
-    } else {
-      showError(err, provider.label);
-    }
-  } finally {
-    if (inFlight === token) setBusy(false);
-  }
-}
 
 function setBusy(busy) {
   loading.hidden = !busy;
@@ -88,22 +98,149 @@ function setBusy(busy) {
   input.setAttribute('aria-busy', String(busy));
 }
 
-function showError(err, label = 'the store') {
-  status.textContent =
-    `Could not reach ${label} right now. Please check your connection and try again.`;
-  if (err && err.details) console.warn('Search failed:', err.details);
-  else console.warn('Search failed:', err);
+// --- single-store mode ---------------------------------------------------
+async function runSingle(query) {
+  const q = (query || '').trim();
+  if (!q) return input.focus();
+  const store = STORE_BY_ID[storeSelect.value] || STORES[0];
+
+  const token = {};
+  inFlight = token;
+  empty.hidden = true;
+  loadingText.textContent = `Searching ${store.label}…`;
+  setBusy(true);
+  status.textContent = '';
+  results.innerHTML = '';
+
+  try {
+    const { results: items } = await adaptiveSearch(store.provider, q, memory);
+    if (inFlight !== token) return;
+    if (!items.length) {
+      status.textContent = `No results for “${q}” in ${store.label}.`;
+      return;
+    }
+    status.textContent = `${items.length} result${items.length > 1 ? 's' : ''} for “${q}” in ${store.label}`;
+    results.appendChild(grid(items));
+  } catch (err) {
+    if (inFlight !== token) return;
+    status.textContent = BEST_EFFORT.has(store.id)
+      ? `${store.label} is temporarily unavailable. Please try again, or pick another store.`
+      : `Could not reach ${store.label} right now. Please check your connection and try again.`;
+    console.warn(`${store.label} search failed:`, (err && err.details) || err);
+  } finally {
+    if (inFlight === token) setBusy(false);
+  }
 }
 
-function render(items, query) {
-  if (!items.length) {
-    status.textContent = `No results for “${query}”.`;
+// --- all-stores mode (parallel, grouped) ---------------------------------
+async function runMulti(query) {
+  const q = (query || '').trim();
+  if (!q) return input.focus();
+  const stores = selectedStores();
+  if (!stores.length) {
+    status.textContent = 'Select at least one store to search.';
     return;
   }
-  status.textContent = `${items.length} result${items.length > 1 ? 's' : ''} for “${query}”`;
-  const frag = document.createDocumentFragment();
-  for (const item of items) frag.appendChild(card(item));
-  results.appendChild(frag);
+
+  const token = {};
+  inFlight = token;
+  empty.hidden = true;
+  loadingText.textContent = `Searching ${stores.length} store${stores.length > 1 ? 's' : ''}…`;
+  setBusy(true);
+  status.textContent = '';
+  results.innerHTML = '';
+
+  // Lay out a section per store immediately; fill each as its search resolves.
+  const sections = new Map();
+  for (const s of stores) {
+    const sec = storeSection(s);
+    results.appendChild(sec.el);
+    sections.set(s.id, sec);
+  }
+
+  let total = 0;
+  let finished = 0;
+  await Promise.all(
+    stores.map(async (s) => {
+      try {
+        const { results: items } = await adaptiveSearch(s.provider, q, memory);
+        if (inFlight !== token) return;
+        total += items.length;
+        fillSection(sections.get(s.id), items);
+      } catch (err) {
+        if (inFlight !== token) return;
+        failSection(sections.get(s.id), s);
+        console.warn(`${s.label} search failed:`, (err && err.details) || err);
+      } finally {
+        finished += 1;
+        if (inFlight === token && finished === stores.length) setBusy(false);
+      }
+    }),
+  );
+
+  if (inFlight !== token) return;
+  setBusy(false);
+  status.textContent = `${total} result${total === 1 ? '' : 's'} across ${stores.length} store${stores.length > 1 ? 's' : ''} for “${q}”`;
+}
+
+// --- rendering -----------------------------------------------------------
+function grid(items) {
+  const g = document.createElement('div');
+  g.className = 'results-grid';
+  for (const item of items) g.appendChild(card(item));
+  return g;
+}
+
+function storeSection(store) {
+  const el = document.createElement('section');
+  el.className = 'store-group';
+
+  const head = document.createElement('div');
+  head.className = 'store-head';
+  const dot = document.createElement('span');
+  dot.className = 'store-dot';
+  dot.style.background = store.color;
+  const name = document.createElement('span');
+  name.className = 'store-name';
+  name.textContent = store.label;
+  const count = document.createElement('span');
+  count.className = 'store-count';
+  count.textContent = '…';
+  head.append(dot, name, count);
+
+  const body = document.createElement('div');
+  body.className = 'store-body';
+  const note = document.createElement('div');
+  note.className = 'store-note';
+  note.innerHTML = '<span class="spinner spinner-sm" aria-hidden="true"></span> Searching…';
+  body.appendChild(note);
+
+  el.append(head, body);
+  return { el, body, count };
+}
+
+function fillSection(sec, items) {
+  sec.count.textContent = String(items.length);
+  sec.body.innerHTML = '';
+  if (!items.length) {
+    const note = document.createElement('div');
+    note.className = 'store-note';
+    note.textContent = 'No results.';
+    sec.body.appendChild(note);
+    return;
+  }
+  sec.body.appendChild(grid(items));
+}
+
+function failSection(sec, store) {
+  sec.count.textContent = '—';
+  sec.body.innerHTML = '';
+  const note = document.createElement('div');
+  note.className = 'store-note';
+  note.textContent = BEST_EFFORT.has(store.id)
+    ? `${store.label} is temporarily unavailable.`
+    : `Could not reach ${store.label}.`;
+  sec.body.appendChild(note);
 }
 
 function money(value, currency) {
@@ -118,11 +255,10 @@ function card(item) {
   a.target = '_blank';
   a.rel = 'noopener';
 
-  // Image
   const imgWrap = document.createElement('div');
   imgWrap.className = 'card-img';
   if (item.image) {
-    const img = document.createElement('img');
+    const img = new Image();
     img.loading = 'lazy';
     img.alt = item.name;
     img.src = item.image;
@@ -132,7 +268,6 @@ function card(item) {
     imgWrap.classList.add('no-img');
   }
 
-  // Body
   const body = document.createElement('div');
   body.className = 'card-body';
 
@@ -149,37 +284,36 @@ function card(item) {
     body.appendChild(m);
   }
 
-  const priceRow = document.createElement('div');
-  priceRow.className = 'card-prices';
+  const prices = document.createElement('div');
+  prices.className = 'card-prices';
   if (item.price != null) {
     const price = document.createElement('span');
     price.className = 'price';
     price.textContent = money(item.price, item.currency);
-    priceRow.appendChild(price);
-
+    prices.appendChild(price);
     if (item.oldPrice != null) {
       const old = document.createElement('span');
       old.className = 'old-price';
       old.textContent = money(item.oldPrice, item.currency);
-      priceRow.appendChild(old);
+      prices.appendChild(old);
     }
     if (item.discountLabel) {
       const tag = document.createElement('span');
       tag.className = 'discount';
       tag.textContent = item.discountLabel;
-      priceRow.appendChild(tag);
+      prices.appendChild(tag);
     }
   } else {
     const noPrice = document.createElement('span');
     noPrice.className = 'no-price';
     noPrice.textContent = 'Tap to see price';
-    priceRow.appendChild(noPrice);
+    prices.appendChild(noPrice);
   }
-  body.appendChild(priceRow);
+  body.appendChild(prices);
 
-  a.appendChild(imgWrap);
-  a.appendChild(body);
+  a.append(imgWrap, body);
   return a;
 }
 
+setMode('all');
 input.focus();
