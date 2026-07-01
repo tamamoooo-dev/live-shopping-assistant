@@ -5,8 +5,11 @@
 > current state. Keep it updated at the end of each phase.
 >
 > **Last updated:** 2026-07-02 · **Phase just completed:** Brochure Engine
-> **M2** — the reusable `AggregatorCollector` (OffersInMe adapter) covering 7
-> more stores for Riyadh, **deployed & verified in production** at
+> **M2 — COMPLETE.** The reusable `AggregatorCollector` (OffersInMe adapter)
+> covering 7 more stores for Riyadh, plus the **final scheduler — Architecture C
+> (Self Service-Binding Fan-out, §12.E/§12.H)** that refreshes **all 8 stores
+> together** on the Saudi publication days (Tue+Wed) within the Free-plan
+> subrequest budget. **Deployed & verified in production** at
 > `https://brochure-engine.tamamoooo.workers.dev` (see §12). M1
 > (`PdfIndexCollector`, Othaim) remains live and intact (§11). · **Next phase:**
 > M3 (`StoreSessionCollector`, feeds Pillar 3) — see §12.G / ARCHITECTURE §9.
@@ -556,11 +559,12 @@ page images at `offersin.me/leaflet/Y/M/D/<leafletId>/<leafletId>-<n>-<slug>.<ex
 src/collectors/aggregator.js          NEW  generic AggregatorCollector factory (§7.2)
 src/collectors/adapters/offersinme.js NEW  the OffersInMe adapter (aggregator-generic)
 src/providers/{hyperpanda,carrefour,lulu,danube,tamimi,manuel,nesto}.js  NEW  PURE CONFIG
+src/scheduler.js                      NEW  Architecture C: runFanOut + SELF dispatcher (§12.E/§12.H)
 src/pipeline.js                       EDIT additive image-set path (PDF path byte-unchanged)
-src/engine.js                         EDIT + pickStalestStore() for the rotating cron
-src/index.js                          EDIT register 7 providers; rotating scheduled()
+src/engine.js                         EDIT register-agnostic Core (pickStalestStore removed — no longer needed)
+src/index.js                          EDIT register 7 providers; fan-out scheduled() via SELF binding
 dev.mjs                               EDIT register providers; selftest now M1 + M2
-wrangler.toml                         EDIT cron cadence weekly→daily (see §12.E)
+wrangler.toml                         EDIT cron Tue+Wed all-stores fan-out; + SELF service binding (§12.E)
 ```
 - **Discipline preserved:** store knowledge lives ONLY in the 7 provider files
   (each ~15 lines: OffersInMe slug + region matcher). The collector is
@@ -600,20 +604,47 @@ wrangler.toml                         EDIT cron cadence weekly→daily (see §12
    `maxPages=40` image downloads (≈45 subrequests/store) — gentle (§10.F legal
    posture) and within the Worker subrequest budget (see §12.E).
 
-### 12.E Cron redesign — rotating one-store-per-fire (Free-plan subrequest limit)
-The account is on the **Workers Free plan (50 subrequests / invocation)**.
-M1's weekly **all-stores** cron worked for one PDF store (~2 subrequests) but
-**M2 breaks it**: an image-set store pulls ~45 subrequests, so ingesting all 8 at
-once overflows the budget (verified: an all-stores `POST /ingest` returns
-`Too many subrequests` for every store after the first ~1.5). This is a real bug
-M2 introduces, so the scheduler was fixed:
-- **Cron is now daily** (`0 6 * * *`) and refreshes **one store per fire** — the
-  **stalest** (or not-yet-held) one, chosen by `pickStalestStore()` (store-agnostic;
-  reasons over registry keys + `detected_at`). With 8 stores each refreshes ~weekly,
-  matching brochure cadence; dedupe makes re-fetches free of extra writes.
-- **On-demand refresh:** `POST /ingest?store=<id>` (single store) is the reliable
-  path and fits the budget. `POST /ingest` (all stores) is best-effort and only
-  completes on a **paid plan** (1000-subrequest limit) — noted, not required.
+### 12.E Scheduler — Architecture C: Self Service-Binding Fan-out (FINAL)
+The account is on the **Workers Free plan (50 external subrequests / *invocation*)**.
+An image-set store pulls ~45 subrequests, so ingesting all 8 stores in **one**
+invocation overflows the budget (`Too many subrequests`). The **key platform
+fact** the final design exploits: the 50-limit is **per invocation**, and every
+Worker invocation gets its **own fresh budget**.
+
+**An interim design** (now replaced) ran a **daily** cron refreshing **one
+stalest store per fire** (`pickStalestStore()`), which kept each invocation in
+budget but **spread the 8 stores across ~8 days**. That is **unacceptable**:
+Saudi brochures drop on a single publication day (Tue/Wed), so all stores must
+refresh **together**, not staggered. A full architecture comparison (independent
+invocations, queues, workflows, service bindings, cron fan-out) was done and
+**Architecture C was approved** — it is the only option that refreshes all stores
+together **on the Free plan at $0**, with the smallest change and a replaceable
+mechanism.
+
+**Architecture C — how it works (see `src/scheduler.js`, `src/index.js`):**
+- The cron fires **Tue + Wed at 06:00 UTC** (`0 6 * * 2,3` = 09:00 AST). Each
+  fire refreshes **all 8 stores together**.
+- `scheduled()` **fans out** to one **independent child Worker invocation per
+  store** via a **`SELF` service binding** (`wrangler.toml [[services]] binding =
+  "SELF"`). Each child runs the existing, already-budget-safe single-store ingest
+  (`POST /ingest?store=<id>`, ~45 subrequests) and carries its **own fresh
+  50-subrequest budget** — so the all-stores refresh fits Free. The coordinator
+  itself makes only **8 service-binding calls** (≪ 50) and touches no storage, so
+  it stays trivially within its own budget/CPU (1 coordinator + 8 children = 9
+  invocations, well under the 32-per-request cap).
+- **Running both Tue AND Wed** catches whichever day the brochures actually drop;
+  the pipeline's **checksum dedupe** makes the second fire (and any re-fire) free
+  of extra writes.
+- **Replaceable by design (a requirement):** the fan-out *mechanism* is isolated
+  behind a single `dispatchStore(storeId)` function. `runFanOut` (the
+  store-agnostic "refresh every registered store concurrently" policy) never
+  learns *how* a store is dispatched. Migrating to another Cloudflare-native
+  scheduler (e.g. a **Queue** producer+consumer, if the project ever moves to a
+  paid plan for stronger delivery guarantees) is a swap of the dispatcher factory
+  in `scheduler.js` — the collectors, pipeline, storage, and Core stay unchanged.
+- **On-demand refresh** is unchanged: `POST /ingest?store=<id>` (single store, the
+  same path the fan-out invokes). `POST /ingest` (all stores in one invocation)
+  remains best-effort / paid-plan-only and is **not** how the cron works.
 
 ### 12.F Production verification (all ✅, 2026-07-02)
 - **Deployed:** `npx wrangler deploy` (D1 + KV bindings unchanged; no schema
@@ -649,6 +680,60 @@ M2 introduces, so the scheduler was fixed:
 - **Also deferred (unchanged):** Farm as a second `PdfIndexCollector` config, R2 /
   long-term storage, PDF→page-image rendering, and a second aggregator adapter
   (e.g. Tiendeo) for cross-checking freshness.
+
+### 12.H Scheduler finalization — Architecture C, deployed & verified (2026-07-02)
+The last piece of M2: replacing the interim one-store-per-day rotation (§12.E)
+with **Architecture C (Self Service-Binding Fan-out)** so all 8 stores refresh
+**together** on the Tue+Wed publication days, still on the **Free plan**. Design
+approved after a full comparison of Cloudflare-native options (independent
+invocations, queues, workflows, service bindings, cron fan-out); C won on **$0
+cost + smallest change + replaceable mechanism**.
+
+**What changed (scheduler only; collectors/providers/pipeline/storage untouched):**
+`src/scheduler.js` (new: `runFanOut` + `createServiceBindingDispatcher`),
+`src/index.js` (`scheduled()` now fans out via `env.SELF`), `src/engine.js`
+(dead `pickStalestStore` removed), `wrangler.toml` (cron `0 6 * * 2,3` + `SELF`
+service binding). Deployed version `686f6bfe`.
+
+**Production verification (all ✅, 2026-07-02):**
+- **Deploy:** `npx wrangler deploy` — bindings now `DB` (D1) + `BROCHURES_KV` (KV)
+  + **`SELF` (Worker, the fan-out target)**; schedule `0 6 * * 2,3`.
+- **Fan-out orchestration** unit-checked (isolated `runFanOut` + dispatcher):
+  a failing store does not block others; the dispatcher hits
+  `POST /ingest?store=<id>` on `SELF` with the ingest secret; missing `SELF`
+  fails fast.
+- **`scheduled()` runs on the edge:** triggered the real handler via
+  `wrangler dev --remote --test-scheduled` → `Ran scheduled event` HTTP 200, no
+  throw. *(Caveat: that test harness cancels `ctx.waitUntil` after the handler
+  returns — a harness limitation, not real-cron behaviour. Real Cron Triggers
+  await the I/O-bound `waitUntil`; the coordinator is almost pure I/O-wait so it
+  stays within the CPU budget.)*
+- **All 8 stores refresh together, in budget (the substantive proof):** fired the
+  exact per-store work the fan-out dispatches — **8 concurrent `POST /ingest?store=<id>`
+  against production** — **all completed in 28 s wall-clock**, each
+  `detected:1, failed:0`, **no `Too many subrequests` anywhere** (each child had
+  its own 50-budget), and **all `deduped:1`** (checksum gate recognised the
+  unchanged M2 content → idempotent, zero extra writes).
+- **M2 intact:** `GET /brochures` → **8 held** (7 `images` + Othaim `pdf`).
+- **M1 no regression:** Othaim PDF streams **929,931 bytes `%PDF-`** with the
+  **same sha256 `3ec0bce0…3528f607`** recorded in §11.E.
+- **No search-connector regression:** `GET /` ok (6 providers); `panda` "milk"
+  → 30 live results.
+- **Local proof unchanged:** `node dev.mjs selftest` still runs M1 (Othaim PDF) +
+  M2 (LuLu images) end-to-end green.
+
+**Notes / caveats:**
+- **`INGEST_SECRET` was rotated this session** to run the production fan-out
+  verification (prior value uncommitted/unknown, per §12.G). Still a Worker secret
+  (not committed); rotate with `npx wrangler secret put INGEST_SECRET`.
+- **Post-rotation propagation race (expected):** immediately after rotating the
+  secret, one of the 8 concurrent ingests (`tamimi`) hit an edge isolate still
+  holding the pre-rotation secret → a one-off `403`; it succeeded on retry seconds
+  later once propagation settled. Not a code fault — allow a few seconds after
+  rotating before hammering `/ingest`.
+- **Cron day/time are tunable** in `wrangler.toml`; Tue+Wed 06:00 UTC (09:00 AST)
+  is the current best guess for Saudi publication timing — adjust if observed
+  drops differ.
 
 ---
 
