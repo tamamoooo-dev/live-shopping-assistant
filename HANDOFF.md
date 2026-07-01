@@ -4,9 +4,17 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-01 · **Phase just completed:** Smart Ranking
-> (+ "Show all" expansion, Danube resilience fix) · **Next phase:** Brochures
-> (see TODOs).
+> **Last updated:** 2026-07-01 · **Phase just completed:** Brochure Engine
+> **Discovery** (10-retailer investigation, no code — see §10) · **Next phase:**
+> Brochure Engine implementation, starting with the `PdfIndexCollector`
+> (Othaim + Farm) — see §10.E roadmap.
+>
+> **Project vision (context for the next phases):** Souq is becoming a Saudi
+> **shopping assistant**, not just a live search engine. Three pillars:
+> (1) Live online search — *built* (§1–§8); (2) **Weekly brochures for physical
+> stores** — *Discovery done, §10, implementation next*; (3) Price intelligence
+> (lowest-ever price, future price alerts) — later, and the reason the Brochure
+> Engine must keep **history**.
 
 ---
 
@@ -223,12 +231,15 @@ wired into the UI (dropdown + checkbox chips).
 
 ## 9. Remaining TODOs (priority order)
 
-1. **Brochures (next phase — start here).** Build the brochures feature. Scope is
-   not yet defined in this repo; define requirements first (what a "brochure" is —
-   e.g. store weekly-offers / flyer listings — its data source per store, whether
-   it flows through a new connector endpoint or reuses `/search`, and its UI
-   placement alongside the existing search modes). Keep the store-agnostic Core /
-   thin-connector / normalized-contract rules intact when designing it.
+1. **Brochure Engine (next phase — start here).** Discovery is **done** — read
+   **§10** for the full report. Scope is now defined. **Start with the
+   `PdfIndexCollector` for Othaim + Farm** (Central/Riyadh), then the
+   `AggregatorCollector`. Do **not** build one collector per store. Note the
+   Brochure Engine is **stateful** (must remember which week it already has +
+   keep history for price-intelligence), so it is a **separate subsystem**, not
+   part of the stateless search connector — see §10.D. The store-agnostic-core /
+   normalized-contract discipline still applies; the thin-*stateless*-connector
+   rule applies to **search only**, not to brochures.
 2. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
    account with PA-API access) so `pa-api` becomes the active path and results stop
    depending on the fragile HTML scraper — or formally accept Amazon as best-effort.
@@ -239,8 +250,107 @@ wired into the UI (dropdown + checkbox chips).
    parsing) are fragile to upstream markup changes; add a lightweight way to notice
    when they silently stop returning results.
 
-_Done recently (no longer TODO): Smart Ranking, per-store "Show all" expansion,
-and Danube transient-failure retry — see sections 5 & 6._
+_Done recently (no longer TODO): **Brochure Engine Discovery (§10)**, Smart
+Ranking, per-store "Show all" expansion, and Danube transient-failure retry._
+
+---
+
+## 10. Brochure Engine — Discovery Report (Pillar 2)
+
+> **Status:** Discovery **complete** (2026-07-01). No code written, no repo
+> modified except this handoff. This section is the source of truth for the
+> Brochure Engine's architecture before implementation begins.
+
+### 10.A Executive summary
+Ten candidate retailers investigated. They collapse into **three delivery
+realities**, not ten bespoke integrations:
+- **Official clean PDFs (region-tagged):** Othaim, Farm — a *stable HTML index
+  page* whose per-week PDF link rotates.
+- **Official but hard:** Carrefour + Lulu web brochures are **bot-protected**
+  (Carrefour digital leaflet timed out / Akamai; Lulu `instore-promotions` →
+  **HTTP 403**, Akinon). Panda/HyperPanda/Danube/Tamimi have e-commerce/app
+  backends but **no clean official web PDF** brochure.
+- **Aggregator-carried (all 10, incl. Riyadh):** ClicFlyer, D4D Online,
+  Tiendeo/getcata, OffersInMe normalize every retailer into per-city
+  **page-image sets**. Only channel covering **Manuel** (which has no official
+  brochure) and the protected/app-only stores.
+
+**Two headline decisions:** (1) build **reusable collectors by pattern, not one
+per store**; (2) the Brochure Engine is **stateful** (remember current week,
+dedupe, keep history for Pillar 3) → it is a **separate subsystem**, deliberately
+**not** bound by the search connector's stateless-&-thin rule.
+
+### 10.B Per-retailer findings
+
+| Store | Weekly? | Where / format | Riyadh/Central? | Auto-detect | Auto-download w/o bypass | Stable URL | Difficulty | Strategy |
+|---|---|---|---|---|---|---|---|---|
+| **Panda** | Yes | E-commerce + **app**; no clean web PDF. Aggregators carry it | via aggregator | aggregator yes / app hard | aggregator yes | index stable; app opaque | Med-High / **Low** (aggr) | aggregator now; later Panda API session |
+| **HyperPanda** | Yes | Same parent (Panda Retail Co.) — shares/parallels Panda promo | via aggregator | same as Panda | same as Panda | same | Med-High / **Low** | **same collector as Panda** |
+| **Othaim** | Yes | **Official PDF**: `othaimmarkets.com/othaim-promotions/?pid=18` → `/api/pdfOffers/<id>.pdf` | **Yes — "Central Region" pid=18** | **Yes** (scrape index) | **Yes** (public PDF) | index stable; **PDF name rotates weekly** | **Low** | **`PdfIndexCollector`** (reference) |
+| **Carrefour** (MAF) | Yes | **Bot-protected** web-app digital leaflet (timeout/Akamai); not a plain PDF | Yes | official **hard** | official: needs headless/bypass → avoid | opaque | High / **Low-Med** (aggr) | **`AggregatorCollector`** |
+| **Lulu** | Yes | Official `instore-promotions` → **HTTP 403** (Akinon). Region PDFs exist | Yes | official med-hard | naive no (403); **reuse search session** | region PDFs | **Medium** | reuse Lulu Akinon session OR aggregator |
+| **Danube** | Yes | Official Spree (in search); "Riyadh Weekly Promotion" flyer exists | Yes | medium | likely yes | medium | **Medium** | aggregator now; later Danube session |
+| **Tamimi** | Yes | Official ZopSmart (in search); "Super Weekly" flyer | Yes | medium | likely yes | medium | **Medium** | aggregator now; later Tamimi session |
+| **Farm** | Yes | **Official PDF**: `farm.com.sa/en/Offers_Regions/2` → `/PDF/Offers/Ar/<num><region>.pdf` | **Yes — Riyadh bundled in a multi-region PDF** | **Yes** (scrape index) | **Yes** (public PDF) | index stable; **PDF name rotates weekly** | **Low** | **`PdfIndexCollector`** (same as Othaim) |
+| **Manuel** | Yes | **No official brochure site found** — aggregator-only | via aggregator (Riyadh present) | aggregator only | aggregator yes | aggregator | **N/A official / Low-Med** | **`AggregatorCollector` only** |
+| **Nesto** | Yes | Official nesto.sa; heavy aggregator coverage. KSA skews Western/Eastern | limited Riyadh | aggregator yes | aggregator yes | aggregator | **Med / Low** | **`AggregatorCollector`** |
+
+### 10.C Pattern groups
+- **A — Official "stable index → weekly PDF" (region-param):** **Othaim, Farm** → **one** `PdfIndexCollector`, config-driven `{ indexUrl, regionSelector, pdfLinkPattern }`.
+- **B — Bot-protected official web-app:** **Carrefour, Lulu** → avoid bypass; use aggregator or (Lulu) the session we already own.
+- **C — E-commerce + app, no clean web brochure:** **Panda, HyperPanda**, partly Danube/Tamimi/Nesto → app API or reuse existing search backend.
+- **D — Third-party aggregator (covers ALL 10):** ClicFlyer / D4D / Tiendeo/getcata / OffersInMe → **one** `AggregatorCollector` (one adapter per aggregator).
+
+### 10.D Recommended architecture
+Reuse the proven **Provider → Strategy → normalized-contract** discipline, as a
+**new stateful subsystem** (not inside the search connector):
+1. **Three reusable collectors, not ten:**
+   - **`PdfIndexCollector`** (Pattern A) — ships covering Othaim + Farm; new
+     PDF-index stores are **config additions, not code**.
+   - **`AggregatorCollector`** (Pattern D) — start with **one** aggregator;
+     instantly covers Panda, HyperPanda, Carrefour, Lulu, Danube, Tamimi,
+     Manuel, Nesto for Riyadh.
+   - **`StoreSessionCollector`** (Patterns B/C, later) — **reuses the live-search
+     connector's existing sessions** (Panda API, Lulu Akinon, Danube Spree,
+     Tamimi ZopSmart) for **structured** promo items: already normalized, feeds
+     Pillar 3, and **sidesteps OCR**.
+2. **Per-store Brochure Provider = ordered collector strategies (best-first)**,
+   just like search (e.g. Othaim `[pdfIndex]`; Carrefour `[aggregator]`;
+   Panda `[storeSession?, aggregator]`). Core stays store-agnostic.
+3. **Proposed normalized Brochure contract** (same discipline as the 10-key
+   result shape): `{ store, region, title, validFrom, validTo, detectedAt,
+   sourceType: pdf|images|flipbook|api, sourceUrl, pdfUrl,
+   pages: [{ index, imageUrl }], checksum }`.
+4. **Stateful storage (new):** object store for PDFs/images (e.g. Cloudflare R2)
+   + metadata store (KV/D1) + a **weekly Cron trigger** that polls providers,
+   dedupes by `checksum`, keeps history (the basis for Pillar 3).
+
+### 10.E Implementation order
+1. **`PdfIndexCollector` → Othaim + Farm (Central/Riyadh).** Cleanest/official;
+   proves the pipeline: **detect → download → store → dedupe → expose**.
+2. **`AggregatorCollector` → one aggregator.** Unlocks the other 8 stores for
+   Riyadh in one collector — max coverage per unit of code.
+3. **`StoreSessionCollector`** reusing the 4 existing search sessions (Panda,
+   Lulu, Danube, Tamimi) → structured promo → direct Pillar 3 input.
+4. Upgrade individual stores from aggregator → official where it's worthwhile.
+
+### 10.F Risks (maintainability-first)
+- **Aggregator dependency (biggest):** third-party ToS + retailer copyright, can
+  restructure/block, freshness lag, watermarks, app-gated detail. → treat as a
+  *strategy* never the sole one; keep official PDFs primary; don't hard-depend on
+  one aggregator.
+- **Bot-protection churn (Carrefour, Lulu):** do **not** build bypass; prefer the
+  session we own (Lulu) or the aggregator.
+- **Weekly PDF URL churn (Othaim, Farm):** **always discover from the stable
+  index; never hardcode a PDF URL.**
+- **Region bundling:** "Central/Riyadh" isn't uniform (Farm bundles Riyadh +
+  Eastern + Western in one PDF; Othaim has a discrete Central `pid`). Needs a
+  per-store region map.
+- **Price extraction is OCR-hard:** flyer PDFs are graphical; structured prices
+  for Pillar 3 are a separate hard problem — `StoreSessionCollector` avoids it.
+- **Storage growth & dedupe:** checksum-dedupe from day one.
+- **Legal posture:** personal tool over public endpoints — keep snapshots
+  private, poll gently (weekly Cron, not aggressive).
 
 ---
 
