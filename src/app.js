@@ -5,6 +5,7 @@ import { createMemory, adaptiveSearch } from './core.js';
 import { pandaProvider } from './providers/panda.js';
 import { amazonProvider } from './providers/amazon.js';
 import { tamimiProvider } from './providers/tamimi.js';
+import { danubeProvider } from './providers/danube.js';
 
 const memory = createMemory('app');
 
@@ -14,6 +15,7 @@ const PROVIDERS = {
   panda: pandaProvider,
   amazon: amazonProvider,
   tamimi: tamimiProvider,
+  danube: danubeProvider,
 };
 
 const form = document.getElementById('search-form');
