@@ -4,8 +4,9 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-01 · **Phase just completed:** Smart Ranking ·
-> **Next phase:** Brochures (see TODOs).
+> **Last updated:** 2026-07-01 · **Phase just completed:** Smart Ranking
+> (+ "Show all" expansion, Danube resilience fix) · **Next phase:** Brochures
+> (see TODOs).
 
 ---
 
@@ -67,8 +68,8 @@ Key architectural facts:
 
 | Role | GitHub | Local path | HEAD at handoff |
 |---|---|---|---|
-| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | `756f514` Smart Ranking |
-| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `8dad4e3` Add Noon provider |
+| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | `cbf6389` Show all toggle |
+| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `0baa0b5` Danube retry |
 
 > Note: the connector's **local folder** is `serverless-connector` but its GitHub
 > **repo name** is `shopping-connector`. Both `origin` remotes are under the
@@ -94,7 +95,7 @@ wired into the UI (dropdown + checkbox chips).
 |---|---|---|---|
 | Panda | `panda` | Public JSON API (`api.panda.sa`), strategies `products-v3` → `suggestions-v3` | **Stable** — production-grade, clean contract |
 | Tamimi | `tamimi` | ZopSmart JSON API (`shop.tamimimarkets.com/api/layout/search`) | **Stable (experimental)** — clean JSON, no auth, EN/AR |
-| Danube | `danube` | Spree JSON API (`danube.sa/api/products.json?q[name_cont]=`) | **Stable (experimental)** — EN/AR, sale prices |
+| Danube | `danube` | Spree JSON API (`danube.sa/api/products.json?q[name_cont]=`) | **Stable (experimental)** — EN/AR, sale prices. Connector retries transient upstream failures once (see note below) |
 | Lulu | `lulu` | Akinon list JSON (`gcc.luluhypermarket.com/{en-sa\|ar-sa}/list?...&format=json`) | **Stable (experimental)** — EN/AR, SAR via pz-locale/pz-currency cookies |
 | Amazon | `amazon` | PA-API 5.0 strategy (`pa-api`, tried first, **unconfigured→skips**) then search-HTML parse (`amazon.sa/s`) | **Best-effort** — see caveat below |
 | Noon | `noon` | Noon Minutes search-page RSC flight (`minutes.noon.com/{saudi-en\|saudi-ar}/search`) | **Best-effort (experimental)** — parses server-rendered JSON; main noon.com blocks datacenter IPs, Minutes does not |
@@ -109,6 +110,15 @@ wired into the UI (dropdown + checkbox chips).
   first; it skips instantly while unconfigured. To activate (no code change):
   set Worker secrets `PAAPI_ACCESS_KEY`, `PAAPI_SECRET_KEY`, `PAAPI_PARTNER_TAG`
   (optional: `PAAPI_HOST`, `PAAPI_REGION`, `PAAPI_MARKETPLACE`) and redeploy.
+- **Danube resilience note:** Danube's Spree origin occasionally drops a single
+  request from Cloudflare's edge (transient 5xx / reset), which surfaced as an
+  intermittent "Could not reach Danube". The connector's Danube provider
+  (`serverless-connector/src/providers/danube.js`) now retries once on transient
+  failures (5xx / 429 / network error) with a short backoff; a 4xx (except 429)
+  stays final. This was preventive hardening — no reproducible code fault was
+  found; the origin was healthy when investigated. If Danube "breaks" again,
+  first check the origin directly:
+  `curl -A Mozilla "https://danube.sa/api/products.json?q%5Bname_cont%5D=milk&per_page=20"`.
 
 ---
 
@@ -121,16 +131,22 @@ wired into the UI (dropdown + checkbox chips).
     results **grouped by store** with a colored dot + count badge per section.
     Store selection via checkbox chips (+ "All").
   - **Single store** — one store via dropdown, flat results grid.
-- **Smart Ranking (shipped this phase):** client-side re-ranking of each store's
-  results by relevance to the query, then capped to the top `DEFAULT_LIMIT = 4`.
+- **Smart Ranking:** client-side re-ranking of each store's results by relevance
+  to the query; the top `DEFAULT_LIMIT = 4` are shown up front.
   - Tiering per field: exact (100) > prefix (80) > whole-word (70) > partial (60)
     > multi-token all-present (45) / some-present (20+hits). Name match dominates;
     brand match counts ×0.7. Stable sort (ties keep store order).
-  - Single-store status shows **"Top N of M"** when truncated; all-stores count
-    badge shows **"N+"** when more than N were found.
   - Implemented entirely in `src/app.js` (`tierScore` / `relevance` / `rankItems`,
     wired into `runSingle` and `runMulti`). Result objects are untouched — only
     order and count shown.
+- **"Show all" expansion:** each store keeps its **full ranked list** (all
+  already-fetched results, typically up to 20–60) and shows a **"Show all N" /
+  "Show fewer"** toggle below its top 4. Expanding renders the rest from memory —
+  **no new search / network call**. Each store section (and the single-store view)
+  expands independently. Implemented as `resultsBlock(items, limit)` in
+  `src/app.js`; button style `.show-all` in `styles.css`. Store count badges show
+  the **true total found** (e.g. "30"); single-store status shows the full result
+  count.
 - **Arabic + English:** input language auto-detected; Arabic input searches the
   Arabic catalogue and links to Arabic product pages. Product names render RTL.
 - **Adaptive search:** the Core tries a provider's strategies in order, remembers
@@ -192,8 +208,16 @@ wired into the UI (dropdown + checkbox chips).
 - **Amazon PA-API:** activate via `npx wrangler secret put PAAPI_ACCESS_KEY` /
   `PAAPI_SECRET_KEY` / `PAAPI_PARTNER_TAG`, then redeploy. No code change.
 
-> Node is **not on PATH** in the shipped environment. Use the preview tooling /
-> `launch.json` node path, or invoke node explicitly, when local serving is needed.
+> **Environment notes (verified this session):** Node lives at
+> `C:\Program Files\nodejs` but is **not on PATH** for the default shells — add it
+> (`export PATH="$PATH:/c/Program Files/nodejs"`) or use the full path. Wrangler is
+> **already authenticated** (OAuth, `tamamoooo@gmail.com`, `workers:write`), so
+> `npx --no-install wrangler deploy` works without an interactive login. The
+> browser-preview tool serves the frontend locally but stays pinned to
+> `localhost` (cross-origin navigation to the Pages URL doesn't stick); the local
+> bundle equals the committed code, so verify locally then confirm the deployed
+> bundle with `curl`. Preview **screenshots time out** on the external product
+> images — rely on `preview_eval` DOM inspection for verification instead.
 
 ---
 
@@ -214,10 +238,9 @@ wired into the UI (dropdown + checkbox chips).
 4. **Best-effort store monitoring.** Amazon (anti-bot) and Noon (RSC-flight
    parsing) are fragile to upstream markup changes; add a lightweight way to notice
    when they silently stop returning results.
-5. **Consider surfacing more than the top 4.** Smart Ranking caps display at
-   `DEFAULT_LIMIT = 4`; a "show more" affordance or configurable limit may be worth
-   adding if users want to see the full ranked list.
-```
+
+_Done recently (no longer TODO): Smart Ranking, per-store "Show all" expansion,
+and Danube transient-failure retry — see sections 5 & 6._
 
 ---
 
