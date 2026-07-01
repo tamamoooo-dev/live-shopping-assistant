@@ -28,6 +28,46 @@ const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
 // Best-effort stores get a friendlier "temporarily unavailable" message.
 const BEST_EFFORT = new Set(['amazon', 'noon']);
 
+// --- smart ranking -------------------------------------------------------
+// Client-side re-ranking of the store's results by relevance to the query.
+// The result objects are untouched — only their order and how many we show.
+const DEFAULT_LIMIT = 4;
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Tier a single field against the query: exact > prefix > whole-word > partial.
+function tierScore(field, query) {
+  const f = (field || '').toLowerCase().trim();
+  if (!f || !query) return 0;
+  if (f === query) return 100; // exact
+  if (f.startsWith(query)) return 80; // prefix
+  if (new RegExp(`(^|\\s)${escapeRegex(query)}(\\s|$)`).test(f)) return 70; // whole word
+  if (f.includes(query)) return 60; // partial substring
+  const tokens = query.split(/\s+/).filter(Boolean);
+  if (tokens.length > 1) {
+    const hits = tokens.filter((t) => f.includes(t)).length;
+    if (hits === tokens.length) return 45; // all words present
+    if (hits > 0) return 20 + hits; // some words present
+  }
+  return 0;
+}
+
+// Name match dominates; a brand match counts a little less.
+function relevance(item, query) {
+  return Math.max(tierScore(item.name, query), Math.round(tierScore(item.brand, query) * 0.7));
+}
+
+// Stable sort by relevance (ties keep the store's original order).
+function rankItems(items, q) {
+  const query = (q || '').toLowerCase().trim();
+  return items
+    .map((it, i) => ({ it, i, s: relevance(it, query) }))
+    .sort((a, b) => b.s - a.s || a.i - b.i)
+    .map((x) => x.it);
+}
+
 const $ = (id) => document.getElementById(id);
 const form = $('search-form');
 const input = $('search-input');
@@ -113,13 +153,18 @@ async function runSingle(query) {
   results.innerHTML = '';
 
   try {
-    const { results: items } = await adaptiveSearch(store.provider, q, memory);
+    const { results: found } = await adaptiveSearch(store.provider, q, memory);
     if (inFlight !== token) return;
-    if (!items.length) {
+    if (!found.length) {
       status.textContent = `No results for “${q}” in ${store.label}.`;
       return;
     }
-    status.textContent = `${items.length} result${items.length > 1 ? 's' : ''} for “${q}” in ${store.label}`;
+    // Smart ranking: reorder by relevance to the query, then show the top few.
+    const items = rankItems(found, q).slice(0, DEFAULT_LIMIT);
+    status.textContent =
+      found.length > items.length
+        ? `Top ${items.length} of ${found.length} for “${q}” in ${store.label}`
+        : `${items.length} result${items.length > 1 ? 's' : ''} for “${q}” in ${store.label}`;
     results.appendChild(grid(items));
   } catch (err) {
     if (inFlight !== token) return;
@@ -163,10 +208,12 @@ async function runMulti(query) {
   await Promise.all(
     stores.map(async (s) => {
       try {
-        const { results: items } = await adaptiveSearch(s.provider, q, memory);
+        const { results: found } = await adaptiveSearch(s.provider, q, memory);
         if (inFlight !== token) return;
+        // Smart ranking: top few most-relevant per store, grouped.
+        const items = rankItems(found, q).slice(0, DEFAULT_LIMIT);
         total += items.length;
-        fillSection(sections.get(s.id), items);
+        fillSection(sections.get(s.id), items, found.length);
       } catch (err) {
         if (inFlight !== token) return;
         failSection(sections.get(s.id), s);
@@ -219,8 +266,9 @@ function storeSection(store) {
   return { el, body, count };
 }
 
-function fillSection(sec, items) {
-  sec.count.textContent = String(items.length);
+function fillSection(sec, items, foundCount = items.length) {
+  // Badge shows how many we display; a trailing "+" means more were found.
+  sec.count.textContent = foundCount > items.length ? `${items.length}+` : String(items.length);
   sec.body.innerHTML = '';
   if (!items.length) {
     const note = document.createElement('div');
