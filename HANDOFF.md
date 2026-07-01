@@ -4,24 +4,26 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-02 · **Phase just completed:** Brochure Engine
-> **M2 — COMPLETE.** The reusable `AggregatorCollector` (OffersInMe adapter)
-> covering 7 more stores for Riyadh, plus the **final scheduler — Architecture C
-> (Self Service-Binding Fan-out, §12.E/§12.H)** that refreshes **all 8 stores
-> together** on the Saudi publication days (Tue+Wed) within the Free-plan
-> subrequest budget. **Deployed & verified in production** at
-> `https://brochure-engine.tamamoooo.workers.dev` (see §12). M1
-> (`PdfIndexCollector`, Othaim) remains live and intact (§11). · **Next phase:**
-> **Price History (Pillar 3)** — the new top implementation priority; see the
-> **Roadmap (§0)** and TODOs (§9). `StoreSessionCollector` is now **deferred**
-> (§0). The Brochure Engine Discovery report is §10; M1 record is §11; M2 is §12.
+> **Last updated:** 2026-07-02 · **Phase just completed:** **Price History
+> (Pillar 3) — COMPLETE.** Built as a **feature of the Brochure Engine** (not a
+> separate service): each price point is **anchored to a store's brochure
+> edition** (the *when* = weekly edition, the *where* = store), with the price
+> *number* sampled once per edition from the search connector via a new
+> `CONNECTOR` service binding. The lowest-ever price (price + where + when) is
+> derived from those edition-anchored points. **Deployed & verified in
+> production** at `https://brochure-engine.tamamoooo.workers.dev` (see §13). M1
+> (`PdfIndexCollector`, Othaim) and M2 (`AggregatorCollector`, 7 stores) remain
+> live and byte-for-byte intact (§11/§12; Othaim checksum re-verified). · **Next
+> phase:** **Personal Alerts (Pillar 3 cont.)** — see the **Roadmap (§0)** and
+> TODOs (§9). `StoreSessionCollector` remains **deferred** (§0). Discovery is §10;
+> M1 is §11; M2 is §12; **Price History is §13**.
 >
 > **Project vision:** Souq is a **personal Saudi shopping assistant** — a private
 > tool for one user, **not a commercial platform**. Three pillars:
 > (1) Live online search — *built* (§1–§8); (2) **Weekly brochures for physical
-> stores** — *built (M1+M2), §10–§12*; (3) **Price intelligence** (price history,
-> then personal alerts) — *next*, and the reason the Brochure Engine keeps
-> **history**. The current, authoritative build order is the **Roadmap (§0)**.
+> stores** — *built (M1+M2), §10–§12*; (3) **Price intelligence** — *price history
+> built (§13)*, personal alerts *next*. This is the reason the Brochure Engine
+> keeps **history**. The current, authoritative build order is the **Roadmap (§0)**.
 
 ---
 
@@ -40,13 +42,14 @@
 2. **Brochure Engine** — ✅ **done** (§10–§12). M1 `PdfIndexCollector` (Othaim PDF)
    + M2 `AggregatorCollector` (OffersInMe, 7 stores), 8 brochures held in
    production, weekly Tue+Wed fan-out scheduler on the Free plan.
-3. **Price History** — ⏭ **next milestone.** Track prices over time so the user
-   can see a product's price trend and its lowest-ever price. Builds on the search
-   connector's live results and the Brochure Engine's retained history. This is
-   Pillar 3's foundation.
-4. **Personal Alerts** — planned. Let the user set a target/interest on a product
-   and be notified when its price drops (personal, single-user notifications —
-   not a subscription/marketing system).
+3. **Price History** — ✅ **done** (§13). A **feature of the Brochure Engine**:
+   price points **anchored to brochure editions** (the *when*/*where*), price
+   *number* from the search connector, lowest-ever (price + where + when) derived
+   on read. Deployed & verified; M1/M2 intact. Free plan, D1-only, $0.
+4. **Personal Alerts** — ⏭ **next milestone.** Let the user set a target on a
+   tracked product and be notified when its price drops (personal, single-user
+   notifications — not a subscription/marketing system). Builds directly on §13's
+   price points.
 5. **Unified Frontend** — planned. One interface over all three pillars (search +
    brochures + price history/alerts) instead of the search-only frontend today.
 
@@ -287,36 +290,38 @@ wired into the UI (dropdown + checkbox chips).
 
 ## 9. Remaining TODOs (priority order)
 
-> Ordered to match the **Roadmap (§0)**. Priorities 1–2 (Online Search, Brochure
-> Engine) are complete; the next milestone is **Price History**.
+> Ordered to match the **Roadmap (§0)**. Priorities 1–3 (Online Search, Brochure
+> Engine, Price History) are complete; the next milestone is **Personal Alerts**.
 
-1. **Price History (Pillar 3) — next milestone.** Track prices over time so the
-   user sees a product's trend and its lowest-ever price. Builds on the live search
-   connector's results and the Brochure Engine's retained history (the reason the
-   engine keeps history at all). Stay on the **Free plan** (KV/D1, no R2, no paid
-   features). Design not yet written — this is the milestone to start.
-2. **Personal Alerts (after Price History).** Let the user flag a product and be
-   notified when its price drops — personal, single-user notifications, not a
-   marketing/subscription system.
-3. **Unified Frontend (after Alerts).** One interface spanning search + brochures +
+1. **Personal Alerts (Pillar 3 cont.) — next milestone.** Let the user set a
+   target price on a tracked product (the §13 watchlist) and be notified when a
+   captured price drops below it — personal, single-user notifications, not a
+   marketing/subscription system. Builds directly on §13's edition-anchored price
+   points and runs on the same weekly capture. Stay on the **Free plan** ($0);
+   design not yet written — this is the milestone to start.
+2. **Unified Frontend (after Alerts).** One interface spanning search + brochures +
    price history/alerts, replacing the search-only frontend.
-4. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
+3. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
    account with PA-API access) so `pa-api` becomes the active path and results stop
    depending on the fragile HTML scraper — or formally accept Amazon as best-effort.
-5. **Refresh README.md & CHANGELOG.md.** Bring them up to date with Souq branding,
+4. **Refresh README.md & CHANGELOG.md.** Bring them up to date with Souq branding,
    the 6-store multi-store architecture, connector routing, and Smart Ranking.
    (They still describe single-store "Panda Live Search v1.0.0".)
-6. **Best-effort store monitoring.** Amazon (anti-bot) and Noon (RSC-flight
+5. **Best-effort store monitoring.** Amazon (anti-bot) and Noon (RSC-flight
    parsing) are fragile to upstream markup changes; add a lightweight way to notice
    when they silently stop returning results.
+6. **Price-match quality (Price History follow-up, §13).** The weekly capture uses
+   the connector's best-ranked result for a query, which can mis-match loosely
+   (e.g. "milk" → a milk *chocolate* biscuit at some stores). Tighten with a
+   per-product `match` rule or explicit per-store product ids when it matters.
 
 **Deferred (per §0 — not TODOs now):** `StoreSessionCollector` (former M3), OCR /
 brochure price extraction, AI/LLM extraction, advanced analytics, and any paid
 Cloudflare features (R2, paid Queues/Workflows/Workers).
 
-_Done recently (no longer TODO): **Brochure Engine M1 + M2** (§11, §12) — deployed
-& verified in production; **Brochure Engine Discovery (§10)**, Smart Ranking,
-per-store "Show all" expansion, and Danube transient-failure retry._
+_Done recently (no longer TODO): **Price History (Pillar 3)** (§13) — deployed &
+verified; **Brochure Engine M1 + M2** (§11, §12); **Brochure Engine Discovery
+(§10)**, Smart Ranking, per-store "Show all" expansion, Danube transient retry._
 
 ---
 
@@ -725,13 +730,12 @@ mechanism.
   the **latest available** flyer and records `validFrom/validTo`, so staleness is
   visible. A **freshness monitor** (ARCHITECTURE §11) — alert when a store hasn't
   refreshed in N weeks — is the natural follow-up.
-- **Next milestone is Price History (Pillar 3), NOT `StoreSessionCollector`.** Per
-  the current Roadmap (§0), the former "M3" `StoreSessionCollector` is **deferred**.
-  The next build is **Price History** — tracking each product's price over time /
-  lowest-ever price, on the Free plan. (`StoreSessionCollector` — reusing the
-  search connector's Panda/LuLu/Danube/Tamimi sessions for structured, OCR-free
-  promo items — remains a *possible later* input to Pillar 3, but only after
-  Price History, Personal Alerts, and the Unified Frontend, and only if still
+- **Price History (Pillar 3) is now BUILT as a Brochure Engine feature — see §13.**
+  Per the Roadmap (§0), the former "M3" `StoreSessionCollector` is **deferred**;
+  Price History was built instead, *inside* this same Worker (not a separate
+  service), anchoring price points to brochure editions. The **next build is
+  Personal Alerts** (§0/§9). (`StoreSessionCollector` remains a *possible later*
+  Pillar 3 input, only after Alerts + the Unified Frontend, and only if still
   warranted.)
 - **Deferred (per §0):** `StoreSessionCollector`, OCR / brochure price extraction,
   AI/LLM extraction, advanced analytics, and any paid Cloudflare features (R2 /
@@ -792,6 +796,113 @@ service binding). Deployed version `686f6bfe`.
 - **Cron day/time are tunable** in `wrangler.toml`; Tue+Wed 06:00 UTC (09:00 AST)
   is the current best guess for Saudi publication timing — adjust if observed
   drops differ.
+
+---
+
+## 13. Price History — Implementation (Pillar 3, a Brochure Engine feature)
+
+> **Status:** **deployed & verified in production** (2026-07-02) at
+> `https://brochure-engine.tamamoooo.workers.dev`. Built **inside the existing
+> Brochure Engine Worker** (approved direction: "Price History is a feature of the
+> Brochure Engine, not an independent service"). No new Worker, no new database —
+> one new D1 table + one service binding. M1 and M2 are **byte-for-byte intact**.
+
+### 13.A The model (why it's brochure-anchored)
+Price History records, per tracked product, **the lowest historical price, where
+it occurred, and when** — the milestone's exact requirement. The design decisions,
+forced by the constraints (Free plan; **no OCR, no `StoreSessionCollector`, no AI
+extraction, no paid services, no frontend**):
+- **Brochures are the backbone of the history.** Each price point is **anchored to
+  a store's current brochure edition**: the **edition is the *when*** (the weekly
+  bucket), the **store is the *where***. The Brochure Engine already retains
+  editions as history (§11/§12), so those editions *are* the price-history
+  skeleton — a product only accrues history for a store during weeks that store
+  has a brochure. This is what makes brochure prices (not a daily poller) the
+  primary source of the lows.
+- **The search connector supplies only the price *number*.** Brochure images would
+  need OCR (out of scope), so the one automated price source is the live search
+  connector. Its **current** price is sampled **once per brochure edition** (weekly,
+  on the existing brochure cron) — **not** a daily search-driven time-series. Live
+  "current market price" display remains the connector's existing job.
+- **Lowest-ever is derived, not stored** (kept simple for a personal tool):
+  `MIN(price)` over the edition-anchored points, carrying that point's store
+  (*where*) and edition/`observedAt` (*when*). Ties keep the **earliest**
+  occurrence.
+
+### 13.B What was built (all additive, inside `brochure-engine/`)
+```
+schema.sql                     EDIT  + price_points table + ux_price_point unique index (brochures table untouched)
+src/storage/priceStore.js      NEW   D1 PriceStore: record (idempotent) / getHistory / getLowest / listProducts
+src/storage/local.js           EDIT  + in-memory PriceStore (dev/selftest parity)
+src/priceHistory.js            NEW   contract (PricePoint), recordPrices (edition-anchored capture), read shaping, CONNECTOR search clients
+src/products.js                NEW   PURE CONFIG watchlist (milk, eggs) — the only place a store name appears
+src/engine.js                  EDIT  + GET /lowest, /prices, /prices/history; + guarded POST /prices/record; health lists products
+src/index.js                   EDIT  build priceStore + CONNECTOR search client into ctx; scheduled() captures prices AFTER the brochure fan-out
+wrangler.toml                  EDIT  + [[services]] CONNECTOR = shopping-connector (reach the search engine)
+dev.mjs                        EDIT  + offline deterministic Price History selftest (node dev.mjs pricetest | selftest)
+```
+- **Discipline preserved:** store knowledge lives ONLY in `products.js`. The Core,
+  `priceHistory`, pipeline and storage never learn a store name. A product only
+  gets points at stores present in **both** engines (LuLu, Tamimi, Danube, and
+  Panda via brochure id `hyperpanda` ≡ search id `panda`).
+- **No regression by construction:** M1/M2 code paths are unedited; Price History
+  is new files + additive routes/wiring sharing the same D1 binding.
+
+### 13.C API surface (added)
+- `GET /lowest?product=<id>` → `{ product, lowest: { price, store, edition, observedAt, … } }` — the headline (price + where + when).
+- `GET /prices?product=<id>` → lowest-ever + latest price per store.
+- `GET /prices/history?product=<id>` → the full time series (Pillar 3 substrate).
+- `POST /prices/record` → guarded by `X-Ingest-Secret`; runs the capture now. The
+  cron calls `recordPrices` directly (no HTTP) after the brochure fan-out.
+- `GET /` health now lists `priceHistory: { products, tracked }`.
+
+### 13.D Scheduling & budget (reuses the existing weekly cron)
+No new cron. The existing Tue+Wed fan-out (`scheduled()`, §12.H) now, **after** the
+brochure fan-out completes (so the current editions it anchors to are committed),
+runs `recordPrices` in the **coordinator** invocation. Capture makes only a handful
+of cheap `CONNECTOR` search calls (no image downloads), so it stays far inside the
+Free-plan 50-subrequest budget. If the watchlist ever grows large, the same
+Architecture-C `SELF` fan-out (one child per product) applies — the capture is
+already isolated behind `recordPrices`.
+
+### 13.E Production verification (all ✅, 2026-07-02, version `500a773c`)
+- **Schema applied** `--remote` (now 2 tables; `brochures` untouched). **Deployed**
+  with bindings `DB` (D1) + `BROCHURES_KV` (KV) + `SELF` + **`CONNECTOR`
+  (shopping-connector)**.
+- **Live capture** (`POST /prices/record`): **8 points recorded** (`milk`+`eggs` ×
+  lulu/tamimi/danube/hyperpanda), each anchored to that store's **real** current
+  edition (lulu `2026-W26`, tamimi `2026-W26`, danube `2025-W37`, hyperpanda
+  `2026-W20`), price from the live connector (e.g. LuLu milk **7 SAR**, Almarai).
+- **Idempotent:** re-record → **`deduped: 8, recorded: 0`** (the `ux_price_point`
+  unique index).
+- **Reads:** `GET /lowest?product=milk` → 7 SAR @ lulu @ `2026-W26`;
+  `/lowest?product=eggs` → 13.95 @ lulu @ `2026-W26`; `/prices/history?product=milk`
+  → 4 points; health `tracked: [milk, eggs]`.
+- **M1 no regression:** Othaim still edition `2026-W27`, `sourceType:pdf`, PDF
+  streams **929,931 bytes `%PDF-`** with the **same sha256 `3ec0bce0…3528f607`**
+  (§11.E). **M2 no regression:** `GET /brochures` → **8 held**. **Search connector
+  no regression:** `GET /` ok (6 providers), `panda` "milk" → 30 live results.
+- **Local proof:** `node dev.mjs pricetest` (offline, deterministic) proves
+  edition-anchoring, dedupe, lowest (price/where/when), lows-only-drop, and
+  brochure-less stores are skipped. `node dev.mjs selftest` runs **M1 + M2 + Price
+  History** end-to-end green.
+
+### 13.F Notes, caveats & next (Personal Alerts)
+- **`INGEST_SECRET` rotated this session** to run the guarded `/prices/record`
+  verification (prior value uncommitted, per §12.G). Still a Worker secret (not
+  committed); rotate with `npx wrangler secret put INGEST_SECRET`. Same
+  post-rotation propagation race applies — allow a few seconds (the verification
+  succeeded on attempt 1 after a short wait).
+- **Match quality is best-effort (TODO §9.6).** Capture takes the connector's
+  **best-ranked** result for the query, which can mis-match loosely (observed:
+  "milk" → "Choco Leibniz Milk Chocolate Biscuit" at Danube). The mechanism is
+  correct; sharpen with a per-product `match` rule or explicit per-store product
+  ids where it matters. Keep watchlist queries specific.
+- **Watchlist is intentionally tiny** (`milk`, `eggs`) — a personal tool. Add
+  products by editing `src/products.js` only.
+- **Next milestone — Personal Alerts (§0/§9):** set a target price per tracked
+  product; notify when a captured point drops below it. Builds directly on these
+  edition-anchored points and the same weekly capture. Still Free plan, $0.
 
 ---
 
