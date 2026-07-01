@@ -7,6 +7,7 @@ import { amazonProvider } from './providers/amazon.js';
 import { tamimiProvider } from './providers/tamimi.js';
 import { danubeProvider } from './providers/danube.js';
 import { luluProvider } from './providers/lulu.js';
+import { noonProvider } from './providers/noon.js';
 
 const memory = createMemory('app');
 
@@ -18,6 +19,7 @@ const PROVIDERS = {
   tamimi: tamimiProvider,
   danube: danubeProvider,
   lulu: luluProvider,
+  noon: noonProvider,
 };
 
 const form = document.getElementById('search-form');
