@@ -12,15 +12,59 @@
 > subrequest budget. **Deployed & verified in production** at
 > `https://brochure-engine.tamamoooo.workers.dev` (see §12). M1
 > (`PdfIndexCollector`, Othaim) remains live and intact (§11). · **Next phase:**
-> M3 (`StoreSessionCollector`, feeds Pillar 3) — see §12.G / ARCHITECTURE §9.
-> The Brochure Engine Discovery report is §10; M1 record is §11; M2 record is §12.
+> **Price History (Pillar 3)** — the new top implementation priority; see the
+> **Roadmap (§0)** and TODOs (§9). `StoreSessionCollector` is now **deferred**
+> (§0). The Brochure Engine Discovery report is §10; M1 record is §11; M2 is §12.
 >
-> **Project vision (context for the next phases):** Souq is becoming a Saudi
-> **shopping assistant**, not just a live search engine. Three pillars:
+> **Project vision:** Souq is a **personal Saudi shopping assistant** — a private
+> tool for one user, **not a commercial platform**. Three pillars:
 > (1) Live online search — *built* (§1–§8); (2) **Weekly brochures for physical
-> stores** — *Discovery done, §10, implementation next*; (3) Price intelligence
-> (lowest-ever price, future price alerts) — later, and the reason the Brochure
-> Engine must keep **history**.
+> stores** — *built (M1+M2), §10–§12*; (3) **Price intelligence** (price history,
+> then personal alerts) — *next*, and the reason the Brochure Engine keeps
+> **history**. The current, authoritative build order is the **Roadmap (§0)**.
+
+---
+
+## 0. Roadmap & priorities (authoritative)
+
+> **This is the source of truth for what to build next.** It overrides any
+> ordering implied elsewhere in this document or in `brochure-engine/ARCHITECTURE.md`
+> (e.g. older "M3 = StoreSessionCollector next" notes). Souq is a **personal
+> shopping assistant for one user — not a commercial platform**; scope decisions
+> favor a simple, private, low-cost tool over breadth or productization.
+
+**Priorities, highest to lowest:**
+
+1. **Online Search** — ✅ **done** (§1–§8). Six stores, live multi-store search,
+   Smart Ranking, "Show all", Arabic+English, all routed through the connector.
+2. **Brochure Engine** — ✅ **done** (§10–§12). M1 `PdfIndexCollector` (Othaim PDF)
+   + M2 `AggregatorCollector` (OffersInMe, 7 stores), 8 brochures held in
+   production, weekly Tue+Wed fan-out scheduler on the Free plan.
+3. **Price History** — ⏭ **next milestone.** Track prices over time so the user
+   can see a product's price trend and its lowest-ever price. Builds on the search
+   connector's live results and the Brochure Engine's retained history. This is
+   Pillar 3's foundation.
+4. **Personal Alerts** — planned. Let the user set a target/interest on a product
+   and be notified when its price drops (personal, single-user notifications —
+   not a subscription/marketing system).
+5. **Unified Frontend** — planned. One interface over all three pillars (search +
+   brochures + price history/alerts) instead of the search-only frontend today.
+
+**Explicitly deferred (do NOT build until the above are done and only if still
+warranted):**
+
+- **`StoreSessionCollector`** (the former "M3") — reusing search sessions for
+  structured promos. Deferred; Price History takes precedence.
+- **OCR** / price extraction from brochure images.
+- **AI extraction** (LLM-based parsing of brochures/pages into structured data).
+- **Advanced analytics** (dashboards, aggregate/market analysis, trend modeling
+  beyond a single product's own history).
+- **Any paid Cloudflare features** — stay on the **Free plan**. No R2 (KV is the
+  approved store), no paid Queues/Workflows, no paid Workers plan. Cost target: **$0**.
+
+Deferred items are not cancelled — they may return once priorities 3–5 are met,
+but only if they still serve the personal-assistant goal. Keep future milestones
+aligned to this order.
 
 ---
 
@@ -243,28 +287,36 @@ wired into the UI (dropdown + checkbox chips).
 
 ## 9. Remaining TODOs (priority order)
 
-1. **Brochure Engine — M1 & M2 are DONE & LIVE (§11, §12).** M1
-   `PdfIndexCollector` (Othaim) and M2 `AggregatorCollector` (OffersInMe, 7 more
-   stores) are built, **deployed, and verified in production** at
-   `https://brochure-engine.tamamoooo.workers.dev`. Eight brochures are held
-   (Othaim PDF + Hyper Panda / Carrefour / LuLu / Danube / Tamimi / Manuel /
-   Nesto image-sets for Central/Riyadh). It lives **inside the connector repo**
-   as a second, self-contained Worker under `brochure-engine/`. The **next step
-   is M3** — the `StoreSessionCollector` reusing the search connector's sessions
-   for structured promos (feeds Pillar 3, OCR-free). See **§12.G** / ARCHITECTURE
-   §9; M2 deployment + verification are in **§12**.
-2. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
+> Ordered to match the **Roadmap (§0)**. Priorities 1–2 (Online Search, Brochure
+> Engine) are complete; the next milestone is **Price History**.
+
+1. **Price History (Pillar 3) — next milestone.** Track prices over time so the
+   user sees a product's trend and its lowest-ever price. Builds on the live search
+   connector's results and the Brochure Engine's retained history (the reason the
+   engine keeps history at all). Stay on the **Free plan** (KV/D1, no R2, no paid
+   features). Design not yet written — this is the milestone to start.
+2. **Personal Alerts (after Price History).** Let the user flag a product and be
+   notified when its price drops — personal, single-user notifications, not a
+   marketing/subscription system.
+3. **Unified Frontend (after Alerts).** One interface spanning search + brochures +
+   price history/alerts, replacing the search-only frontend.
+4. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
    account with PA-API access) so `pa-api` becomes the active path and results stop
    depending on the fragile HTML scraper — or formally accept Amazon as best-effort.
-3. **Refresh README.md & CHANGELOG.md.** Bring them up to date with Souq branding,
+5. **Refresh README.md & CHANGELOG.md.** Bring them up to date with Souq branding,
    the 6-store multi-store architecture, connector routing, and Smart Ranking.
    (They still describe single-store "Panda Live Search v1.0.0".)
-4. **Best-effort store monitoring.** Amazon (anti-bot) and Noon (RSC-flight
+6. **Best-effort store monitoring.** Amazon (anti-bot) and Noon (RSC-flight
    parsing) are fragile to upstream markup changes; add a lightweight way to notice
    when they silently stop returning results.
 
-_Done recently (no longer TODO): **Brochure Engine Discovery (§10)**, Smart
-Ranking, per-store "Show all" expansion, and Danube transient-failure retry._
+**Deferred (per §0 — not TODOs now):** `StoreSessionCollector` (former M3), OCR /
+brochure price extraction, AI/LLM extraction, advanced analytics, and any paid
+Cloudflare features (R2, paid Queues/Workflows/Workers).
+
+_Done recently (no longer TODO): **Brochure Engine M1 + M2** (§11, §12) — deployed
+& verified in production; **Brochure Engine Discovery (§10)**, Smart Ranking,
+per-store "Show all" expansion, and Danube transient-failure retry._
 
 ---
 
@@ -673,13 +725,19 @@ mechanism.
   the **latest available** flyer and records `validFrom/validTo`, so staleness is
   visible. A **freshness monitor** (ARCHITECTURE §11) — alert when a store hasn't
   refreshed in N weeks — is the natural follow-up.
-- **M3 — `StoreSessionCollector`** (next, ARCHITECTURE §7.3/§9): reuse the search
-  connector's Panda/LuLu/Danube/Tamimi sessions for **structured** promo items
-  (`sourceType:"api"`, OCR-free) → direct Pillar 3 input. Requires extracting the
-  shared fetch/session helpers into a package both repos consume (§12.5 decision).
-- **Also deferred (unchanged):** Farm as a second `PdfIndexCollector` config, R2 /
-  long-term storage, PDF→page-image rendering, and a second aggregator adapter
-  (e.g. Tiendeo) for cross-checking freshness.
+- **Next milestone is Price History (Pillar 3), NOT `StoreSessionCollector`.** Per
+  the current Roadmap (§0), the former "M3" `StoreSessionCollector` is **deferred**.
+  The next build is **Price History** — tracking each product's price over time /
+  lowest-ever price, on the Free plan. (`StoreSessionCollector` — reusing the
+  search connector's Panda/LuLu/Danube/Tamimi sessions for structured, OCR-free
+  promo items — remains a *possible later* input to Pillar 3, but only after
+  Price History, Personal Alerts, and the Unified Frontend, and only if still
+  warranted.)
+- **Deferred (per §0):** `StoreSessionCollector`, OCR / brochure price extraction,
+  AI/LLM extraction, advanced analytics, and any paid Cloudflare features (R2 /
+  long-term storage, paid Queues/Workflows). Also deferred: Farm as a second
+  `PdfIndexCollector` config, PDF→page-image rendering, and a second aggregator
+  adapter (e.g. Tiendeo) for cross-checking freshness.
 
 ### 12.H Scheduler finalization — Architecture C, deployed & verified (2026-07-02)
 The last piece of M2: replacing the interim one-store-per-day rotation (§12.E)
