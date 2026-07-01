@@ -44,7 +44,14 @@ async function runSearch(query) {
   }
 
   const providerId = (storeSelect && storeSelect.value) || 'panda';
-  const provider = PROVIDERS[providerId] || pandaProvider;
+  const provider = PROVIDERS[providerId];
+  // If the selected store isn't known to this (possibly cached) script, say so
+  // instead of silently searching a different store.
+  if (!provider) {
+    results.innerHTML = '';
+    status.textContent = 'This store isn’t available yet — please reload the page.';
+    return;
+  }
 
   const token = {};
   inFlight = token;
