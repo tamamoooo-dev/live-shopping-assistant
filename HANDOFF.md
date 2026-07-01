@@ -5,7 +5,8 @@
 > current state. Keep it updated at the end of each phase.
 >
 > **Last updated:** 2026-07-01 · **Phase just completed:** Brochure Engine
-> **M1** — `PdfIndexCollector` for Othaim, built + verified end-to-end (see §11)
+> **M1** — `PdfIndexCollector` for Othaim, **deployed & verified in production**
+> at `https://brochure-engine.tamamoooo.workers.dev` (see §11, esp. §11.E)
 > · **Next phase:** M2 (`AggregatorCollector`, one aggregator) — see §11.G. The
 > Brochure Engine Discovery report is §10; the M1 implementation record is §11.
 >
@@ -237,13 +238,14 @@ wired into the UI (dropdown + checkbox chips).
 
 ## 9. Remaining TODOs (priority order)
 
-1. **Brochure Engine — M1 is DONE (§11).** `PdfIndexCollector` for Othaim
-   (Central/Riyadh) is built and verified end-to-end (detect → download → dedupe
-   → store → index → expose). It lives **inside the connector repo** as a second,
+1. **Brochure Engine — M1 is DONE & LIVE (§11).** `PdfIndexCollector` for Othaim
+   (Central/Riyadh) is built, **deployed, and verified in production** at
+   `https://brochure-engine.tamamoooo.workers.dev` (detect → download → dedupe →
+   store → index → expose). It lives **inside the connector repo** as a second,
    self-contained Worker under `brochure-engine/` (decision: no third repo). The
    **next step is M2** — the `AggregatorCollector` (one aggregator, covers the
-   other 8 stores for Riyadh). See **§11.G** for the M2 plan. **Deployment of M1
-   is ready but not yet run** (needs explicit authorization) — see §11.E.
+   other 8 stores for Riyadh). See **§11.G** for the M2 plan; deployment details
+   and production verification are in **§11.E**.
 2. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
    account with PA-API access) so `pa-api` becomes the active path and results stop
    depending on the fragile HTML scraper — or formally accept Amazon as best-effort.
@@ -360,11 +362,11 @@ Reuse the proven **Provider → Strategy → normalized-contract** discipline, a
 
 ## 11. Brochure Engine — M1 Implementation (PdfIndexCollector, Othaim)
 
-> **Status:** M1 **built and verified end-to-end** (2026-07-01) against the live
-> Othaim site. Lives in the connector repo; deployment wired but not yet run.
-> Source of truth for the design is `brochure-engine/ARCHITECTURE.md`; this
-> section records what was actually implemented and how it deviates from/refines
-> that design.
+> **Status:** M1 **deployed & verified in production** (2026-07-01) at
+> `https://brochure-engine.tamamoooo.workers.dev`, against the live Othaim site.
+> Lives in the connector repo as a second Worker. Source of truth for the design
+> is `brochure-engine/ARCHITECTURE.md`; this section records what was actually
+> implemented, how it refines that design, and the production deployment (§11.E).
 
 ### 11.A What M1 delivers
 The reference vertical slice proving the architecture: **detect → download →
@@ -428,20 +430,54 @@ new: 0`** — the checksum gate + `ux_checksum` unique index prevent a re-store.
    already hardens for Danube (§5). The collector's fetch now retries **once** on
    5xx/429/network with a short backoff; 4xx (except 429) is final.
 
-### 11.E Deployment (wired, not yet run — needs authorization)
-Resources already **created** on Cloudflare: D1 db `brochure-engine`
-(`50bbe1ea-…`) and KV namespace `BROCHURES_KV` (`38b06392…`), both pasted into
-`wrangler.toml`. Remaining steps (run from `brochure-engine/`):
+### 11.E Deployment — LIVE IN PRODUCTION (verified 2026-07-01)
+**Production URL:** `https://brochure-engine.tamamoooo.workers.dev`
+(separate Worker from the search connector at
+`https://shopping-connector.tamamoooo.workers.dev` — different deployment, same
+repo, same Cloudflare account `tamamoooo@gmail.com`).
+
+**Cloudflare resources (M1):**
+- **Worker:** `brochure-engine` · weekly Cron `0 6 * * 1` (Mon 06:00 UTC).
+- **D1 database:** `brochure-engine`, id `50bbe1ea-aca0-4f1d-abfd-c586335d82ba`
+  (region EEUR). Schema (`schema.sql`) applied `--remote`; `ux_checksum` unique
+  index present.
+- **KV namespace (object store):** `BROCHURES_KV`,
+  id `38b0639256a34d1ebd7d96dcb55d0a9b`. Holds the PDF bytes + `meta.json`
+  (R2 still not enabled; KV is the approved M1 fallback, one-line swap later).
+- **Secret:** `INGEST_SECRET` (Worker secret, guards `POST /ingest`). Not
+  committed; rotate with `npx wrangler secret put INGEST_SECRET`.
+
+**How it was deployed (repeatable, from `brochure-engine/`):**
 ```
-npx wrangler d1 execute brochure-engine --remote --file=./schema.sql   # apply schema
-npx wrangler secret put INGEST_SECRET                                    # guard POST /ingest
-npx wrangler deploy                                                      # deploy Worker + weekly cron
-# smoke test:
-curl https://brochure-engine.<subdomain>.workers.dev/
-curl -X POST -H "X-Ingest-Secret: <secret>" "https://…/ingest?store=othaim"
-curl "https://…/brochures?store=othaim&region=central"
+npx wrangler d1 execute brochure-engine --remote --file=./schema.sql
+printf '%s' "<secret>" | npx wrangler secret put INGEST_SECRET
+npx wrangler deploy
 ```
-Local dev needs no cloud: `node dev.mjs` (server) or `node dev.mjs selftest` (E2E).
+Redeploys are just `npx wrangler deploy` (idempotent; the ingest dedupes).
+Local dev still needs no cloud: `node dev.mjs` / `node dev.mjs selftest`.
+
+**Production end-to-end verification (all ✅):** Worker reachable (`GET /` 200);
+Othaim collector `detected:1` for Central/Riyadh; PDF downloaded (929,931 bytes,
+`%PDF-`); **duplicate detection post-deploy** (2nd `POST /ingest` →
+`deduped:1, new:0`); metadata written (D1 row + `meta.json`); read API returns
+the expected BrochureDoc (`othaim:central:2026-W27`); asset retrieval streams the
+PDF with a **byte-exact sha256 match** to the recorded checksum
+(`3ec0bce0…3528f607`); **no regression** to the search Worker (healthy, 6
+providers, live search returns results).
+
+**Production-specific findings / notes:**
+- **First-request `error code: 1042`** immediately after the first deploy — the
+  workers.dev route was still propagating. Resolved itself within ~seconds
+  (retry with backoff). Expected for a brand-new workers.dev subdomain; not a
+  code fault. Retry-on-deploy if you see it.
+- **`workers.dev` + Preview URLs enabled by default** (wrangler warned, because
+  neither is pinned in `wrangler.toml`). Fine for M1 (we *want* the public
+  read API). To lock down later, set `workers_dev`/`preview_urls` explicitly.
+- `wrangler secret put` on a not-yet-deployed Worker **created the Worker first**
+  (non-interactive fallback "yes"), then `deploy` uploaded the code — harmless
+  ordering, noted so it isn't mistaken for a stray Worker.
+- The public read endpoints are intentionally CORS-open (frontend will call
+  them); `POST /ingest` is the only guarded route.
 
 ### 11.F API surface implemented (§8)
 - `GET /` — health + `held` (current store/region/edition list).
