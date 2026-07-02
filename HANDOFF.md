@@ -5,9 +5,8 @@
 > current state. Keep it updated at the end of each phase.
 >
 > **Last updated:** 2026-07-02 · **Phase just completed:** **Brochure Source
-> Migration — CODE COMPLETE & VERIFIED (see §15); production Worker deploy is a
-> remaining operational step (not done — the milestone asked to commit/push/stop,
-> not deploy).** OffersInMe is **removed entirely** as a brochure source and
+> Migration — DEPLOYED & VERIFIED IN PRODUCTION (see §15).** OffersInMe is
+> **removed entirely** as a brochure source and
 > replaced by **D4D Online** as the primary aggregator, with a new
 > **official-offers-page fallback** when D4D has no current flyer (never a second
 > aggregator). The change is confined to the **provider/adapter layer** (a new
@@ -62,7 +61,8 @@
 2. **Brochure Engine** — ✅ **done** (§10–§12). M1 `PdfIndexCollector` (Othaim PDF)
    + `AggregatorCollector` for 7 stores, 8 brochures held in production, weekly
    Tue+Wed fan-out scheduler on the Free plan. **Aggregator migrated OffersInMe →
-   D4D + official-offers-page fallback (§15, code complete; deploy pending).**
+   D4D + official-offers-page fallback (§15) — deployed & verified; all covered
+   stores current at 2026-W27.**
 3. **Price History** — ✅ **done** (§13). A **feature of the Brochure Engine**:
    price points **anchored to brochure editions** (the *when*/*where*), price
    *number* from the search connector, lowest-ever (price + where + when) derived
@@ -1136,11 +1136,12 @@ and swipe on touch, next-page image preloading, and a PDF branch for PDF sources
 
 ## 15. Brochure Source Migration — OffersInMe → D4D + official fallback
 
-> **Status:** **code complete & verified against the live D4D site** (2026-07-02).
-> **NOT YET DEPLOYED to the brochure-engine Worker** — the milestone asked to
-> *update HANDOFF, commit, push, stop*, not deploy. The search connector and
-> frontend changes are safe to ship independently; the engine keeps serving the
-> old OffersInMe editions until someone runs the deploy + ingest in §15.F.
+> **Status:** **DEPLOYED & VERIFIED IN PRODUCTION** (2026-07-02) at
+> `https://brochure-engine.tamamoooo.workers.dev` (version `788db568`). The Worker
+> was deployed and all stores re-ingested from D4D on explicit follow-up
+> instruction; production now holds **current `2026-W27` D4D editions** for every
+> covered store (§15.F). The old OffersInMe rows are superseded (retained as
+> is_current=0 history).
 
 ### 15.A Goal & rules (as given)
 Replace OffersInMe **completely**. Make **D4D** the primary brochure provider.
@@ -1242,22 +1243,31 @@ live-shopping-assistant/
   providers) + `panda` "milk" (29 results); brochure engine `GET /` (8 providers)
   + Price History `/lowest?product=milk`.
 
-**To finish (operational step, NOT done here — needs a production deploy):**
+**Production deploy + ingest (DONE 2026-07-02):**
 ```
 cd serverless-connector/brochure-engine
-# 1. Deploy the new engine code (no schema migration needed):
-npx wrangler deploy
-# 2. Rotate the ingest secret if unknown (per §12.G/§13.F), then refresh all
-#    stores so production holds D4D editions (supersedes the old OffersInMe rows;
-#    checksum dedupe makes re-fires free):
-#    for id in othaim hyperpanda carrefour lulu danube tamimi manuel nesto; do
-#      curl -X POST -H "X-Ingest-Secret: <secret>" \
-#        "https://brochure-engine.tamamoooo.workers.dev/ingest?store=$id"; done
-#    (or just let the Tue+Wed cron fan-out do it — §12.H)
+npx wrangler deploy                         # version 788db568 (no schema migration)
+# INGEST_SECRET was rotated this session (per §12.G/§13.F) then all stores ingested:
+for id in othaim hyperpanda carrefour lulu danube tamimi manuel nesto; do
+  curl -X POST -H "X-Ingest-Secret: <secret>" \
+    "https://brochure-engine.tamamoooo.workers.dev/ingest?store=$id"; done
 ```
-Until step 1 runs, the deployed Worker still serves the **old OffersInMe editions**
-(e.g. hyperpanda `2026-W20`, danube `2025-W37`); the frontend is backward-compatible
-with those, so nothing breaks in the interim.
+**Result (all ✅):** hyperpanda / carrefour / lulu / danube / tamimi / nesto each
+ingested **new** and now current at **`2026-W27`** (`sourceType:images`), with live
+D4D validity windows (e.g. LuLu "Saudi Summer Surprises" 06‑30→07‑07, **Danube
+"Summer is yours…" 07‑01→07‑14** — vs the old stale `2025-W37`). Othaim **deduped**
+(official PDF unchanged, `2026-W27`, sha256 `3ec0bce0…`). **Manuel** produced no
+brochure (`d4d: no brochure` — its D4D store page is currently empty and it has no
+official fallback), so it keeps its prior `2025-W37` row; Manuel is engine-only,
+not a frontend brochure store, so the UI is unaffected. **Frontend end-to-end
+(live prod engine):** the in-app viewer opened the Panda flyer at
+`…/hyperpanda/central/2026-W27/page00.webp`, header **"Jul 1, 2026 – Jul 7, 2026"**,
+counter **1/40**, engine-served — no console errors. **No regression:** search
+connector `lulu` "milk" 20 results; Price History `/lowest?product=milk` intact
+(7 SAR @ lulu; it re-anchors to W27 on the next weekly capture).
+- **`INGEST_SECRET` was rotated this session** (prior value uncommitted, per
+  §12.G). Still a Worker secret (not committed); rotate with
+  `npx wrangler secret put INGEST_SECRET`.
 
 ### 15.G Notes & follow-ups
 - **D4D returns multiple concurrent promos per store;** the collector's existing
