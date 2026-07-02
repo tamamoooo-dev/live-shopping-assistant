@@ -86,6 +86,16 @@ export async function brochureForStore(searchStoreId) {
   return byStore[`${map.store}:${map.region}`] || null;
 }
 
+// Is this brochure an EXTERNAL link rather than an in-app viewable page set?
+// The engine serves two kinds of current brochure, and the frontend stays
+// source-agnostic: it never learns which aggregator or official source produced
+// a brochure, only whether it is viewable inline (page images) or is a pointer
+// to the store's official offers page (sourceType "link"). A link brochure has
+// a sourceUrl and no inline pages — the flyer button opens it in a new tab.
+export function isExternalBrochure(b) {
+  return !!(b && b.sourceType === 'link' && b.sourceUrl);
+}
+
 // URL that streams a stored asset (page image / meta.json) THROUGH the engine —
 // the user never touches the original aggregator/store site. `key` is an object
 // key like "brochures/lulu/central/2026-W26/page00.webp".

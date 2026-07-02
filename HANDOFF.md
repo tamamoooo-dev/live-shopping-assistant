@@ -4,8 +4,23 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-02 · **Phase just completed:** **Unified Interface
-> (Integration) — COMPLETE (first pass).** The three built pillars are now wired
+> **Last updated:** 2026-07-02 · **Phase just completed:** **Brochure Source
+> Migration — CODE COMPLETE & VERIFIED (see §15); production Worker deploy is a
+> remaining operational step (not done — the milestone asked to commit/push/stop,
+> not deploy).** OffersInMe is **removed entirely** as a brochure source and
+> replaced by **D4D Online** as the primary aggregator, with a new
+> **official-offers-page fallback** when D4D has no current flyer (never a second
+> aggregator). The change is confined to the **provider/adapter layer** (a new
+> `d4d` adapter + a new `officialLink` collector + 7 rewritten provider configs +
+> a small additive pipeline branch and one frontend branch); the Brochure Engine
+> architecture, collectors' contract, pipeline, storage, read APIs, and the search
+> path are otherwise unchanged. Verified end-to-end against the **live D4D site**
+> (§15): all covered stores resolve **current** brochures (e.g. Danube now valid
+> to 2026-07-14, vs the stale 2025-W37 OffersInMe held), the in-app viewer serves
+> D4D pages through the engine, the currency gate rejects expired flyers, and the
+> fallback produces a link brochure. **Before this**, the prior phase was the
+> **Unified Interface (Integration) — COMPLETE (first pass).** The three built
+> pillars are now wired
 > into the **existing search page** (no redesign, no new backend): each all-stores
 > search now shows, inline, (a) the **historical lowest price** (price + store +
 > date) for tracked products via the Brochure Engine's `/lowest`, and (b) a
@@ -45,8 +60,9 @@
 1. **Online Search** — ✅ **done** (§1–§8). Six stores, live multi-store search,
    Smart Ranking, "Show all", Arabic+English, all routed through the connector.
 2. **Brochure Engine** — ✅ **done** (§10–§12). M1 `PdfIndexCollector` (Othaim PDF)
-   + M2 `AggregatorCollector` (OffersInMe, 7 stores), 8 brochures held in
-   production, weekly Tue+Wed fan-out scheduler on the Free plan.
+   + `AggregatorCollector` for 7 stores, 8 brochures held in production, weekly
+   Tue+Wed fan-out scheduler on the Free plan. **Aggregator migrated OffersInMe →
+   D4D + official-offers-page fallback (§15, code complete; deploy pending).**
 3. **Price History** — ✅ **done** (§13). A **feature of the Brochure Engine**:
    price points **anchored to brochure editions** (the *when*/*where*), price
    *number* from the search connector, lowest-ever (price + where + when) derived
@@ -631,6 +647,13 @@ storage, and PDF→page-image rendering for PDF sources.
 > One reusable `AggregatorCollector` + one adapter covers 7 additional stores for
 > Central/Riyadh. Source of truth for the design is `brochure-engine/ARCHITECTURE.md`
 > §7.2/§9; this section records what was actually built and how it refines the plan.
+>
+> **⚠️ SUPERSEDED (2026-07-02) — see §15.** The **OffersInMe** adapter this section
+> describes has been **removed**. The reusable `AggregatorCollector` remains; only
+> its adapter changed to **D4D Online**, plus a new official-offers-page fallback.
+> Read §12 for the collector/pipeline design that still holds; read **§15** for the
+> current aggregator and fallback behaviour. Any OffersInMe specifics below (slug
+> maps, `central-province` include matchers, the OffersInMe URL scheme) are history.
 
 ### 12.A What M2 delivers
 The second reusable collector, proving the aggregator pattern end-to-end:
@@ -1108,6 +1131,147 @@ official-PDF store ever becomes searchable.)
 
 **Follow-ups (nice-to-have, not v1):** thumbnail strip / jump-to-page, pinch-zoom
 and swipe on touch, next-page image preloading, and a PDF branch for PDF sources.
+
+---
+
+## 15. Brochure Source Migration — OffersInMe → D4D + official fallback
+
+> **Status:** **code complete & verified against the live D4D site** (2026-07-02).
+> **NOT YET DEPLOYED to the brochure-engine Worker** — the milestone asked to
+> *update HANDOFF, commit, push, stop*, not deploy. The search connector and
+> frontend changes are safe to ship independently; the engine keeps serving the
+> old OffersInMe editions until someone runs the deploy + ingest in §15.F.
+
+### 15.A Goal & rules (as given)
+Replace OffersInMe **completely**. Make **D4D** the primary brochure provider.
+Keep the Brochure Engine architecture unchanged; reuse the existing collectors,
+pipeline, storage, APIs, and frontend; keep changes in the **provider/adapter
+layer**. Rules honoured:
+- **D4D current flyer → download, store, serve exactly as today** (image-set path,
+  in-app viewer, engine-served pages — unchanged).
+- **D4D expired or unavailable → do NOT fall back to OffersInMe.** Instead expose
+  the store's **official offers page** as the fallback destination.
+- **Frontend stays source-agnostic** — it never learns D4D-vs-official; it only
+  distinguishes *inline-viewable* (page images) from *external link*.
+
+### 15.B Why D4D (and how it beats OffersInMe here)
+D4D Online (`d4donline.com`) **server-renders** clean, fetchable KSA pages (HTTP
+200 from a plain Worker `fetch`, incl. the engine's default UA), **scopes offers
+by city in the URL path** (so Riyadh = Central is selected by the URL, not a slug
+matcher), and carries **current** Riyadh flyers with **machine-readable validity
+dates** (JSON-LD `datePublished`/`expires`). OffersInMe had grown stale (Danube
+lagging to ~2025-09; §12.G). Verified live, every covered store now resolves a
+**current** flyer (e.g. Danube valid **to 2026-07-14**, Hyper Panda/LuLu/Carrefour/
+Tamimi/Nesto valid into the current week).
+
+### 15.C D4D shape (verified live)
+- **Store page:** `…/en/saudi-arabia/<city>/offers/<slug>-<id>` → offer cards
+  `<a href="…/<slug>-<id>/<offerId>/<offerSlug>" class="book-cover" title="… . <expiresISO>">`.
+  The **raw HTML lists only current offers** (the expired archive is client-side
+  loaded and never fetched).
+- **Leaflet page:** `…/offers/<slug>-<id>/<offerId>/<offerSlug>` → **JSON-LD
+  `CreativeWork`** with `name`/`datePublished`/`expires`, and page images as
+  `<picture class="offer-page" data-index="<n>"><img src="https://cdn.d4donline.com/u/d/YY/MM/DD/<hash>.webp">`
+  (`data-index` is the 0-based page order; the hashed filename carries no index).
+
+### 15.D What changed (all in the provider/adapter layer + minimal edges)
+```
+brochure-engine/
+  src/collectors/adapters/d4d.js        NEW  the D4D adapter (aggregator-generic; reads the shape in §15.C)
+  src/collectors/adapters/offersinme.js DELETED
+  src/collectors/officialLink.js        NEW  fallback collector: emits a "link" brochure (sourceType:"link", sourceUrl=official offers page, no pages)
+  src/collectors/aggregator.js          EDIT (small) currency gate: never serve an expired pick → yield nothing so best-first falls through
+  src/pipeline.js                       EDIT (small, additive) link-candidate branch: checksum over sourceUrl, index the D1 row, write NO object bytes
+  src/providers/{hyperpanda,carrefour,lulu,danube,tamimi,manuel,nesto}.js  REWRITTEN pure config: D4D store slug+id + city + officialUrl; strategies [d4d, officialLink]
+  src/index.js / dev.mjs                EDIT comments; dev.mjs gains an offline fallback selftest
+live-shopping-assistant/
+  src/brochure.js                       EDIT +isExternalBrochure(b) (sourceType==="link" && sourceUrl)
+  src/app.js                            EDIT fillFlyer: link brochure → open sourceUrl in a new tab; else → in-app viewer (unchanged)
+```
+- **Discipline preserved (project rule 2):** all store knowledge is the 7 provider
+  configs (D4D `<slug>-<id>`, `city`, `officialUrl`); the adapter is store-agnostic,
+  the collector aggregator-agnostic, the pipeline/Core/storage store-agnostic. The
+  `AggregatorCollector`, the `BrochureDoc` contract, storage, read APIs, scheduler,
+  and Price History are **unchanged**. `sourceType:"link"` is an existing contract
+  value (pdf|images|flipbook|api|link) needing **no schema migration**.
+- **Best-first realises the fallback rule:** each aggregator provider is
+  `strategies: [d4d, officialLink]`. D4D wins when it has a current flyer;
+  otherwise (expired via the currency gate, or unavailable → empty) best-first
+  runs `officialLink`, which yields the store's official offers page. This is the
+  engine's existing `collectBestFirst` dispatch — no Core change.
+
+### 15.E Store map (Central = Riyadh) & official fallback URLs
+| Provider (engine id) | D4D store (Riyadh) | Official-page fallback |
+|---|---|---|
+| hyperpanda (search `panda`) | `hyper-panda-70` | https://www.panda.com.sa/ |
+| lulu | `lulu-hypermarket-63` | https://www.luluhypermarket.com/en-sa |
+| tamimi | `tamimi-market-68` | https://shop.tamimimarkets.com/ |
+| danube | `danube-74` | https://www.danube.sa/ |
+| carrefour | `carrefour-62` | https://www.carrefourksa.com/mafsau/en/ |
+| nesto | `nesto-73` | https://nesto.sa/ |
+| manuel | `manuel-market-223` | *(none — Manuel has no official offers page; no fallback)* |
+| othaim | *(unchanged — official PDF via `PdfIndexCollector`, §11)* | n/a |
+
+- **Othaim was NOT touched** — it is an official PDF, not OffersInMe; it stays
+  current (edition `2026-W27`) and out of scope for this migration.
+- **Manuel** currently has **no current D4D offer** (its D4D store page is empty /
+  "coming up") **and no official offers page**, so it resolves to **no brochure** —
+  the correct "unavailable, no fallback" outcome. Manuel is engine-only (not one of
+  the frontend's brochure stores), so this does not affect the UI. It self-heals if
+  D4D republishes Manuel.
+
+### 15.F Verification (all ✅, 2026-07-02) & how to finish (deploy)
+**Verified without deploying** (code + live D4D + local dev harness + prod read APIs):
+- **`node dev.mjs selftest`** (in `brochure-engine/`) — green end-to-end:
+  **M1** Othaim PDF intact (929,931 bytes, sha256 `3ec0bce0…`); **M2/D4D** LuLu
+  ingested live from D4D (edition `2026-W27`, valid `2026-06-30 → 2026-07-07`,
+  **40 pages** stored + served through `/asset`, dedupes on re-run); **Fallback**
+  currency gate rejects an expired flyer, and an empty aggregator → `officialLink`
+  link brochure (`sourceType:"link"`, correct `sourceUrl`, **no** pages, **no**
+  object bytes written, dedupes on re-run); **Price History** unchanged.
+- **All 7 aggregator providers probed against live D4D (HTML-only):** 6 resolve a
+  **current** brochure (hyperpanda/carrefour/lulu/danube/tamimi/nesto); manuel has
+  none (§15.E). Dates confirmed current.
+- **Frontend (local preview against the *current* prod engine):** search works
+  (26 results / 6 stores), the Price-History "Lowest recorded" banner works
+  (7.00 SAR @ Lulu), **the in-app viewer opens and streams engine-served pages**
+  (regression check on the viewer path), **no console errors**. The link-fallback
+  UI branch is verified by the engine selftest + code (it can't surface in the UI
+  until a store actually lacks a current D4D flyer).
+- **Prod read APIs healthy (no regression):** search connector `GET /` (6
+  providers) + `panda` "milk" (29 results); brochure engine `GET /` (8 providers)
+  + Price History `/lowest?product=milk`.
+
+**To finish (operational step, NOT done here — needs a production deploy):**
+```
+cd serverless-connector/brochure-engine
+# 1. Deploy the new engine code (no schema migration needed):
+npx wrangler deploy
+# 2. Rotate the ingest secret if unknown (per §12.G/§13.F), then refresh all
+#    stores so production holds D4D editions (supersedes the old OffersInMe rows;
+#    checksum dedupe makes re-fires free):
+#    for id in othaim hyperpanda carrefour lulu danube tamimi manuel nesto; do
+#      curl -X POST -H "X-Ingest-Secret: <secret>" \
+#        "https://brochure-engine.tamamoooo.workers.dev/ingest?store=$id"; done
+#    (or just let the Tue+Wed cron fan-out do it — §12.H)
+```
+Until step 1 runs, the deployed Worker still serves the **old OffersInMe editions**
+(e.g. hyperpanda `2026-W20`, danube `2025-W37`); the frontend is backward-compatible
+with those, so nothing breaks in the interim.
+
+### 15.G Notes & follow-ups
+- **D4D returns multiple concurrent promos per store;** the collector's existing
+  `pickCurrent` selects one current flyer (validity-window-today → latest `validTo`
+  → newest id). Some picks are single-image promos (e.g. a Tamimi 1-page banner) —
+  still current and valid; a "prefer the largest page-count flyer" refinement is a
+  possible nicety, not required.
+- **Aggregator dependency risk is unchanged (§10.F #1):** D4D is still one
+  third-party source. The `AggregatorCollector` stays adapter-driven, so a second
+  adapter (e.g. Tiendeo) for cross-checking/failover is a new file, zero collector
+  change. The official-offers-page fallback already removes the single-aggregator
+  hard dependency for the "no current flyer" case.
+- **Freshness monitor (§12.G) is still the natural follow-up** — now cheaper to
+  reason about since D4D exposes `expires` per flyer.
 
 ---
 

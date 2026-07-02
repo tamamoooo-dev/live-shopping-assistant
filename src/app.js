@@ -16,6 +16,7 @@ import {
   loadBrochures,
   brochureForStore,
   loadBrochurePages,
+  isExternalBrochure,
   productForQuery,
   lowestForProduct,
   storeLabel,
@@ -366,8 +367,12 @@ function fmtDate(iso) {
 }
 
 // A "flyer" button for one search store, appended to `slot` if that store has a
-// current brochure. Opens the brochure INSIDE the app (§14 viewer) — the user
-// never leaves. No-op for stores with no brochure (amazon/noon) or if a newer
+// current brochure. If the brochure is a viewable page set it opens INSIDE the
+// app (§14 viewer) — the user never leaves; if it is an external link (the
+// store's official offers page, exposed when no current flyer is available) it
+// opens that page in a new tab. The frontend stays source-agnostic — it only
+// distinguishes inline-viewable from external-link, never which source produced
+// the brochure. No-op for stores with no brochure (amazon/noon) or if a newer
 // search has begun.
 async function fillFlyer(slot, storeId, token) {
   if (!slot) return;
@@ -378,8 +383,15 @@ async function fillFlyer(slot, storeId, token) {
   btn.type = 'button';
   btn.className = 'store-flyer';
   btn.textContent = '📖 Weekly flyer';
-  btn.title = b.title ? `${b.title} — view this week's brochure` : "View this week's brochure";
-  btn.addEventListener('click', () => openBrochureViewer(b, label));
+  if (isExternalBrochure(b)) {
+    btn.title = "View this store's official offers page";
+    btn.addEventListener('click', () =>
+      window.open(b.sourceUrl, '_blank', 'noopener,noreferrer'),
+    );
+  } else {
+    btn.title = b.title ? `${b.title} — view this week's brochure` : "View this week's brochure";
+    btn.addEventListener('click', () => openBrochureViewer(b, label));
+  }
   slot.replaceChildren(btn);
 }
 
