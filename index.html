@@ -3,85 +3,104 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#6d28d9" />
-  <title>Souq — Live shopping search</title>
+  <meta name="theme-color" content="#6d28d9" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#141322" media="(prefers-color-scheme: dark)" />
+  <meta name="description" content="Souq — a personal Saudi shopping assistant: live prices across stores, weekly brochures, and price history." />
+  <title>Souq — Personal shopping assistant</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="app">
-    <header class="hero">
-      <div class="brand">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#/search" aria-label="Souq home">
         <span class="brand-mark" aria-hidden="true"></span>
-        <h1 class="brand-name">Souq</h1>
-      </div>
-      <p class="tagline">Search live prices across Saudi stores.</p>
-    </header>
+        <span class="brand-name">Souq</span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a class="nav-link" href="#/search" data-nav="search">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+          <span>Search</span>
+        </a>
+        <a class="nav-link" href="#/brochures" data-nav="brochures">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5A2.5 2.5 0 0 1 17.5 21H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7.5h8M8 11h8M8 14.5h5"/></svg>
+          <span>Brochures</span>
+        </a>
+      </nav>
+    </div>
+  </header>
 
-    <main class="main">
-      <div class="mode" role="tablist" aria-label="Search mode">
-        <button id="mode-all" class="mode-btn is-active" type="button" role="tab" aria-selected="true">All stores</button>
-        <button id="mode-single" class="mode-btn" type="button" role="tab" aria-selected="false">Single store</button>
-      </div>
+  <main id="main" class="main">
 
+    <!-- ============ Live Search ============ -->
+    <section id="page-search" class="page" aria-label="Live search">
       <form id="search-form" class="search" role="search" autocomplete="off">
-        <input
-          id="search-input"
-          class="search-input"
-          type="search"
-          name="q"
-          placeholder="Search a product…  (e.g. milk, بوك, iphone)"
-          enterkeyhint="search"
-          aria-label="Product name"
-        />
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+          <input
+            id="search-input"
+            class="search-input"
+            type="search"
+            name="q"
+            dir="auto"
+            placeholder="Search a product…  (e.g. milk, حليب, iphone)"
+            enterkeyhint="search"
+            aria-label="Product name"
+          />
+        </div>
         <button id="search-button" class="search-button" type="submit">Search</button>
       </form>
 
-      <!-- Single-store mode: dropdown -->
-      <div id="single-controls" class="controls" hidden>
-        <label class="store-label" for="store-select">Store</label>
-        <select id="store-select" class="store-select" aria-label="Store">
-          <option value="panda" selected>Panda</option>
-          <option value="amazon">Amazon (Experimental)</option>
-          <option value="tamimi">Tamimi</option>
-          <option value="danube">Danube</option>
-          <option value="lulu">Lulu</option>
-          <option value="noon">Noon</option>
-        </select>
-      </div>
-
-      <!-- All-stores mode: checkbox chips -->
-      <div id="multi-controls" class="controls chips" role="group" aria-label="Stores to search">
-        <label class="chip chip-all"><input type="checkbox" id="chk-all" checked /><span class="box">✓</span><span>All</span></label>
-        <label class="chip"><input type="checkbox" class="store-chk" value="panda" checked /><span class="box">✓</span><span>Panda</span></label>
-        <label class="chip"><input type="checkbox" class="store-chk" value="amazon" checked /><span class="box">✓</span><span>Amazon</span></label>
-        <label class="chip"><input type="checkbox" class="store-chk" value="tamimi" checked /><span class="box">✓</span><span>Tamimi</span></label>
-        <label class="chip"><input type="checkbox" class="store-chk" value="danube" checked /><span class="box">✓</span><span>Danube</span></label>
-        <label class="chip"><input type="checkbox" class="store-chk" value="lulu" checked /><span class="box">✓</span><span>Lulu</span></label>
-        <label class="chip"><input type="checkbox" class="store-chk" value="noon" checked /><span class="box">✓</span><span>Noon</span></label>
-      </div>
-
-      <div id="loading" class="loading" hidden>
-        <span class="spinner" aria-hidden="true"></span>
-        <span id="loading-text">Searching…</span>
+      <div id="store-chips" class="chips" role="group" aria-label="Stores to search">
+        <button type="button" class="chip chip-all" id="chip-all" aria-pressed="true">All stores</button>
+        <!-- one chip per store is rendered by app.js -->
       </div>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
 
       <div id="results" class="results"></div>
 
-      <div id="empty" class="empty">
-        <p>Search across <strong>6 Saudi stores</strong> at once — live prices, one place.</p>
-        <div class="empty-stores">
-          <span class="empty-chip"><span class="store-dot" style="background:#16a34a"></span>Panda</span>
-          <span class="empty-chip"><span class="store-dot" style="background:#f59e0b"></span>Amazon</span>
-          <span class="empty-chip"><span class="store-dot" style="background:#0ea5e9"></span>Tamimi</span>
-          <span class="empty-chip"><span class="store-dot" style="background:#ef4444"></span>Danube</span>
-          <span class="empty-chip"><span class="store-dot" style="background:#6366f1"></span>Lulu</span>
-          <span class="empty-chip"><span class="store-dot" style="background:#eab308"></span>Noon</span>
+      <div id="home" class="home">
+        <div class="home-hero">
+          <h1>What are you shopping for?</h1>
+          <p>Live prices across <strong>6 Saudi stores</strong> — searched in one place, in Arabic or English.</p>
+        </div>
+        <div id="home-recent" class="home-block" hidden>
+          <h2>Recent searches</h2>
+          <div class="quick-chips" id="recent-chips"></div>
+        </div>
+        <div class="home-block">
+          <h2>Price history available</h2>
+          <p class="home-hint">These products are tracked weekly — search one to see its lowest recorded price.</p>
+          <div class="quick-chips" id="tracked-chips"></div>
         </div>
       </div>
-    </main>
-  </div>
+    </section>
+
+    <!-- ============ Brochures ============ -->
+    <section id="page-brochures" class="page" aria-label="Weekly brochures" hidden>
+      <header class="page-head">
+        <h1>Weekly brochures</h1>
+        <p>Current flyers from Riyadh stores — viewed right here, page by page.</p>
+      </header>
+      <div id="brochure-stores" class="brochure-stores" aria-live="polite">
+        <!-- store sections rendered by brochures.js -->
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar" aria-label="Primary">
+    <a class="tab" href="#/search" data-nav="search">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+      <span>Search</span>
+    </a>
+    <a class="tab" href="#/brochures" data-nav="brochures">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5A2.5 2.5 0 0 1 17.5 21H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7.5h8M8 11h8M8 14.5h5"/></svg>
+      <span>Brochures</span>
+    </a>
+  </nav>
 
   <script type="module" src="./src/app.js"></script>
 </body>
