@@ -17,6 +17,7 @@ import { tamimiProvider } from './providers/tamimi.js';
 import { danubeProvider } from './providers/danube.js';
 import { luluProvider } from './providers/lulu.js';
 import { noonProvider } from './providers/noon.js';
+import { ninjaProvider } from './providers/ninja.js';
 import {
   loadBrochures,
   brochureForStore,
@@ -29,6 +30,8 @@ import {
 } from './brochure.js';
 import { openBrochureViewer } from './viewer.js';
 import { initBrochuresPage } from './brochures.js';
+import { rankItems as smartRank, relevance as matchRelevance, isRelevant } from './match.js';
+import { computeSummary, summaryElement } from './summary.js';
 
 const memory = createMemory('app');
 
@@ -40,49 +43,26 @@ const STORES = [
   { id: 'danube', label: 'Danube', color: '#ef4444', provider: danubeProvider },
   { id: 'lulu', label: 'Lulu', color: '#6366f1', provider: luluProvider },
   { id: 'noon', label: 'Noon', color: '#eab308', provider: noonProvider },
+  { id: 'ninja', label: 'Ninja', color: '#ec4899', provider: ninjaProvider },
 ];
 const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
 // Best-effort stores get a friendlier "temporarily unavailable" message.
 const BEST_EFFORT = new Set(['amazon', 'noon']);
 
 // --- smart ranking -------------------------------------------------------
-// Client-side re-ranking of the store's results by relevance to the query.
-// The result objects are untouched — only their order and how many we show.
+// Ranking, relevance, size parsing and equivalence now live in match.js (the
+// search-intelligence module) so the same logic drives both the per-store lists
+// and the shopping summary. Here we just rank each store's results and drop the
+// ones that don't match the query at all (reduces cross-noise like "coffee" for
+// a "milk" search) while keeping everything else for "Show all".
 const DEFAULT_LIMIT = 4;
 
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Tier a single field against the query: exact > prefix > whole-word > partial.
-function tierScore(field, query) {
-  const f = (field || '').toLowerCase().trim();
-  if (!f || !query) return 0;
-  if (f === query) return 100; // exact
-  if (f.startsWith(query)) return 80; // prefix
-  if (new RegExp(`(^|\\s)${escapeRegex(query)}(\\s|$)`).test(f)) return 70; // whole word
-  if (f.includes(query)) return 60; // partial substring
-  const tokens = query.split(/\s+/).filter(Boolean);
-  if (tokens.length > 1) {
-    const hits = tokens.filter((t) => f.includes(t)).length;
-    if (hits === tokens.length) return 45; // all words present
-    if (hits > 0) return 20 + hits; // some words present
-  }
-  return 0;
-}
-
-// Name match dominates; a brand match counts a little less.
-function relevance(item, query) {
-  return Math.max(tierScore(item.name, query), Math.round(tierScore(item.brand, query) * 0.7));
-}
-
-// Stable sort by relevance (ties keep the store's original order).
-function rankItems(items, q) {
-  const query = (q || '').toLowerCase().trim();
-  return items
-    .map((it, i) => ({ it, i, s: relevance(it, query) }))
-    .sort((a, b) => b.s - a.s || a.i - b.i)
-    .map((x) => x.it);
+function rankAndFilter(items, query) {
+  const ranked = smartRank(items, query); // attaches _size and _rel
+  const relevant = ranked.filter((it) => isRelevant(it, query) && matchRelevance(it, query) > 0);
+  // If filtering would empty the list (unusual queries), fall back to the ranked
+  // set so the user still sees what the store returned.
+  return relevant.length ? relevant : ranked;
 }
 
 const $ = (id) => document.getElementById(id);
@@ -124,7 +104,18 @@ window.addEventListener('hashchange', route);
 const chipButtons = [];
 function renderChips() {
   const saved = (memory.get('stores') || '').split(',').filter((id) => STORE_BY_ID[id]);
-  const selected = new Set(saved.length ? saved : STORES.map((s) => s.id));
+  // A newly-added store (one the user has never seen) defaults ON, so new
+  // providers are discoverable without wiping the user's saved scope. Stores the
+  // user has explicitly toggled off stay off. `known` records the stores the
+  // user has seen; if that key predates this feature, we assume they already
+  // knew about whatever they had saved.
+  const knownRaw = memory.get('known-stores');
+  const known = knownRaw != null ? new Set(knownRaw.split(',').filter(Boolean)) : new Set(saved);
+  const newStores = STORES.map((s) => s.id).filter((id) => !known.has(id));
+  const selected = saved.length
+    ? new Set([...saved, ...newStores])
+    : new Set(STORES.map((s) => s.id));
+  memory.set('known-stores', STORES.map((s) => s.id).join(','));
   for (const s of STORES) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -262,8 +253,16 @@ async function runSearch(query) {
   results.innerHTML = '';
   saveRecent(q);
 
+  // The shopping summary sits ABOVE the results and is filled once every store
+  // has answered (it needs all offers to compare). Show a placeholder now so its
+  // slot is reserved at the top.
+  const summarySlot = document.createElement('div');
+  summarySlot.className = 'summary-slot';
+  summarySlot.appendChild(summarySkeleton());
+  results.appendChild(summarySlot);
+
   // Lay out a section per store immediately (with skeleton cards); fill each
-  // as its search resolves. The same layout serves 1 store or 6.
+  // as its search resolves. The same layout serves 1 store or 8.
   const sections = new Map();
   for (const s of stores) {
     const sec = storeSection(s);
@@ -271,8 +270,8 @@ async function runSearch(query) {
     sections.set(s.id, sec);
     fillFlyer(sec.flyer, s.id, token); // weekly-flyer chip, best-effort
   }
-  prependPricePanel(q, token); // price intelligence, best-effort
 
+  const tagged = []; // { store, it } across all stores — feeds the summary
   let total = 0;
   let finished = 0;
   await Promise.all(
@@ -280,9 +279,11 @@ async function runSearch(query) {
       try {
         const { results: found } = await adaptiveSearch(s.provider, q, memory);
         if (inFlight !== token) return;
-        // Smart ranking per store; the section shows the top few + "Show all".
-        const ranked = rankItems(found, q);
+        // Smart ranking + irrelevance filtering per store; the section shows the
+        // top few + "Show all".
+        const ranked = rankAndFilter(found, q);
         total += ranked.length;
+        for (const it of ranked) tagged.push({ store: s, it });
         fillSection(sections.get(s.id), ranked);
       } catch (err) {
         if (inFlight !== token) return;
@@ -293,10 +294,33 @@ async function runSearch(query) {
         if (inFlight === token && finished === stores.length) {
           setBusy(false);
           status.textContent = `${total} result${total === 1 ? '' : 's'} across ${stores.length} store${stores.length > 1 ? 's' : ''} for “${q}”`;
+          fillSummary(summarySlot, q, tagged, token);
         }
       }
     }),
   );
+}
+
+// Build and render the shopping summary once all stores have answered. Best-
+// effort: pulls Price History for tracked products, then computes the summary.
+// If there's nothing to summarize (no priced results) the slot is removed.
+async function fillSummary(slot, query, tagged, token) {
+  let prices = null;
+  const productId = productForQuery(query);
+  if (productId) {
+    try {
+      prices = await pricesForProduct(productId);
+    } catch {
+      prices = null;
+    }
+  }
+  if (inFlight !== token) return;
+  const summary = computeSummary(query, tagged, prices);
+  if (!summary) {
+    slot.remove();
+    return;
+  }
+  slot.replaceChildren(summaryElement(summary, storeLabel));
 }
 
 // --- rendering -----------------------------------------------------------
@@ -349,6 +373,16 @@ function skeletonGrid(n = 4) {
     g.appendChild(c);
   }
   return g;
+}
+
+function summarySkeleton() {
+  const c = document.createElement('div');
+  c.className = 'summary skeleton-summary';
+  c.innerHTML =
+    '<div class="sk-line sk" style="width:40%"></div>' +
+    '<div class="sk-line sk" style="width:65%;height:22px"></div>' +
+    '<div class="sk-line sk" style="width:55%"></div>';
+  return c;
 }
 
 function storeSection(store) {
@@ -410,13 +444,6 @@ function money(value, currency) {
   return `${value.toFixed(2)} ${currency}`;
 }
 
-function fmtDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 function fmtDateShort(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -467,109 +494,6 @@ async function fillFlyer(slot, storeId, token) {
     btn.addEventListener('click', () => openBrochureViewer(b, label));
   }
   slot.replaceChildren(btn);
-}
-
-// If the query maps to a tracked product, prepend the price-intelligence panel:
-// the lowest recorded price (price + where + when) PLUS the latest captured
-// price per store with its distance from that low — so "is today a good deal?"
-// is answerable at a glance (HANDOFF §14.D.d). Also carries the (disabled)
-// price-alert affordance where Personal Alerts will live once built.
-async function prependPricePanel(query, token) {
-  const productId = productForQuery(query);
-  if (!productId) return;
-  const data = await pricesForProduct(productId);
-  if (inFlight !== token || !data || !data.lowest || data.lowest.price == null) return;
-  const { lowest, latest } = data;
-
-  const el = document.createElement('div');
-  el.className = 'price-panel';
-
-  const head = document.createElement('div');
-  head.className = 'pp-head';
-  const badge = document.createElement('span');
-  badge.className = 'pp-badge';
-  badge.textContent = 'Lowest recorded';
-  head.appendChild(badge);
-  // Alerts-ready: this is where a target-price control will slot in.
-  const alert = document.createElement('button');
-  alert.type = 'button';
-  alert.className = 'pp-alert';
-  alert.disabled = true;
-  alert.title = 'Personal price alerts are coming soon';
-  alert.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg> Alerts soon';
-  head.appendChild(alert);
-  el.appendChild(head);
-
-  const hero = document.createElement('div');
-  hero.className = 'pp-hero';
-  const price = document.createElement('span');
-  price.className = 'pp-price';
-  price.textContent = money(lowest.price, lowest.currency || 'SAR');
-  const where = document.createElement('span');
-  where.className = 'pp-where';
-  const when = fmtDate(lowest.observedAt) || lowest.edition || '';
-  where.textContent = `at ${storeLabel(lowest.store)}${when ? ` · ${when}` : ''}`;
-  hero.append(price, where);
-  el.appendChild(hero);
-
-  if (lowest.name) {
-    const name = lowest.link ? document.createElement('a') : document.createElement('span');
-    name.className = 'pp-name';
-    name.dir = 'auto';
-    name.textContent = lowest.name;
-    if (lowest.link) {
-      name.href = lowest.link;
-      name.target = '_blank';
-      name.rel = 'noopener';
-    }
-    el.appendChild(name);
-  }
-
-  // Latest captured price per store, cheapest first, each with its distance
-  // from the recorded low.
-  const rows = latest
-    .filter((p) => p && p.price != null)
-    .sort((a, b) => a.price - b.price);
-  if (rows.length) {
-    const box = document.createElement('div');
-    box.className = 'pp-latest';
-    const title = document.createElement('p');
-    title.className = 'pp-latest-title';
-    title.textContent = 'Latest weekly capture, by store';
-    box.appendChild(title);
-    for (const p of rows) {
-      const row = document.createElement('div');
-      row.className = 'pp-row';
-      const st = document.createElement('span');
-      st.className = 'pp-store';
-      st.textContent = storeLabel(p.store);
-      const pr = document.createElement('span');
-      pr.className = 'pp-row-price';
-      pr.textContent = money(p.price, p.currency || 'SAR');
-      const delta = document.createElement('span');
-      delta.className = 'pp-delta';
-      if (p.price <= lowest.price) {
-        delta.classList.add('is-best');
-        delta.textContent = 'lowest ever';
-      } else {
-        delta.classList.add('is-above');
-        delta.textContent = `+${(p.price - lowest.price).toFixed(2)}`;
-      }
-      const nm = document.createElement('span');
-      nm.className = 'pp-row-name';
-      nm.dir = 'auto';
-      nm.textContent = p.name || '';
-      const wh = document.createElement('span');
-      wh.className = 'pp-when';
-      wh.textContent = fmtDate(p.observedAt) || p.edition || '';
-      row.append(st, pr, delta, nm, wh);
-      box.appendChild(row);
-    }
-    el.appendChild(box);
-  }
-
-  if (inFlight !== token) return;
-  results.prepend(el);
 }
 
 function card(item) {
