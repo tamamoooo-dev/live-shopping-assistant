@@ -12,6 +12,14 @@ import { tamimiProvider } from './providers/tamimi.js';
 import { danubeProvider } from './providers/danube.js';
 import { luluProvider } from './providers/lulu.js';
 import { noonProvider } from './providers/noon.js';
+import {
+  loadBrochures,
+  brochureForStore,
+  brochureLink,
+  productForQuery,
+  lowestForProduct,
+  storeLabel,
+} from './brochure.js';
 
 const memory = createMemory('app');
 
@@ -164,6 +172,18 @@ async function runSingle(query) {
     const ranked = rankItems(found, q);
     status.textContent = `${ranked.length} result${ranked.length > 1 ? 's' : ''} for “${q}” in ${store.label}`;
     results.appendChild(resultsBlock(ranked));
+
+    // A flyer bar for this store (if it has a current brochure), then the
+    // price-history banner above it — both best-effort and token-guarded.
+    const meta = document.createElement('div');
+    meta.className = 'store-meta';
+    const slot = document.createElement('span');
+    meta.appendChild(slot);
+    results.prepend(meta);
+    fillFlyer(slot, store.id, token).then(() => {
+      if (inFlight === token && !slot.hasChildNodes()) meta.remove();
+    });
+    prependLowestBanner(q, token);
   } catch (err) {
     if (inFlight !== token) return;
     status.textContent = BEST_EFFORT.has(store.id)
@@ -199,7 +219,9 @@ async function runMulti(query) {
     const sec = storeSection(s);
     results.appendChild(sec.el);
     sections.set(s.id, sec);
+    fillFlyer(sec.flyer, s.id, token); // brochure link, best-effort
   }
+  prependLowestBanner(q, token); // price-history headline, best-effort
 
   let total = 0;
   let finished = 0;
@@ -283,7 +305,11 @@ function storeSection(store) {
   const count = document.createElement('span');
   count.className = 'store-count';
   count.textContent = '…';
-  head.append(dot, name, count);
+  // Flyer slot: filled asynchronously with a "weekly flyer" link if this store
+  // has a current brochure. Pushed to the right so it never crowds the name.
+  const flyer = document.createElement('span');
+  flyer.className = 'store-flyer-slot';
+  head.append(dot, name, count, flyer);
 
   const body = document.createElement('div');
   body.className = 'store-body';
@@ -293,7 +319,7 @@ function storeSection(store) {
   body.appendChild(note);
 
   el.append(head, body);
-  return { el, body, count };
+  return { el, body, count, flyer };
 }
 
 function fillSection(sec, items) {
@@ -324,6 +350,81 @@ function failSection(sec, store) {
 function money(value, currency) {
   if (value == null) return '';
   return `${value.toFixed(2)} ${currency}`;
+}
+
+// --- Brochure Engine + Price History integration -------------------------
+// These decorate the existing results with two read-only capabilities from the
+// Brochure Engine: the historical lowest price for a tracked product, and each
+// store's current weekly flyer. All fetches are best-effort and token-guarded —
+// if the engine is unreachable, or a newer search has started, they add nothing.
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// A "flyer" link for one search store, appended to `slot` if that store has a
+// current brochure. No-op for stores with no brochure (amazon/noon) or if a
+// newer search has begun.
+async function fillFlyer(slot, storeId, token) {
+  if (!slot) return;
+  const b = await brochureForStore(storeId);
+  if (inFlight !== token || !b) return;
+  const url = brochureLink(b);
+  if (!url) return;
+  const a = document.createElement('a');
+  a.className = 'store-flyer';
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = '📖 Weekly flyer';
+  a.title = b.title ? `${b.title} — open this week's brochure` : "Open this week's brochure";
+  slot.replaceChildren(a);
+}
+
+// If the query maps to a tracked product, prepend a "lowest recorded price"
+// banner (price + where + when) to the results. This is the Price History
+// headline (/lowest) surfaced inline. No-op for untracked queries.
+async function prependLowestBanner(query, token) {
+  const productId = productForQuery(query);
+  if (!productId) return;
+  const lowest = await lowestForProduct(productId);
+  if (inFlight !== token || !lowest || lowest.price == null) return;
+
+  const el = document.createElement('div');
+  el.className = 'price-history';
+
+  const head = document.createElement('div');
+  head.className = 'ph-head';
+  const badge = document.createElement('span');
+  badge.className = 'ph-badge';
+  badge.textContent = 'Lowest recorded';
+  const price = document.createElement('span');
+  price.className = 'ph-price';
+  price.textContent = money(lowest.price, lowest.currency || 'SAR');
+  const meta = document.createElement('span');
+  meta.className = 'ph-meta';
+  const when = fmtDate(lowest.observedAt) || lowest.edition || '';
+  meta.textContent = `at ${storeLabel(lowest.store)}${when ? ` · ${when}` : ''}`;
+  head.append(badge, price, meta);
+  el.appendChild(head);
+
+  if (lowest.name) {
+    const name = lowest.link ? document.createElement('a') : document.createElement('span');
+    name.className = 'ph-name';
+    name.textContent = lowest.name;
+    if (lowest.link) {
+      name.href = lowest.link;
+      name.target = '_blank';
+      name.rel = 'noopener';
+    }
+    el.appendChild(name);
+  }
+
+  if (inFlight !== token) return;
+  results.prepend(el);
 }
 
 function card(item) {
@@ -395,3 +496,4 @@ function card(item) {
 
 setMode('all');
 input.focus();
+loadBrochures(); // warm the weekly-flyer cache so links appear instantly
