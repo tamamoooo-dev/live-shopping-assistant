@@ -86,10 +86,32 @@ export async function brochureForStore(searchStoreId) {
   return byStore[`${map.store}:${map.region}`] || null;
 }
 
-// A browsable link that opens a brochure: the original flyer page (works for
-// both aggregator image-sets and the Othaim PDF).
-export function brochureLink(b) {
-  return b ? b.sourceUrl || b.pdfUrl : null;
+// URL that streams a stored asset (page image / meta.json) THROUGH the engine —
+// the user never touches the original aggregator/store site. `key` is an object
+// key like "brochures/lulu/central/2026-W26/page00.webp".
+export function assetUrl(key) {
+  return `${ENGINE_BASE}/asset/${key}`;
+}
+
+// The brochure's page images, served through the engine, for the in-app viewer.
+// Reads the stored meta.json (which lists pages[]; the /brochures row omits them,
+// HANDOFF §12.D.2), and returns { pages: [engine URL], title, validFrom, validTo }
+// or null. Never throws.
+export async function loadBrochurePages(b) {
+  if (!b || !b.storageKey) return null;
+  try {
+    const r = await fetch(assetUrl(`brochures/${b.storageKey}/meta.json`));
+    if (!r.ok) return null;
+    const meta = await r.json();
+    const pages = (meta.pages || [])
+      .slice()
+      .sort((a, b) => a.index - b.index)
+      .map((p) => assetUrl(p.imageUrl));
+    if (!pages.length) return null;
+    return { pages, title: meta.title, validFrom: meta.validFrom, validTo: meta.validTo };
+  } catch {
+    return null;
+  }
 }
 
 // The lowest recorded price point for a tracked product id, or null. Never

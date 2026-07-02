@@ -9,8 +9,11 @@
 > into the **existing search page** (no redesign, no new backend): each all-stores
 > search now shows, inline, (a) the **historical lowest price** (price + store +
 > date) for tracked products via the Brochure Engine's `/lowest`, and (b) a
-> per-store **"Weekly flyer"** link (Brochure Engine `/brochures`) that opens that
-> store's current brochure. Frontend-only change: one new client module
+> per-store **"Weekly flyer"** button (Brochure Engine `/brochures`) that opens
+> that store's current brochure in an **in-app viewer** — the page images are
+> served **through the Brochure Engine** (`/asset`), so the user never leaves Souq
+> for an external aggregator site. The viewer does prev/next, page counter, zoom,
+> store name, and brochure date. Frontend-only change: one new client module
 > (`src/brochure.js`) plus additive rendering in `src/app.js`/`styles.css`; the
 > Core, providers, and result contract are untouched. Verified end-to-end against
 > the live engine (see §14). **Done ahead of Alerts by explicit direction** — the
@@ -55,7 +58,8 @@
 5. **Unified Frontend** — ✅ **first pass done (§14).** The existing search page
    now surfaces all three built pillars: live search results (Pillar 1), the
    historical lowest price for tracked products (Pillar 3, `/lowest`), and a
-   per-store "Weekly flyer" link (Pillar 2, `/brochures`). Integration only — the
+   per-store "Weekly flyer" opening an **in-app brochure viewer** (Pillar 2,
+   `/brochures` + engine-served page images, §14.F). Integration only — the
    UI was reused, not redesigned; no new backend. Alerts, once built, slot into
    this same page. **Note on ordering:** this was done *before* Alerts by explicit
    user direction (integrate-and-evaluate first); Alerts (priority 4) is still the
@@ -239,9 +243,11 @@ wired into the UI (dropdown + checkbox chips).
 - **Brochure + Price History integration (§14):** results now carry two read-only
   Brochure-Engine capabilities. A **"Lowest recorded" banner** (price + store +
   date) appears above results when the query is a tracked product (milk/eggs,
-  from `/lowest`). Each store section shows a **"📖 Weekly flyer"** link
-  (from `/brochures`) that opens that store's current brochure — Panda, Tamimi,
-  Danube, Lulu (Amazon/Noon have no brochure). All Brochure-Engine knowledge is
+  from `/lowest`). Each store section shows a **"📖 Weekly flyer"** button
+  (from `/brochures`) that opens that store's current brochure in an **in-app
+  viewer** (pages served through the engine's `/asset`; prev/next, counter, zoom,
+  store, date) — the user never leaves the app. Covers Panda, Tamimi, Danube, Lulu
+  (Amazon/Noon have no brochure). All Brochure-Engine knowledge is
   isolated in `src/brochure.js`; both features are best-effort (engine down →
   nothing shown) and never block or alter the live search.
 
@@ -331,11 +337,13 @@ wired into the UI (dropdown + checkbox chips).
    (milk/eggs) and there is **no cue** telling the user which queries have
    history — a user searching anything else silently gets nothing. Growing the
    watchlist (`products.js`) and/or hinting tracked terms would help.
-   (b) The flyer link opens the **whole store brochure**, not the searched
-   product within it (per-product location needs OCR — out of scope, §0).
-   (c) The flyer shows **no date/validity**, so a stale flyer (e.g. Danube
-   `2025-W37`, Hyper Panda `2026-W20`) looks as current as a fresh one; surfacing
-   `validTo` would make staleness visible (ties into the §12.G freshness monitor).
+   (b) The in-app viewer (§14.F) opens the **whole store brochure**, not the
+   searched product within it (per-product location needs OCR — out of scope, §0).
+   (c) The flyer **button** in the results list shows **no date**, so a stale flyer
+   (e.g. Danube `2025-W37`, Hyper Panda `2026-W20`) looks as current as a fresh one
+   until you open it (the viewer header *does* show the date). Surfacing `validTo`
+   on the button, or a "may be outdated" hint, would help (ties into the §12.G
+   freshness monitor).
    (d) The banner shows the **lowest-ever** price but not the **current** price
    next to it, so the user can't see at a glance whether today is a good deal —
    a "current vs lowest" comparison is the obvious next enhancement (and is
@@ -985,11 +993,14 @@ The search page (Pillar 1, unchanged) now also shows, inline and read-only:
    results — **price + store (where) + date (when)** + the matched product name
    (linked to the store page) — shown when the query is a **tracked product**
    (milk/eggs). Sourced from the Brochure Engine `GET /lowest?product=<id>`.
-2. **Brochure availability + open (Pillar 2).** Each store section carries a
-   **"📖 Weekly flyer"** link that opens that store's **current brochure**
-   (the original browsable flyer page). Sourced from `GET /brochures`. Shown for
-   the stores present in both engines — **Panda** (brochure id `hyperpanda`),
-   **Tamimi, Danube, Lulu**; **Amazon/Noon** have no brochure, so no link.
+2. **Brochure availability + in-app viewer (Pillar 2).** Each store section carries
+   a **"📖 Weekly flyer"** button that opens that store's **current brochure in an
+   in-app viewer** (§14.F). The page images are served **through the Brochure
+   Engine** (`/asset/…`), so the user **never leaves Souq** for the external
+   aggregator. Availability comes from `GET /brochures`; the page list from the
+   stored `meta.json`. Shown for the stores present in both engines — **Panda**
+   (brochure id `hyperpanda`), **Tamimi, Danube, Lulu**; **Amazon/Noon** have no
+   brochure, so no button.
 
 Both work in **All-stores** and **Single-store** modes.
 
@@ -1000,13 +1011,17 @@ src/brochure.js   NEW  the ONLY place the frontend knows the Brochure Engine: it
                        hyperpanda/central, lulu/tamimi/danube→central), the tiny
                        query→product matcher (milk/eggs, mirrors §13 products.js),
                        and thin readers loadBrochures()/brochureForStore()/
-                       lowestForProduct()/brochureLink()/storeLabel(). Never throws.
-src/app.js        EDIT additive rendering only: prependLowestBanner(), fillFlyer(),
-                       a flyer slot in storeSection(), calls in runSingle/runMulti,
-                       and loadBrochures() warmed at startup. Core/providers/result
-                       contract UNTOUCHED.
-styles.css        EDIT additive: .price-history/.ph-* banner, .store-flyer link,
-                       .store-flyer-slot, .store-meta. Reuses the existing palette
+                       lowestForProduct()/storeLabel() + assetUrl()/
+                       loadBrochurePages() (page images served THROUGH the engine).
+                       Never throws.
+src/app.js        EDIT additive rendering only: prependLowestBanner(), fillFlyer()
+                       (opens the viewer), openBrochureViewer() + brochureDateLabel()
+                       (the in-app viewer, §14.F), a flyer slot in storeSection(),
+                       calls in runSingle/runMulti, loadBrochures() warmed at
+                       startup. Core/providers/result contract UNTOUCHED.
+styles.css        EDIT additive: .price-history/.ph-* banner, .store-flyer button,
+                       .store-flyer-slot, .store-meta, and the .bv-* viewer (overlay,
+                       panel, stage, controls). Reuses the existing palette
                        (var(--brand)/--grad/--brand-soft) — no redesign.
 ```
 - **Discipline preserved (project rule 2):** every Brochure-Engine specific fact
@@ -1023,15 +1038,24 @@ styles.css        EDIT additive: .price-history/.ph-* banner, .store-flyer link,
 Ran the real page (`node server.js` / preview) against the **production** search
 connector and Brochure Engine:
 - **All-stores "milk":** banner → **"Lowest recorded · 7.00 SAR · at Lulu ·
-  Jul 2, 2026"**, product name linked; flyer links present on Panda/Tamimi/Danube/
+  Jul 2, 2026"**, product name linked; flyer buttons present on Panda/Tamimi/Danube/
   Lulu, **absent** on Amazon/Noon; base search unaffected (168 results / 6 stores).
+- **In-app viewer (Lulu flyer):** opens an overlay titled **"Lulu"** with date
+  **"Jun 24, 2026 – Jun 30, 2026"**, counter **"1 / 40"**, first image loaded from
+  **`brochure-engine…/asset/brochures/lulu/central/2026-W26/page00.webp`** (served
+  through the engine, `naturalWidth` 709 — **not** an aggregator URL). Verified:
+  **Next** advances (3/40, page02.webp) and enables **Prev**; **zoom-in** ×2 sets
+  the image to 200% and enables **zoom-out**; paging resets zoom; **Next** disables
+  at **40/40**; background scroll is locked while open; **Esc** (and the ✕ / backdrop)
+  closes and restores scroll.
 - **Single-store Lulu "milk":** banner + a `.store-meta` flyer bar render above the
   grid in the right order (`price-history`, `store-meta`, results).
 - **Untracked "chocolate":** **no** price banner (correct); flyer still shown for a
   brochure store (Danube), and the empty flyer bar is removed for Amazon.
-- **No console errors.** (Preview **screenshots time out on external product
-  images** — a known constraint, §8 — so verification was DOM-based via
-  `preview_eval`, which is the documented approach.)
+- **No console errors.** (Preview **screenshots time out on the external product
+  images** in the results grid — a known constraint, §8 — so verification was
+  DOM-based via `preview_eval`, the documented approach. The *viewer's* images load
+  fine; they are engine-served, not external.)
 
 ### 14.D Usability issues & missing features found through real use
 Captured as TODO §9.2; summarized here as the milestone's evaluation output:
@@ -1039,7 +1063,7 @@ Captured as TODO §9.2; summarized here as the milestone's evaluation output:
   appears for milk/eggs (the §13 watchlist), and nothing tells the user which
   queries have history. Biggest felt gap. → grow `products.js` and/or hint tracked
   terms.
-- **Flyer is store-level, not product-level.** The link opens the whole brochure;
+- **Flyer is store-level, not product-level.** The viewer opens the whole brochure;
   it doesn't jump to the searched product (needs OCR — out of scope, §0).
 - **Flyer staleness is invisible.** Some current flyers are old (Danube `2025-W37`,
   Hyper Panda `2026-W20`) but look as fresh as a current one. Surfacing `validTo`
@@ -1052,9 +1076,38 @@ Captured as TODO §9.2; summarized here as the milestone's evaluation output:
 ### 14.E What was intentionally NOT done
 - **No Alerts** (the next milestone, §0/§9.1) — not started, by direction.
 - **No new backend / no architecture change** — pure frontend integration reading
-  existing public APIs; the connector and Brochure Engine were not modified.
+  existing public APIs; the connector and Brochure Engine were not modified. The
+  engine *already* downloads and serves brochure page images (§12.D.1), so the
+  in-app viewer needed **zero** engine change — it just reads `meta.json` + `/asset`.
 - **No redesign** — existing components, layout, and palette reused; additions are
-  a banner and a small link only.
+  a banner, a flyer button, and a modal viewer, all in the existing style.
+- **No OCR, no product detection** in the viewer — it is a plain page flipper.
+
+### 14.F In-app brochure viewer (v1)
+A simple full-screen modal (`openBrochureViewer` in `src/app.js`, `.bv-*` in
+`styles.css`) that flips through the brochure's page images. **The user never
+leaves the app**, and no page ever loads from the external aggregator — every
+image streams from the Brochure Engine's `/asset/<key>` (the engine downloaded
+and stored them during ingest, §12.D.1). v1 scope exactly as requested:
+- **Prev / Next** page navigation (buttons + ◀/▶ arrow keys; disabled at the ends).
+- **Page counter** (`n / total`).
+- **Zoom** in/out (1×–3×, buttons + `+`/`-` keys; resets on page change; when
+  zoomed the stage scrolls/pans).
+- **Store name** and **brochure date** (the validity window `validFrom – validTo`,
+  else the edition) in the header.
+- **Close** via ✕, the backdrop, or `Esc`; background scroll is locked while open.
+
+How pages are found: `/brochures` returns the current BrochureDoc but with an
+empty `pages:[]` (the D1 row omits them, §12.D.2). The viewer therefore reads the
+stored **`meta.json`** at `/asset/brochures/<storageKey>/meta.json`, which lists
+`pages:[{ index, imageUrl }]`, and streams each `imageUrl` via `/asset`. All the
+overlapping search stores are `sourceType:images` (LuLu/Tamimi/Danube/Hyper Panda),
+so every flyer the search page can show is viewable. (Othaim is a PDF but is not a
+search store, so it never surfaces here; a PDF branch is a future addition if an
+official-PDF store ever becomes searchable.)
+
+**Follow-ups (nice-to-have, not v1):** thumbnail strip / jump-to-page, pinch-zoom
+and swipe on touch, next-page image preloading, and a PDF branch for PDF sources.
 
 ---
 

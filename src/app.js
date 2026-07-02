@@ -15,7 +15,7 @@ import { noonProvider } from './providers/noon.js';
 import {
   loadBrochures,
   brochureForStore,
-  brochureLink,
+  loadBrochurePages,
   productForQuery,
   lowestForProduct,
   storeLabel,
@@ -365,23 +365,22 @@ function fmtDate(iso) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// A "flyer" link for one search store, appended to `slot` if that store has a
-// current brochure. No-op for stores with no brochure (amazon/noon) or if a
-// newer search has begun.
+// A "flyer" button for one search store, appended to `slot` if that store has a
+// current brochure. Opens the brochure INSIDE the app (§14 viewer) — the user
+// never leaves. No-op for stores with no brochure (amazon/noon) or if a newer
+// search has begun.
 async function fillFlyer(slot, storeId, token) {
   if (!slot) return;
   const b = await brochureForStore(storeId);
   if (inFlight !== token || !b) return;
-  const url = brochureLink(b);
-  if (!url) return;
-  const a = document.createElement('a');
-  a.className = 'store-flyer';
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener';
-  a.textContent = '📖 Weekly flyer';
-  a.title = b.title ? `${b.title} — open this week's brochure` : "Open this week's brochure";
-  slot.replaceChildren(a);
+  const label = (STORE_BY_ID[storeId] || {}).label || storeLabel(b.store);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'store-flyer';
+  btn.textContent = '📖 Weekly flyer';
+  btn.title = b.title ? `${b.title} — view this week's brochure` : "View this week's brochure";
+  btn.addEventListener('click', () => openBrochureViewer(b, label));
+  slot.replaceChildren(btn);
 }
 
 // If the query maps to a tracked product, prepend a "lowest recorded price"
@@ -425,6 +424,151 @@ async function prependLowestBanner(query, token) {
 
   if (inFlight !== token) return;
   results.prepend(el);
+}
+
+// A human date label for a brochure: its validity window if known, else edition.
+function brochureDateLabel(b) {
+  const from = fmtDate(b.validFrom);
+  const to = fmtDate(b.validTo);
+  if (from && to) return `${from} – ${to}`;
+  return from || to || b.edition || '';
+}
+
+// --- in-app brochure viewer ----------------------------------------------
+// A simple full-screen modal that pages through the brochure's images (served
+// THROUGH the Brochure Engine's /asset). The user never leaves the app. v1:
+// prev/next, page counter, zoom, store name, brochure date. No OCR, no product
+// detection — just a page flipper.
+let viewerOpen = false;
+
+async function openBrochureViewer(b, storeName) {
+  if (viewerOpen) return;
+  viewerOpen = true;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'bv-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', `${storeName} weekly brochure`);
+  overlay.innerHTML = `
+    <div class="bv-panel">
+      <header class="bv-head">
+        <div class="bv-title">
+          <span class="bv-store"></span>
+          <span class="bv-date"></span>
+        </div>
+        <button type="button" class="bv-close" aria-label="Close brochure">✕</button>
+      </header>
+      <div class="bv-stage"><div class="bv-msg">Loading brochure…</div></div>
+      <footer class="bv-controls">
+        <button type="button" class="bv-prev" aria-label="Previous page">‹ Prev</button>
+        <span class="bv-counter" aria-live="polite">—</span>
+        <button type="button" class="bv-next" aria-label="Next page">Next ›</button>
+        <span class="bv-zoom">
+          <button type="button" class="bv-zoom-out" aria-label="Zoom out">−</button>
+          <button type="button" class="bv-zoom-in" aria-label="Zoom in">+</button>
+        </span>
+      </footer>
+    </div>`;
+
+  const $$ = (sel) => overlay.querySelector(sel);
+  $$('.bv-store').textContent = storeName;
+  $$('.bv-date').textContent = brochureDateLabel(b);
+  const stage = $$('.bv-stage');
+  const counter = $$('.bv-counter');
+  const prevBtn = $$('.bv-prev');
+  const nextBtn = $$('.bv-next');
+  const zoomInBtn = $$('.bv-zoom-in');
+  const zoomOutBtn = $$('.bv-zoom-out');
+
+  const close = () => {
+    viewerOpen = false;
+    document.removeEventListener('keydown', onKey);
+    document.body.style.overflow = '';
+    overlay.remove();
+  };
+  $$('.bv-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close(); // click the backdrop to dismiss
+  });
+
+  document.body.style.overflow = 'hidden'; // lock background scroll
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
+
+  // Fetch the page images (through the engine). Best-effort.
+  const data = await loadBrochurePages(b);
+  if (!viewerOpen) return; // closed while loading
+  if (!data || !data.pages.length) {
+    stage.innerHTML = '<div class="bv-msg">Sorry — this brochure could not be loaded.</div>';
+    return;
+  }
+  const pages = data.pages;
+
+  const img = document.createElement('img');
+  img.className = 'bv-img';
+  img.alt = `${storeName} brochure page`;
+  stage.replaceChildren(img);
+
+  let idx = 0;
+  let zoom = 1;
+  const MAX_ZOOM = 3;
+
+  const applyZoom = () => {
+    if (zoom <= 1) {
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '100%';
+      img.style.width = '';
+      img.style.height = '';
+    } else {
+      img.style.maxWidth = 'none';
+      img.style.maxHeight = 'none';
+      img.style.height = `${zoom * 100}%`;
+      img.style.width = 'auto';
+    }
+    zoomOutBtn.disabled = zoom <= 1;
+    zoomInBtn.disabled = zoom >= MAX_ZOOM;
+  };
+
+  const render = () => {
+    img.src = pages[idx];
+    zoom = 1;
+    applyZoom();
+    stage.scrollTop = 0;
+    stage.scrollLeft = 0;
+    counter.textContent = `${idx + 1} / ${pages.length}`;
+    prevBtn.disabled = idx === 0;
+    nextBtn.disabled = idx === pages.length - 1;
+  };
+
+  const go = (n) => {
+    const next = Math.min(pages.length - 1, Math.max(0, n));
+    if (next !== idx) {
+      idx = next;
+      render();
+    }
+  };
+
+  prevBtn.addEventListener('click', () => go(idx - 1));
+  nextBtn.addEventListener('click', () => go(idx + 1));
+  zoomInBtn.addEventListener('click', () => {
+    zoom = Math.min(MAX_ZOOM, zoom + 0.5);
+    applyZoom();
+  });
+  zoomOutBtn.addEventListener('click', () => {
+    zoom = Math.max(1, zoom - 0.5);
+    applyZoom();
+  });
+
+  function onKey(e) {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') go(idx - 1);
+    else if (e.key === 'ArrowRight') go(idx + 1);
+    else if (e.key === '+' || e.key === '=') zoomInBtn.click();
+    else if (e.key === '-' || e.key === '_') zoomOutBtn.click();
+  }
+
+  render();
 }
 
 function card(item) {

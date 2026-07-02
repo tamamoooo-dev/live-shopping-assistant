@@ -357,6 +357,7 @@ body {
   gap: 5px;
   font-size: 12.5px;
   font-weight: 700;
+  font-family: inherit;
   color: var(--brand);
   background: var(--brand-soft);
   border: 1px solid transparent;
@@ -364,10 +365,104 @@ body {
   padding: 5px 12px;
   text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
 .store-flyer:hover { background: var(--brand); color: #fff; }
+.store-flyer:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--brand-soft); }
 .store-meta { margin: 0 2px 12px; }
+
+/* In-app brochure viewer (§14 — pages served through the Brochure Engine) */
+.bv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  background: rgba(15, 14, 30, 0.72);
+  backdrop-filter: blur(2px);
+}
+.bv-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(920px, 100%);
+  height: 100%;
+  max-height: 100%;
+  background: var(--surface);
+  overflow: hidden;
+}
+@media (min-width: 560px) {
+  .bv-panel { height: min(94%, 100%); border-radius: var(--radius); box-shadow: var(--shadow); }
+}
+.bv-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.bv-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.bv-store { font-size: 16px; font-weight: 800; letter-spacing: -0.2px; }
+.bv-date { font-size: 12.5px; color: var(--muted); }
+.bv-close {
+  margin-left: auto;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  font-size: 16px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: none;
+  border-radius: var(--pill);
+  cursor: pointer;
+}
+.bv-close:hover { color: var(--text); }
+.bv-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: var(--surface-2);
+  padding: 12px;
+}
+.bv-img { display: block; object-fit: contain; }
+.bv-msg { margin: auto; color: var(--muted); font-size: 14px; padding: 24px; text-align: center; }
+.bv-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.bv-controls button {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: none;
+  border-radius: var(--pill);
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.bv-controls button:hover:not(:disabled) { background: var(--brand); color: #fff; }
+.bv-controls button:disabled { opacity: 0.4; cursor: default; }
+.bv-counter {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 62px;
+  text-align: center;
+}
+.bv-zoom { margin-left: auto; display: flex; gap: 6px; }
+.bv-zoom button { width: 40px; padding: 9px 0; text-align: center; }
 
 /* Price-history banner: "lowest recorded" (Pillar 3, /lowest) */
 .price-history {
