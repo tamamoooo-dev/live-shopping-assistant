@@ -4,14 +4,26 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-02 · **Phase just completed:** **Brochures Page Bug
-> Fixes (multi-flyer engine + page ordering) — DEPLOYED & VERIFIED IN PRODUCTION
-> (see §17).** The Brochure Engine now holds **every current flyer** a store runs
-> (not one), ranked **main-weekly-flyer-first** (a 1-page promo can never displace
-> the main brochure), and the Brochures page shows all of them per store with an
-> honest empty state when none is current. **Before this**, the prior phase was
-> the **Frontend Redesign (Unified Frontend, full pass) — DEPLOYED & VERIFIED IN
-> PRODUCTION (see §16).**
+> **Last updated:** 2026-07-02 · **Phase just completed:** **Search Intelligence
+> & Reliability — DEPLOYED & VERIFIED IN PRODUCTION (see §18).** An **intelligent
+> shopping summary** now sits ABOVE the results (cheapest option, best value per
+> unit, a **confidence indicator**, and Price History woven in) — and it **only**
+> claims a strong "Lowest price" for a **confidently-equivalent product** (same
+> brand + size at ≥2 stores), never across different pack sizes/variants. Search
+> accuracy was rebuilt in a new pure, unit-tested `src/match.js` (Arabic+English
+> normalization, decimal-safe size/pack parsing, relevance + compound-noun
+> demotion, irrelevance filtering, equivalent-product grouping). A **7th live
+> store, Ninja (نينجا) Market**, was added; **Amazon** reliability rose from ~25%
+> to ~80% (retry + UA rotation) and **Danube** was further hardened. HungerStation
+> Market and Keeta Market were investigated but are **not addable from a Worker**
+> (Cloudflare-gated / signed API) — see §18. **Before this**, the prior phase was
+> the **Brochures Page Bug Fixes (multi-flyer engine + page ordering) — DEPLOYED &
+> VERIFIED IN PRODUCTION (see §17).** The Brochure Engine now holds **every current
+> flyer** a store runs (not one), ranked **main-weekly-flyer-first** (a 1-page
+> promo can never displace the main brochure), and the Brochures page shows all of
+> them per store with an honest empty state when none is current. **Before this**,
+> the prior phase was the **Frontend Redesign (Unified Frontend, full pass) —
+> DEPLOYED & VERIFIED IN PRODUCTION (see §16).**
 > The frontend is now a two-experience app — **Live Search** (`#/search`) and
 > **Brochures** (`#/brochures`) — under one hash-routed shell with desktop top
 > nav + mobile bottom tab bar, a rewritten design system (dark mode, skeletons,
@@ -72,8 +84,11 @@
 
 **Priorities, highest to lowest:**
 
-1. **Online Search** — ✅ **done** (§1–§8). Six stores, live multi-store search,
-   Smart Ranking, "Show all", Arabic+English, all routed through the connector.
+1. **Online Search** — ✅ **done** (§1–§8), **upgraded in §18.** Now **seven
+   stores** (Ninja added), live multi-store search, an **intelligent shopping
+   summary** before results, rebuilt matching/ranking + equivalent-product
+   grouping (`src/match.js`), "Show all", Arabic+English, all routed through the
+   connector.
 2. **Brochure Engine** — ✅ **done** (§10–§12). M1 `PdfIndexCollector` (Othaim PDF)
    + `AggregatorCollector` for 7 stores, 8 brochures held in production, weekly
    Tue+Wed fan-out scheduler on the Free plan. **Aggregator migrated OffersInMe →
@@ -179,8 +194,8 @@ Key architectural facts:
 
 | Role | GitHub | Local path | HEAD at handoff |
 |---|---|---|---|
-| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | Brochures page bug fixes (§17) + this handoff update |
-| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `53fd525` Brochure Engine multi-flyer bug fixes (§17) |
+| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | `7ff4c28` Search intelligence + Ninja (§18) + this handoff update |
+| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `43bd753` Ninja provider + Amazon/Danube reliability (§18) |
 
 > Note: the connector's **local folder** is `serverless-connector` but its GitHub
 > **repo name** is `shopping-connector`. Both `origin` remotes are under the
@@ -216,17 +231,29 @@ wired into the UI (dropdown + checkbox chips).
 | Lulu | `lulu` | Akinon list JSON (`gcc.luluhypermarket.com/{en-sa\|ar-sa}/list?...&format=json`) | **Stable (experimental)** — EN/AR, SAR via pz-locale/pz-currency cookies |
 | Amazon | `amazon` | PA-API 5.0 strategy (`pa-api`, tried first, **unconfigured→skips**) then search-HTML parse (`amazon.sa/s`) | **Best-effort** — see caveat below |
 | Noon | `noon` | Noon Minutes search-page RSC flight (`minutes.noon.com/{saudi-en\|saudi-ar}/search`) | **Best-effort (experimental)** — parses server-rendered JSON; main noon.com blocks datacenter IPs, Minutes does not |
+| Ninja | `ninja` | Ninja Market public "fahras" search (`public.ananinja.com/fahras/search/products`) after bootstrapping a **guest `DeviceToken`** from the storefront | **Stable (experimental)** — EN/AR, Riyadh store (`storeId=1`), prices in cents. Added §18. Token cached in-isolate, refetched on 401 |
+
+> **All seven stores exist on both the frontend and the connector.** The seventh,
+> **Ninja Market**, was added in the Search Intelligence milestone (§18). Two more
+> markets were investigated and **rejected** (§18.E): **HungerStation Market** (its
+> product-search / menu API is Cloudflare-gated to datacenter IPs — the darkstore
+> vendor resolves but its catalogue does not) and **Keeta Market** (a Meituan
+> "Sailor" signed mobile API, geo-gated) — neither offers a clean free-text search
+> from a Cloudflare Worker.
 
 - The frontend marks `amazon` and `noon` as **best-effort** (`BEST_EFFORT` set in
   `src/app.js`), giving them a friendlier "temporarily unavailable" message on
   failure instead of a hard error.
-- **Amazon caveat:** no credential-free product API exists, so the active path
-  scrapes public search HTML and hits Amazon's anti-bot interstitial on a share of
-  requests (detected → fails cleanly, so results aren't guaranteed). The durable
-  fix is **PA-API 5.0**, already implemented as the `pa-api` strategy and tried
-  first; it skips instantly while unconfigured. To activate (no code change):
-  set Worker secrets `PAAPI_ACCESS_KEY`, `PAAPI_SECRET_KEY`, `PAAPI_PARTNER_TAG`
-  (optional: `PAAPI_HOST`, `PAAPI_REGION`, `PAAPI_MARKETPLACE`) and redeploy.
+- **Amazon caveat (improved §18):** no credential-free product API exists, so the
+  active path scrapes public search HTML and hits Amazon's anti-bot interstitial on
+  a share of requests. As of §18 the `search-html` strategy **retries up to 5×
+  with a rotating User-Agent + browser-like headers**, because the interstitial
+  clears on retry — measured Worker success rose from **~25% to ~80%**. It still
+  isn't guaranteed (Amazon stays **best-effort**). The durable fix remains
+  **PA-API 5.0**, already implemented as the `pa-api` strategy and tried first; it
+  skips instantly while unconfigured. To activate (no code change): set Worker
+  secrets `PAAPI_ACCESS_KEY`, `PAAPI_SECRET_KEY`, `PAAPI_PARTNER_TAG` (optional:
+  `PAAPI_HOST`, `PAAPI_REGION`, `PAAPI_MARKETPLACE`) and redeploy.
 - **Danube resilience note:** Danube's Spree origin occasionally drops a single
   request from Cloudflare's edge (transient 5xx / reset), which surfaced as an
   intermittent "Could not reach Danube". The connector's Danube provider
@@ -236,6 +263,10 @@ wired into the UI (dropdown + checkbox chips).
   found; the origin was healthy when investigated. If Danube "breaks" again,
   first check the origin directly:
   `curl -A Mozilla "https://danube.sa/api/products.json?q%5Bname_cont%5D=milk&per_page=20"`.
+  **Further hardened §18:** now **3 tries** (was 2), it guards a 200-response with
+  a non-JSON body (an HTML error/challenge page) as a retryable blip instead of a
+  hard throw, and it presents as a same-origin XHR (`X-Requested-With`, `Referer`)
+  to reduce edge drops.
 
 ---
 
@@ -1530,6 +1561,177 @@ engine down → search still works, Brochures page shows honest empty states.
   Manuel.
 - **A 1-page brochure card shows no page pill** (the pill renders only for
   >1 pages) — cosmetic, by design.
+
+---
+
+## 18. Search Intelligence & Reliability
+
+> **Status:** **DEPLOYED & VERIFIED IN PRODUCTION** (2026-07-02). Frontend on
+> `main` `7ff4c28` (GitHub Pages, served bundle byte-matches source); connector
+> Worker redeployed, version `dc1472b6` (commit `43bd753`). **No redesign, no
+> Brochure Engine change, no Price History architecture change** — the existing
+> system was improved in place. The Core, the 10-key result contract, the
+> connector framework, and the Brochure Engine / Price History were untouched.
+
+### 18.A What this milestone delivers
+1. **An intelligent shopping summary shown BEFORE the results** (`src/summary.js`).
+2. **Greatly improved search accuracy** — a new pure, unit-tested matching module
+   (`src/match.js`): better ranking, matching, equivalent-product grouping, fewer
+   irrelevant results, and much better Arabic/English handling.
+3. **Honesty guarantees** — a strong "Lowest price" is claimed **only** for
+   confidently-equivalent products; different pack sizes/variants are never
+   treated as the same product; low confidence is shown explicitly.
+4. **Price History woven into the summary** — today's cheapest vs the record low.
+5. **Provider reliability** — Amazon ~25%→~80%, Danube further hardened.
+6. **A 7th live store: Ninja (نينجا) Market.** (HungerStation/Keeta investigated,
+   not feasible — §18.E.)
+
+### 18.B The shopping summary (`src/summary.js`, rendered by `src/app.js`)
+A single panel prepended to `#results` (with a skeleton placeholder while stores
+answer; filled once **all** stores respond, since it compares every offer):
+- **Overview:** N offers across M stores, and the SAR price range.
+- **Headline claim — two honest modes:**
+  - **"Lowest price · <size>"** (high confidence) when the cheapest offer belongs
+    to an **equivalence group** spanning **≥2 stores** (same brand + same size).
+    Shows the price, store, product name (linked), and "Same product elsewhere:
+    store price · …". This is the ONLY strong lowest-price claim.
+  - **"Cheapest option"** (otherwise) — the single cheapest relevant item, with a
+    **low-confidence note** ("Results are different sizes or variants — compare
+    carefully") when results are too heterogeneous to compare. Never a false
+    apples-to-apples claim.
+- **"Best value · SAR X/L|kg|pc"** — the lowest **per-unit** price within the most
+  common unit family, so a 6×200 ml pack and a 2 L bottle are compared fairly.
+- **Confidence indicator** — a coloured dot + label (High = same product compared;
+  Medium = compared by unit price; Low = different sizes/variants) plus a left
+  accent on the panel keyed to confidence.
+- **Price History section** (tracked products only, via the engine's `/prices`):
+  a verdict — *"Today's best matches the lowest ever recorded"* / *"Close to the
+  record low (+X)"* / *"Above the record low (+X)"* — the record low (price +
+  where + when), and the per-store latest weekly capture (cheapest first, each vs
+  the low). This replaces the old standalone price-intelligence panel (`.pp-*`),
+  which was folded into the summary.
+- **Best-effort & token-guarded:** if there are no priced relevant results the
+  slot is removed; a newer search cancels a stale summary render (`inFlight`).
+
+### 18.C The matching module (`src/match.js`, pure — tested by `src/match.test.mjs`)
+All "what does the query mean and which results actually match" logic lives here,
+so the same logic drives per-store lists AND the summary (Core/providers/contract
+untouched). **23 offline tests** (`node src/match.test.mjs`) guard it.
+- **`normalizeText`** — matching-only fold: lowercase, strip Arabic diacritics +
+  tatweel, unify alef/hamza/taa-marbuta/alef-maqsura, drop punctuation. A tiny
+  **bilingual synonym bridge** (milk↔حليب/لبن, eggs↔بيض, …) lets an Arabic query
+  recognise an English name and vice-versa in the equivalence/summary layer.
+- **`parseSize(name, sizeField)`** — extracts a comparable quantity. Uses a
+  **separate `normSize`** that **preserves the decimal point** (critical bug found
+  & fixed in verification: Panda's `"2.85 ML"`/`"2.85L"` was parsing as **85 L**
+  once the "." became a space → a bogus "0.19 SAR/L best value"; `normSize` keeps
+  decimals and folds **Arabic-Indic digits** ٠-٩). Handles volume→ml, weight→g,
+  counts→pcs, and **packs** ("6 × 200 ml", "12x1l"). Arabic units (لتر، كجم، مل،
+  جم…) parse too (JS `\b` is ASCII-only, so a **unicode lookahead boundary** is
+  used, not `\b`).
+- **`unitPrice`** — SAR per litre / kg / piece, for fair cross-size comparison.
+- **`relevance` + `isRelevant`** — tiered token scoring (whole-word > prefix >
+  substring) over normalized text with synonym expansion; a **compound-noun
+  penalty** demotes look-alikes ("milk chocolate/biscuit/powder" rank **below**
+  plain milk); off-topic items (e.g. "coffee" for a "milk" query) are dropped.
+- **`groupEquivalents`** — groups tagged results into the SAME product: same unit
+  family + total within **3%** AND (same brand OR ≥60% content-token overlap).
+  Items with **no parseable size are never merged** — the engine refuses to guess
+  equivalence, which is what keeps the "lowest price" claim honest.
+
+`src/app.js` now imports `rankItems`/`relevance`/`isRelevant` from `match.js`
+(the old inline `tierScore`/`relevance`/`rankItems` were removed), ranks each
+store's results and drops zero-relevance noise, collects the relevant priced
+items across stores, and builds the summary when the last store answers.
+
+### 18.D New store — Ninja (نينجا) Market
+- **Connector** `serverless-connector/src/providers/ninja.js`: bootstraps a
+  **guest `DeviceToken`** (a ~90-day JWT) by fetching any storefront 404 on
+  `ananinja.com` (the cheapest response that still sets the cookie), then queries
+  `GET https://public.ananinja.com/fahras/search/products?storeId=1&q=…&includes=…`
+  with `Authorization: Bearer <token>`. `storeId=1` = Riyadh/Central. Prices are
+  in cents (÷100). Search is broad/fuzzy (up to ~400 hits for "milk"), so results
+  are capped at 40 and the client ranking narrows them. Token cached in-isolate,
+  refetched once on 401/403. Registered in `src/index.js`.
+- **Frontend** `src/providers/ninja.js`: the usual thin connector strategy;
+  registered in `src/app.js` STORES (`ninja`, colour `#ec4899`). Chips are
+  rendered from STORES, so no `index.html` change was needed.
+- **Newly-added stores default ON for returning users** (discoverability): a
+  `known-stores` localStorage key records which stores the user has seen; a store
+  absent from it is auto-selected once, then explicit toggles are respected. This
+  is why Ninja appears for the existing user without wiping their saved scope.
+
+### 18.E Investigated but NOT added (honest scope)
+- **HungerStation Market** — Delivery Hero platform. The darkstore vendor resolves
+  (`GET hungerstation.com/cw-api/hmarket-vendor?latitude=…&longitude=…` → vendor
+  id 36843, "HungerStation Market"), but **free-text product search needs the
+  menuxp menu API**, which returns a **Cloudflare challenge page to datacenter
+  IPs**; `/cw-api/category-products` returns the right envelope but always empty
+  without menuxp-derived category IDs. **Not addable from a Worker.**
+- **Keeta Market (Keemart)** — Meituan **"Sailor"** platform (`mykeeta.com`), a
+  **signed** mobile-style API, geo-gated. Not reachable without reverse-
+  engineering request signing. **Not addable from a Worker.**
+- Adding perpetually-failing store chips would violate the "never mislead" rule
+  (goal #3) and add noise, so they were deliberately left out. A future session
+  with a residential egress or the mobile-app signing scheme could revisit them.
+
+### 18.F Reliability changes (connector)
+- **Amazon** (`src/providers/amazon.js`): the `search-html` strategy now
+  **retries up to 5×** with a **rotating User-Agent** (4-UA pool) and full
+  browser-like headers (`sec-ch-ua`, `Sec-Fetch-*`, `Accept-Language`, etc.),
+  because the anti-bot interstitial clears on a rotated retry. **Measured: ~25%
+  → ~80%** success from the deployed Worker (5 prod runs: 4 × count=48, 1 × 502).
+  Still best-effort; PA-API remains the durable path (tried first, skips
+  unconfigured).
+- **Danube** (`src/providers/danube.js`): **3 tries** (was 2), guards a
+  200-with-non-JSON body as retryable, and sends `X-Requested-With` + `Referer`
+  so it looks like the storefront's own XHR. (Danube was healthy when tested —
+  all 200s — so this is preventive, matching the existing posture.)
+
+### 18.G Verification (all ✅, 2026-07-02)
+- **Local matching tests:** `node src/match.test.mjs` → **23 passed, 0 failed**
+  (size parsing EN+AR incl. decimals & packs, unit price, relevance/irrelevance,
+  equivalence grouping, normalization).
+- **Connector (deployed `dc1472b6`):** `GET /` lists **7 providers**; live
+  `milk` searches — ninja 40 (`fahras-market`), panda 30, lulu 20, tamimi 20,
+  danube 20; ninja Arabic `حليب` → 40 (RTL names). Amazon 5 prod runs → 4 ok / 1
+  interstitial (best-effort, as expected).
+- **Frontend (local preview against the *production* connector + engine — the
+  documented approach, since the preview stays pinned to localhost, §8):**
+  all-stores "milk" → summary **High confidence**, "Lowest price · 200 ml" 1.95
+  SAR at Noon with "Same product elsewhere" across 3 stores, **Best value 4.92
+  SAR/L** (12×1 L multipack — realistic after the decimal fix), Price-History
+  verdict "Today's best matches the lowest ever recorded" + per-store table; a
+  legacy-selection user gets **Ninja auto-enabled** and Arabic `حليب` → **160
+  results across 7 stores** incl. Ninja (RTL); an untracked query ("shampoo")
+  → summary with no history; a nonsense query removes the summary slot cleanly.
+  **No console errors.**
+- **Production frontend:** GitHub Pages serving the new bundle — `src/app.js`,
+  `src/summary.js`, `src/match.js`, `src/providers/ninja.js`, `styles.css`,
+  `index.html` all **byte-match** the committed sources.
+- **No regression:** connector 7 providers all live; **Brochure Engine `GET /`
+  → 8 providers, 18 held, tracked [eggs, milk]; `/prices?product=milk` → 7 SAR
+  @ lulu** — Brochure Engine / Price History untouched and intact.
+
+### 18.H Notes, caveats & follow-ups
+- **Ninja token** is anonymous/guest and cached in the Worker isolate; a cold
+  isolate re-bootstraps (one extra cheap fetch). If Ninja ever changes the cookie
+  name or the fahras path, the provider fails cleanly (best-effort). The catalogue
+  is Riyadh (`storeId=1`); other cities would be a config addition.
+- **Amazon** is still best-effort — the honest durable fix is PA-API secrets
+  (TODO §9.3), unchanged.
+- **Flavoured/variant edge:** the summary's "Lowest price" can lead with a
+  legitimately-cheaper variant (e.g. a 125 ml strawberry milk) when it forms a
+  real ≥2-store equivalence group; the product **name and size are always shown**,
+  so it stays transparent. Tightening "plain vs flavoured" intent would need
+  semantic categories (out of scope; not misleading as-is).
+- **Watchlist unchanged** (`milk`, `eggs`) — the summary's Price-History section
+  only appears for tracked products (grow via the engine's `products.js` + the
+  frontend `PRODUCTS` mirror in `src/brochure.js`, as before).
+- **Personal Alerts (Roadmap §0 priority 4) is still the next milestone** — this
+  milestone did not build it. The summary is a natural future home for a target-
+  price control (the old disabled "Alerts soon" affordance was removed with the
+  price panel; re-add it in the summary header when Alerts lands).
 
 ---
 
