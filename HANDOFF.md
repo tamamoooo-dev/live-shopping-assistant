@@ -904,6 +904,30 @@ already isolated behind `recordPrices`.
   product; notify when a captured point drops below it. Builds directly on these
   edition-anchored points and the same weekly capture. Still Free plan, $0.
 
+### 13.G Replaceable price source (by design)
+The **price *source* is a swappable seam**, so it can be replaced later (e.g. by
+**brochure parsing**) **without redesigning the feature**. Everything that defines
+Price History — the `PricePoint` contract, the **brochure-edition anchoring**
+(store = *where*, edition = *when*), idempotent capture + `ux_price_point` dedupe,
+the derived lowest-ever, the D1 `price_points` table, and the read API
+(`/lowest`, `/prices`, `/prices/history`) — is **source-agnostic** and stays
+unchanged. Only the price *number* comes from an injectable source:
+- `recordPrices(ctx, { products, searchClient })` takes the source as a
+  **parameter**; it is never hard-wired. The source contract is tiny —
+  `search(provider, query) → results[]` — and the price is extracted by the
+  isolated `pickPricedResult(results)` helper in `src/priceHistory.js`.
+- Today that source is the **search connector** via the `CONNECTOR` service
+  binding (`createServiceBindingSearchClient`), with an HTTP variant for dev
+  (`createHttpSearchClient`). The `dev.mjs` selftest already swaps in a scripted
+  in-memory source — proof the seam is real.
+- **To change the source later** (e.g. a brochure-price parser once OCR/structured
+  extraction is in scope, or a `StoreSessionCollector`), write one new
+  source object honoring that contract (returning a price for the anchored
+  product/store) and pass it to `recordPrices`. **No change** to the contract,
+  anchoring, storage, dedupe, lows, scheduling, or read API. This keeps the
+  approved model — *brochures are the history backbone; the price number is
+  pluggable* — future-proof.
+
 ---
 
 _End of handoff._
