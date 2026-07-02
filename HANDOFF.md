@@ -4,8 +4,14 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-02 · **Phase just completed:** **Frontend Redesign
-> (Unified Frontend, full pass) — DEPLOYED & VERIFIED IN PRODUCTION (see §16).**
+> **Last updated:** 2026-07-02 · **Phase just completed:** **Brochures Page Bug
+> Fixes (multi-flyer engine + page ordering) — DEPLOYED & VERIFIED IN PRODUCTION
+> (see §17).** The Brochure Engine now holds **every current flyer** a store runs
+> (not one), ranked **main-weekly-flyer-first** (a 1-page promo can never displace
+> the main brochure), and the Brochures page shows all of them per store with an
+> honest empty state when none is current. **Before this**, the prior phase was
+> the **Frontend Redesign (Unified Frontend, full pass) — DEPLOYED & VERIFIED IN
+> PRODUCTION (see §16).**
 > The frontend is now a two-experience app — **Live Search** (`#/search`) and
 > **Brochures** (`#/brochures`) — under one hash-routed shell with desktop top
 > nav + mobile bottom tab bar, a rewritten design system (dark mode, skeletons,
@@ -173,8 +179,8 @@ Key architectural facts:
 
 | Role | GitHub | Local path | HEAD at handoff |
 |---|---|---|---|
-| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | `c97945e` Frontend redesign (§16) + a docs commit for this handoff |
-| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `286c7a4` Brochure Source Migration (D4D) |
+| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | Brochures page bug fixes (§17) + this handoff update |
+| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `53fd525` Brochure Engine multi-flyer bug fixes (§17) |
 
 > Note: the connector's **local folder** is `serverless-connector` but its GitHub
 > **repo name** is `shopping-connector`. Both `origin` remotes are under the
@@ -1280,11 +1286,10 @@ connector `lulu` "milk" 20 results; Price History `/lowest?product=milk` intact
   `npx wrangler secret put INGEST_SECRET`.
 
 ### 15.G Notes & follow-ups
-- **D4D returns multiple concurrent promos per store;** the collector's existing
-  `pickCurrent` selects one current flyer (validity-window-today → latest `validTo`
-  → newest id). Some picks are single-image promos (e.g. a Tamimi 1-page banner) —
-  still current and valid; a "prefer the largest page-count flyer" refinement is a
-  possible nicety, not required.
+- **D4D returns multiple concurrent promos per store** — ~~the collector's
+  `pickCurrent` selects one current flyer~~ **superseded by §17 (2026-07-02):**
+  the collector now keeps **all** current flyers, ranked main-flyer-first
+  (page count beats recency), so the "Tamimi 1-page banner" problem is fixed.
 - **Aggregator dependency risk is unchanged (§10.F #1):** D4D is still one
   third-party source. The `AggregatorCollector` stays adapter-driven, so a second
   adapter (e.g. Tiendeo) for cross-checking/failover is a new file, zero collector
@@ -1403,10 +1408,8 @@ engine down → search still works, Brochures page shows honest empty states.
   (frontend-only milestone — connector repo untouched and clean).
 
 ### 16.D UX findings from this pass (candidate follow-ups, not started)
-- **Tamimi's current pick is a 1-page banner** (D4D carries several concurrent
-  promos; the engine's `pickCurrent` chose a single-image one). §15.G's "prefer
-  the largest page-count flyer" refinement would make its brochure card feel
-  fuller. Engine-side, one function — do it opportunistically.
+- ~~**Tamimi's current pick is a 1-page banner**~~ — **FIXED in §17** (the engine
+  now holds all current flyers, main weekly flyer first).
 - **iOS Safari renders embedded PDFs first-page-only**; the viewer's
   "Open PDF ↗" link is the fallback. A future PDF→page-image path (deferred,
   §0) would make Othaim first-class in the flipper.
@@ -1420,6 +1423,113 @@ engine down → search still works, Brochures page shows honest empty states.
 - **Watchlist growth is now purely engine config:** add products to the engine's
   `products.js` and the frontend's `PRODUCTS` mirror in `src/brochure.js` — the
   home-state chips and the price panel pick them up automatically.
+
+---
+
+## 17. Brochures Page Bug Fixes — multi-flyer engine + intelligent ordering
+
+> **Status:** **DEPLOYED & VERIFIED IN PRODUCTION** (2026-07-02). Engine Worker
+> version `b0bdf978` (connector repo commit `53fd525`); frontend on `main`.
+> A **bug-fix milestone only**: no redesign, no new features, no backend
+> architecture change, no schema migration. Changes live in the engine's
+> collector/Core seam and the frontend's brochure client.
+
+### 17.A The bugs (as found in production)
+1. **Only ONE brochure held per store.** D4D lists several concurrent flyers per
+   store (LuLu had 7), but `pickCurrent` kept a single candidate and
+   `metadataStore.upsert` flipped `is_current=0` on every sibling — so the
+   Brochures page could never show more than one flyer per store.
+2. **A 1-page promo could displace the main weekly brochure.** The old pick
+   preferred the *newest offer id*: Tamimi held the 1-page "Double Your
+   Savings!" banner while the 48-page "Summer Goals" existed; Carrefour held a
+   9-pager over the 63-page "Summer Hot Deals"; Nesto a 5-pager over the
+   34-page "Real 50".
+3. **Same-week concurrent flyers would collide** on the identity
+   `store:region:edition` (edition = ISO week), so multiples couldn't even be
+   stored.
+
+### 17.B Engine fixes (`serverless-connector/brochure-engine`, commit `53fd525`)
+- **`collectors/aggregator.js`** — `rankCurrent` replaces `pickCurrent`: apply
+  the currency gate (drop expired), **dedupe same-campaign duplicates** (same
+  title+validity → keep the fullest; D4D lists branch/language variants), then
+  rank **valid-now → MOST PAGES → latest `validTo` → newest id**. The collector
+  emits **one candidate per current flyer**, main first.
+- **Identity (`contract.js`):** the primary flyer keeps the plain weekly edition
+  (back-compatible with existing rows); concurrent siblings append the D4D
+  offer id as a **variant** (e.g. `2026-W27-738849`), giving each its own
+  id/storage prefix.
+- **Free-plan budget & convergence:** page downloads are capped per run
+  (`maxTotalPages=40`, `maxCandidates=6` leaflet fetches — ≤ ~47 subrequests of
+  the 50/invocation budget). Flyers the engine **already holds are matched by
+  `source_url`** (new `metadataStore.getBySourceUrl`, surfaced to collectors as
+  the store-agnostic `findHeld` hook) and emitted as `existing` candidates with
+  **zero downloads** — so consecutive runs converge on the full current set
+  (the cron already fires Tue+Wed; live convergence took 3 runs).
+- **Current-set semantics:** `upsert` no longer supersedes siblings; after each
+  ingest run, `ingestTarget` calls the new **`metadataStore.setCurrent(store,
+  region, checksums, { supersedeOthers })`** with everything the run confirmed
+  (new + deduped + existing). Supersede is skipped when anything failed, so a
+  partial run never un-currents brochures it couldn't confirm. Both the D1 and
+  in-memory stores implement the same interface.
+- **Price History:** with several current rows possible, `recordPrices` anchors
+  to the **primary weekly edition** (plain `YYYY-Wnn` rows win, newest first).
+- **Untouched:** pipeline PDF/link paths, schema (no migration — `source_url`
+  already existed), read APIs, scheduler/fan-out, providers' configs, Othaim
+  (`pdfIndex`) and the `officialLink` fallback.
+
+### 17.C Frontend fixes (this repo)
+- **`src/brochure.js`** — `loadBrochures()` keeps a **list** per store (the
+  engine's `/brochures` now returns several rows per store); new
+  **`orderBrochures()`** orders for display: active → in-app viewable before
+  external link → **most pages** (from the already-needed cached `meta.json`) →
+  latest `validTo`. `brochureForStore()` returns the **best** one, so the
+  search page's flyer chip always opens the main weekly flyer.
+- **`src/brochures.js`** — the Brochures page renders **all active flyers per
+  store** through `orderBrochures` (main first), and the "no current flyer"
+  fallback now shows the **most recently expired** flyer (latest `validTo`)
+  instead of whatever sorted first.
+
+### 17.D Verification (all ✅, 2026-07-02)
+- **Engine selftests** (`node dev.mjs selftest [store]`): LuLu converges to
+  **6 current flyers** (primary = 40-page "Saudi Summer Surprises"); Tamimi to
+  **3** (primary = "Summer Goals"; the 1-page banner is a sibling). M1 Othaim
+  PDF (929,931 bytes, sha256 `3ec0bce0…` unchanged), the officialLink fallback,
+  and Price History selftests all green.
+- **Production ingest:** deployed `b0bdf978`, rotated `INGEST_SECRET`, ingested
+  all 8 stores ×4 paced runs → converged (`new:0`, `deduped==detected`).
+  `/brochures` now holds **18 current brochures**: carrefour 2 (main "Summer
+  Hot Deals" 40pp), danube 1, hyperpanda 1, lulu 6, nesto 3 (main "Real 50"
+  31pp), othaim 1 (PDF), tamimi 3 (main "Summer Goals" 40pp), manuel stale
+  (expected — no D4D flyer, no official page; ingest reports `failed`, prior
+  row kept).
+- **Frontend (preview against prod engine):** Brochures page shows **all 8
+  stores**; per-store tags ("Current flyer" / "N current flyers" / "No current
+  flyer"); every active flyer rendered main-first with correct covers, titles,
+  dates, page pills, and badges (Current / Ends today / Ends tomorrow /
+  Expired); **Manuel** correctly shows "No current flyer" + greyed Expired card
+  (Sep 2025). **Viewer:** a variant-edition brochure streams engine-served
+  pages (`…/tamimi/central/2026-W27-738849/page00.webp`, counter 1/1, Esc
+  closes); **Othaim PDF card** opens the in-app frame streaming
+  `…/othaim/central/2026-W27/original.pdf`. **Search page:** "milk" → 6
+  sections, results render, flyer chips dated ("until Jul 7/14") and
+  `brochureForStore` picks the mains (Tamimi → "Summer Goals", Lulu → "Saudi
+  Summer Surprises", Panda → "Moments we live with you"). **No console
+  errors.** Price History reads intact (`/prices?product=milk` → 7 SAR @ lulu).
+
+### 17.E Notes & caveats
+- **`INGEST_SECRET` was rotated this session** (prior value unknown, per
+  §12.G). Still a Worker secret; rotate with `npx wrangler secret put
+  INGEST_SECRET`.
+- **Back-to-back live ingests can rate-limit on D4D** (transient, silent
+  per-flyer skips); the selftest paces runs 2.5 s apart. Real cron fires are
+  days apart, and held flyers cost zero downloads, so this only affects rapid
+  manual re-ingests.
+- **Manuel's stale row is still `is_current=1` in D1** (its ingest fails before
+  `setCurrent`); the frontend's activity check is validity-based, so the UI is
+  correct ("No current flyer" + greyed card). Self-heals when D4D republishes
+  Manuel.
+- **A 1-page brochure card shows no page pill** (the pill renders only for
+  >1 pages) — cosmetic, by design.
 
 ---
 

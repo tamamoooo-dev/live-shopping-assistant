@@ -68,7 +68,9 @@ export function productForQuery(query) {
   return hit ? hit.id : null;
 }
 
-// --- current brochures (one per store, the engine's is_current view) --------
+// --- current brochures (the engine's is_current view) ------------------------
+// A store may hold SEVERAL current brochures at once (the main weekly flyer
+// plus smaller concurrent promos), so the cache keeps a LIST per store.
 // Fetched once and cached for the page session (they change weekly, so a single
 // fetch per visit keeps the engine polled gently). Never throws.
 let brochuresPromise = null;
@@ -78,7 +80,10 @@ export function loadBrochures() {
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         const byStore = {};
-        for (const b of (j && j.brochures) || []) byStore[`${b.store}:${b.region}`] = b;
+        for (const b of (j && j.brochures) || []) {
+          const key = `${b.store}:${b.region}`;
+          (byStore[key] = byStore[key] || []).push(b);
+        }
         return byStore;
       })
       .catch(() => ({}));
@@ -86,12 +91,40 @@ export function loadBrochures() {
   return brochuresPromise;
 }
 
-// The current brochure for a SEARCH store id, or null if that store has none.
+// Order brochures for display, MAIN WEEKLY FLYER FIRST — never prefer a 1-page
+// promo over the main brochure: active before inactive, in-app viewable before
+// external links, then most pages (from the cached meta.json, which the covers
+// and viewer need anyway), then the latest validTo. Never throws.
+export async function orderBrochures(brochures) {
+  const scored = await Promise.all(
+    (brochures || []).map(async (b) => {
+      let pages = 0;
+      if (!isExternalBrochure(b)) {
+        const data = await loadBrochurePages(b);
+        pages = data ? data.pages.length : 0;
+      }
+      return { b, pages };
+    }),
+  );
+  scored.sort(
+    (a, z) =>
+      (isActiveBrochure(z.b) ? 1 : 0) - (isActiveBrochure(a.b) ? 1 : 0) ||
+      (isExternalBrochure(a.b) ? 1 : 0) - (isExternalBrochure(z.b) ? 1 : 0) ||
+      z.pages - a.pages ||
+      (z.b.validTo || '').localeCompare(a.b.validTo || ''),
+  );
+  return scored.map((s) => s.b);
+}
+
+// The BEST current brochure for a SEARCH store id (the one the search page's
+// flyer chip shows), or null if that store has none.
 export async function brochureForStore(searchStoreId) {
   const map = BROCHURE_STORE[searchStoreId];
   if (!map) return null;
   const byStore = await loadBrochures();
-  return byStore[`${map.store}:${map.region}`] || null;
+  const list = byStore[`${map.store}:${map.region}`] || [];
+  if (!list.length) return null;
+  return (await orderBrochures(list))[0];
 }
 
 // --- edition history (the Brochures page's substrate) ------------------------

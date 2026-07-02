@@ -21,6 +21,7 @@ import {
   isExternalBrochure,
   isPdfBrochure,
   loadBrochurePages,
+  orderBrochures,
   daysLeft,
 } from './brochure.js';
 import { openBrochureViewer, brochureDateLabel } from './viewer.js';
@@ -86,7 +87,9 @@ function skeletonCard() {
 
 async function renderStore(store, section) {
   const editions = await loadStoreEditions(store.id);
-  const active = editions.filter(isActiveBrochure);
+  // ALL active brochures for this store (a store may run several at once),
+  // ordered main-weekly-flyer-first — never a 1-page promo above the main one.
+  const active = await orderBrochures(editions.filter(isActiveBrochure));
 
   section.body.innerHTML = '';
 
@@ -97,12 +100,14 @@ async function renderStore(store, section) {
     return;
   }
 
-  // No active brochure — say so clearly, and show the newest expired flyer
-  // (greyed + badged) so the state is legible rather than just empty.
+  // No active brochure — say so clearly, and show the most recently expired
+  // flyer (greyed + badged) so the state is legible rather than just empty.
   section.tag.className = 'bstore-tag is-off';
   section.tag.textContent = 'No current flyer';
 
-  const expired = editions.find((b) => !isExternalBrochure(b));
+  const expired = editions
+    .filter((b) => !isExternalBrochure(b))
+    .sort((a, z) => (z.validTo || '').localeCompare(a.validTo || ''))[0];
   if (!expired) {
     const empty = document.createElement('div');
     empty.className = 'bstore-empty';
