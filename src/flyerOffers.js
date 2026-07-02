@@ -18,6 +18,7 @@
 
 import { searchOffers, brochureForOffer, storeLabel } from './brochure.js';
 import { openBrochureViewer } from './viewer.js';
+import { flyerListing, unitPriceLabel } from './compare.js';
 
 const MAX_CARDS = 8;
 
@@ -40,7 +41,7 @@ function fmtDateShort(iso) {
     : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
-function offerCard(offer) {
+function offerCard(offer, listing) {
   const card = el('button', 'fo-card');
   card.type = 'button';
   const displayName = offer.name || offer.nameAr || offer.category || 'Flyer offer';
@@ -69,6 +70,8 @@ function offerCard(offer) {
   if (offer.oldPrice != null) {
     priceRow.appendChild(el('s', 'fo-old', money(offer.oldPrice, offer.currency)));
   }
+  const up = listing ? unitPriceLabel(listing) : '';
+  if (up) priceRow.appendChild(el('span', 'fo-unit', up));
   body.appendChild(priceRow);
 
   const meta = el('div', 'fo-meta');
@@ -94,25 +97,30 @@ function offerCard(offer) {
 // there is nothing to show. Token-guarded by the caller's live-search token
 // (`isStale()` true -> a newer search superseded this render). Never throws.
 export async function fillFlyerOffers(slot, query, isStale) {
-  const data = await searchOffers(query, 24).catch(() => null);
+  const data = await searchOffers(query, 40).catch(() => null);
   if (isStale()) return;
-  if (!data || !data.offers.length) {
+  // Client-side relevance pass with the SAME logic the comparison engine uses
+  // (flyerListing applies match.js relevance to the OCR-derived name), so the
+  // panel and the summary always agree on which flyer offers are real matches.
+  const relevant = ((data && data.offers) || [])
+    .map((offer) => ({ offer, listing: flyerListing(offer, query, storeLabel) }))
+    .filter((x) => x.listing);
+  if (!relevant.length) {
     slot.remove();
     return;
   }
 
-  const offers = data.offers.slice(0, MAX_CARDS);
   const panel = el('section', 'flyer-offers');
 
   const head = el('div', 'fo-head');
   head.appendChild(el('span', 'fo-title', "In this week's flyers"));
   head.appendChild(
-    el('span', 'fo-count', `${data.offers.length} offer${data.offers.length === 1 ? '' : 's'} · physical stores`),
+    el('span', 'fo-count', `${relevant.length} offer${relevant.length === 1 ? '' : 's'} · physical stores`),
   );
   panel.appendChild(head);
 
   const row = el('div', 'fo-row');
-  for (const offer of offers) row.appendChild(offerCard(offer));
+  for (const { offer, listing } of relevant.slice(0, MAX_CARDS)) row.appendChild(offerCard(offer, listing));
   panel.appendChild(row);
 
   panel.appendChild(

@@ -278,6 +278,69 @@ export async function brochureForOffer(offer) {
   return list.find((b) => b.edition === offer.edition) || null;
 }
 
+// --- Price Monitoring (watches + alerts) --------------------------------------
+// The engine's Keepa-inspired monitoring: the user sets a target price on a
+// specific product (kind 'product': provider + stable product id) or a grocery
+// query (kind 'grocery': checked across ALL sources — online stores + flyer
+// offers) and the engine's daily cron writes an alert when the price crosses
+// down to the target. These are thin, never-throwing clients for that API.
+
+export async function listWatches() {
+  try {
+    const r = await fetch(`${ENGINE_BASE}/watches`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && Array.isArray(j.watches) ? j : null;
+  } catch {
+    return null;
+  }
+}
+
+// body: { kind, query, targetPrice, label?, provider?, productId?, link?,
+// image?, sizeText? }. Returns { watch } or { error }.
+export async function createWatch(body) {
+  try {
+    const r = await fetch(`${ENGINE_BASE}/watches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return { error: j.error || `HTTP ${r.status}` };
+    return { watch: j.watch };
+  } catch {
+    return { error: 'The alerts service is unreachable right now.' };
+  }
+}
+
+export async function deleteWatch(id) {
+  try {
+    const r = await fetch(`${ENGINE_BASE}/watches?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function listAlerts(limit = 50) {
+  try {
+    const r = await fetch(`${ENGINE_BASE}/alerts?limit=${limit}`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && Array.isArray(j.alerts) ? j : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function markAlertsSeen() {
+  try {
+    await fetch(`${ENGINE_BASE}/alerts/seen`, { method: 'POST' });
+  } catch {
+    /* best-effort */
+  }
+}
+
 // --- price history (Pillar 3, read-only) -------------------------------------
 // The full price picture for a tracked product: the lowest-ever point plus the
 // latest captured point per store — what the search page's price-intelligence

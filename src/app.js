@@ -26,13 +26,16 @@ import {
   productForQuery,
   trackedProducts,
   pricesForProduct,
+  searchOffers,
   storeLabel,
 } from './brochure.js';
 import { openBrochureViewer } from './viewer.js';
 import { fillFlyerOffers } from './flyerOffers.js';
 import { initBrochuresPage } from './brochures.js';
-import { rankItems as smartRank, relevance as matchRelevance, isRelevant } from './match.js';
-import { computeSummary, summaryElement } from './summary.js';
+import { rankItems as smartRank, relevance as matchRelevance, isRelevant, sizeLabel, unitPrice } from './match.js';
+import { computeComparison, unitPriceLabel } from './compare.js';
+import { summaryElement } from './summary.js';
+import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.js';
 
 const memory = createMemory('app');
 
@@ -77,6 +80,7 @@ const chipsWrap = $('store-chips');
 const chipAll = $('chip-all');
 const pageSearch = $('page-search');
 const pageBrochures = $('page-brochures');
+const pageAlerts = $('page-alerts');
 
 let inFlight = null; // token so a newer search cancels an older one's rendering
 
@@ -85,10 +89,17 @@ let inFlight = null; // token so a newer search cancels an older one's rendering
 // friendly): #/search and #/brochures. Both navs (top + bottom tab bar) are
 // plain links; this just toggles pages and active states.
 function route() {
-  const name = (location.hash || '').startsWith('#/brochures') ? 'brochures' : 'search';
+  const hash = location.hash || '';
+  const name = hash.startsWith('#/brochures') ? 'brochures' : hash.startsWith('#/alerts') ? 'alerts' : 'search';
   pageSearch.hidden = name !== 'search';
   pageBrochures.hidden = name !== 'brochures';
-  document.title = name === 'brochures' ? 'Souq — Weekly brochures' : 'Souq — Live shopping search';
+  pageAlerts.hidden = name !== 'alerts';
+  document.title =
+    name === 'brochures'
+      ? 'Souq — Weekly brochures'
+      : name === 'alerts'
+      ? 'Souq — Price alerts'
+      : 'Souq — Live shopping search';
   for (const link of document.querySelectorAll('[data-nav]')) {
     const active = link.dataset.nav === name;
     link.classList.toggle('is-active', active);
@@ -97,6 +108,7 @@ function route() {
   }
   window.scrollTo(0, 0);
   if (name === 'brochures') initBrochuresPage(); // idempotent, lazy first render
+  if (name === 'alerts') initAlertsPage(true); // fresh state on every visit
 }
 window.addEventListener('hashchange', route);
 
@@ -280,7 +292,7 @@ async function runSearch(query) {
     fillFlyer(sec.flyer, s.id, token); // weekly-flyer chip, best-effort
   }
 
-  const tagged = []; // { store, it } across all stores — feeds the summary
+  const tagged = []; // { store, it } across all stores — feeds the comparison
   let total = 0;
   let finished = 0;
   await Promise.all(
@@ -293,7 +305,7 @@ async function runSearch(query) {
         const ranked = rankAndFilter(found, q);
         total += ranked.length;
         for (const it of ranked) tagged.push({ store: s, it });
-        fillSection(sections.get(s.id), ranked);
+        fillSection(sections.get(s.id), ranked, s);
       } catch (err) {
         if (inFlight !== token) return;
         failSection(sections.get(s.id), s);
@@ -310,9 +322,11 @@ async function runSearch(query) {
   );
 }
 
-// Build and render the shopping summary once all stores have answered. Best-
-// effort: pulls Price History for tracked products, then computes the summary.
-// If there's nothing to summarize (no priced results) the slot is removed.
+// Build and render the shopping summary once all stores have answered. The
+// comparison engine (compare.js) weighs BOTH worlds — the live online results
+// AND this week's flyer offers — so the recommendation is source-agnostic.
+// Best-effort: flyer offers and Price History are each optional inputs; if
+// there's nothing to compare at all the slot is removed.
 async function fillSummary(slot, query, tagged, token) {
   let prices = null;
   const productId = productForQuery(query);
@@ -323,20 +337,37 @@ async function fillSummary(slot, query, tagged, token) {
       prices = null;
     }
   }
+  // The same session-cached call the flyer panel makes — no extra request.
+  const offersData = await searchOffers(query, 40).catch(() => null);
   if (inFlight !== token) return;
-  const summary = computeSummary(query, tagged, prices);
-  if (!summary) {
+  const comparison = computeComparison(query, tagged, (offersData && offersData.offers) || [], prices, storeLabel);
+  if (!comparison) {
     slot.remove();
     return;
   }
-  slot.replaceChildren(summaryElement(summary, storeLabel));
+  slot.replaceChildren(
+    summaryElement(comparison, storeLabel, {
+      onWatch: (model) => {
+        const h = model.headline.listing;
+        openWatchDialog({
+          kind: 'grocery',
+          query,
+          label: `${query}${sizeLabel(h.size) ? ` · ${sizeLabel(h.size)}` : ''}`,
+          sizeText: h.name, // the reference size for the engine's size gate
+          suggestedPrice: h.price,
+          currentPrice: h.price,
+          link: h.link,
+        });
+      },
+    }),
+  );
 }
 
 // --- rendering -----------------------------------------------------------
 // Render a ranked result list: the top `limit` up front, plus a "Show all"
 // toggle that reveals the rest. Everything is already fetched, so expanding
 // never triggers a new search — it just renders more of the same list.
-function resultsBlock(items, limit = DEFAULT_LIMIT) {
+function resultsBlock(items, store, limit = DEFAULT_LIMIT) {
   const wrap = document.createElement('div');
   const g = document.createElement('div');
   g.className = 'results-grid';
@@ -344,7 +375,7 @@ function resultsBlock(items, limit = DEFAULT_LIMIT) {
 
   const render = (n) => {
     g.innerHTML = '';
-    for (const item of items.slice(0, n)) g.appendChild(card(item));
+    for (const item of items.slice(0, n)) g.appendChild(card(item, store));
   };
 
   if (items.length <= limit) {
@@ -423,7 +454,7 @@ function storeSection(store) {
   return { el, body, count, flyer };
 }
 
-function fillSection(sec, items) {
+function fillSection(sec, items, store) {
   // Badge shows the full count found; the body shows the top few + "Show all".
   sec.count.textContent = String(items.length);
   sec.body.innerHTML = '';
@@ -434,7 +465,7 @@ function fillSection(sec, items) {
     sec.body.appendChild(note);
     return;
   }
-  sec.body.appendChild(resultsBlock(items));
+  sec.body.appendChild(resultsBlock(items, store));
 }
 
 function failSection(sec, store) {
@@ -505,12 +536,50 @@ async function fillFlyer(slot, storeId, token) {
   slot.replaceChildren(btn);
 }
 
-function card(item) {
+// The search query a product watch uses to re-find this product daily: the
+// name's first few words (a full product title is often too specific for the
+// store's own search to return the item).
+function watchQueryFor(item) {
+  return (item.name || '')
+    .split(/\s+/)
+    .slice(0, 6)
+    .join(' ')
+    .slice(0, 80);
+}
+
+function card(item, store) {
   const a = document.createElement('a');
   a.className = 'card';
   a.href = item.link;
   a.target = '_blank';
   a.rel = 'noopener';
+
+  // Watch bell: one tap sets a target-price watch on THIS product (the engine
+  // re-finds it daily by its stable result id — Keepa-style monitoring).
+  if (store && item.id != null && item.price != null) {
+    const bell = document.createElement('button');
+    bell.type = 'button';
+    bell.className = 'card-watch';
+    bell.textContent = '🔔';
+    bell.title = 'Watch this product’s price';
+    bell.setAttribute('aria-label', `Watch the price of ${item.name}`);
+    bell.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openWatchDialog({
+        kind: 'product',
+        provider: store.id,
+        productId: String(item.id),
+        query: watchQueryFor(item),
+        label: item.name,
+        suggestedPrice: item.price,
+        currentPrice: item.price,
+        link: item.link,
+        image: item.image,
+      });
+    });
+    a.appendChild(bell);
+  }
 
   const imgWrap = document.createElement('div');
   imgWrap.className = 'card-img';
@@ -561,6 +630,15 @@ function card(item) {
       tag.textContent = item.discountLabel;
       prices.appendChild(tag);
     }
+    // Per-unit price (SAR/L, SAR/kg, SAR/pc) — the value lens on every card,
+    // so the comparison engine's reasoning is visible everywhere.
+    const up = unitPriceLabel({ up: unitPrice(item) });
+    if (up) {
+      const u = document.createElement('span');
+      u.className = 'unit-price';
+      u.textContent = up;
+      prices.appendChild(u);
+    }
   } else {
     const noPrice = document.createElement('span');
     noPrice.className = 'no-price';
@@ -579,3 +657,4 @@ renderHomeChips();
 route();
 if (!pageSearch.hidden) input.focus();
 loadBrochures(); // warm the weekly-flyer cache so chips appear instantly
+refreshAlertsBadge(); // unseen price alerts -> badge on the Alerts tab

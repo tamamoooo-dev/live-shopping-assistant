@@ -92,11 +92,14 @@ const UNIT_TO_BASE = [
   { re: new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(g|gm|gr|grm|gram|grams|جم|جرام|غرام|غ)${B}`, 'u'), base: 'g', factor: 1 },
 ];
 const UNITS = 'l|lt|ltr|liter|litre|ml|kg|g|gm|gr|gram|لتر|مل|كجم|جم|جرام';
+const COUNT_WORDS = 'pcs|pc|pieces|piece|قطعه|قطعة|قطع|حبه|حبة|حبات|عبوات|عبوه|عبوة|اكياس|كيس';
 const PACK_RE = [
-  new RegExp(`(\\d+)\\s*[x×*]\\s*(\\d+(?:[.,]\\d+)?)\\s*(${UNITS})${B}`, 'u'), // 6 x 200 ml
+  // "6 x 200 ml" and "24 قطعة × 125مل" (an optional count word between the
+  // pack number and the ×) — pack first, size second.
+  new RegExp(`(\\d+)\\s*(?:${COUNT_WORDS})?\\s*[x×*]\\s*(\\d+(?:[.,]\\d+)?)\\s*(${UNITS})${B}`, 'u'),
   new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${UNITS})${B}\\s*[x×*]\\s*(\\d+)`, 'u'), // 200 ml x 6
 ];
-const COUNT_RE = new RegExp(`(\\d+)\\s*(pcs|pc|pieces|piece|ct|count|s|x|حبه|حبات|قطعه|عبوات|اكياس|كيس)${B}`, 'u');
+const COUNT_RE = new RegExp(`(\\d+)\\s*(pcs|pc|pieces|piece|ct|count|s|x|حبه|حبة|حبات|قطعه|قطعة|عبوات|عبوه|عبوة|اكياس|كيس)${B}`, 'u');
 
 function num(x) {
   return parseFloat(String(x).replace(',', '.'));
@@ -158,8 +161,12 @@ export function parseSize(name, sizeField) {
     const m = u.re.exec(hay);
     if (m) {
       const each = num(m[1]) * u.factor;
-      // A trailing "x6" / "6's" pack multiplier if present.
-      const pm = /[x×*]\s*(\d+)\b/.exec(hay) || /\b(\d+)\s*(?:pcs|pc|pack|s)\b/.exec(hay);
+      // A trailing "x6" / "6's" pack multiplier if present — but never the
+      // size's own "× 125ml" digits (a unit right after the number means the
+      // × introduced the SIZE, not a multiplier; the pack forms above own that).
+      const pm =
+        new RegExp(`[x×*]\\s*(\\d+)(?!\\s*(?:${UNITS}))${B}`, 'u').exec(hay) ||
+        /\b(\d+)\s*(?:pcs|pc|pack|s)\b/.exec(hay);
       const pack = pm ? Math.max(1, parseInt(pm[1], 10)) : 1;
       return { unit: u.base, each, pack, total: each * pack };
     }
@@ -215,12 +222,15 @@ function fieldScore(field, qTokens) {
   for (const qt of qTokens) {
     const variants = expandToken(qt);
     let best = 0;
+    // Prefix/substring tiers need a minimum token length: a 3-char stem
+    // prefix-matches unrelated words ("egg" -> "eggplant", "بيض" (eggs) ->
+    // "بيضاء" (white)) — the "eggs recommends eggplant" class of bug.
     for (const v of variants) {
       if (!v) continue;
       if (fWords.has(v)) best = Math.max(best, 100); // whole-word
-      else if (f.startsWith(v)) best = Math.max(best, 80); // prefix
-      else if (new RegExp(`(^| )${escapeRegex(v)}`).test(f)) best = Math.max(best, 75); // word-start
-      else if (f.includes(v)) best = Math.max(best, 45); // substring
+      else if (v.length >= 4 && f.startsWith(v)) best = Math.max(best, 80); // prefix
+      else if (v.length >= 4 && new RegExp(`(^| )${escapeRegex(v)}`).test(f)) best = Math.max(best, 75); // word-start
+      else if (v.length >= 5 && f.includes(v)) best = Math.max(best, 45); // substring
     }
     if (best) matched += 1;
     score += best;
@@ -277,12 +287,14 @@ export function isRelevant(item, query) {
   for (const qt of qOriginal) {
     for (const v of expandToken(qt)) {
       if (fWords.has(v)) return true;
-      if (v.length >= 3 && new RegExp(`(^| )${escapeRegex(v)}`).test(f)) return true;
+      // ≥4 chars for a word-start match: "egg" must not keep "eggplant",
+      // "بيض" (eggs) must not keep "بيضاء" (white).
+      if (v.length >= 4 && new RegExp(`(^| )${escapeRegex(v)}`).test(f)) return true;
     }
   }
   // last resort: strong head-token substring for compound words (e.g. "cornflakes")
   for (const v of expandToken(head)) {
-    if (v.length >= 4 && f.includes(v)) return true;
+    if (v.length >= 5 && f.includes(v)) return true;
   }
   return false;
 }

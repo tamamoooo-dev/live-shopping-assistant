@@ -25,6 +25,8 @@ ok('arabic 2 لتر -> 2000', parseSize('المراعي حليب 2 لتر').tota
 ok('arabic كجم', parseSize('رز بسمتي 5 كجم').total === 5000);
 ok('arabic-indic digits', parseSize('حليب ٢ لتر').total === 2000);
 ok('count 30 pcs', (() => { const s = parseSize('Eggs 30 pcs'); return s.unit === 'pcs' && s.total === 30; })());
+ok('arabic count-word pack: 24 قطعة × 125مل', (() => { const s = parseSize('حليب كامل الدسم، 24 قطعة × 125مل'); return s.pack === 24 && s.each === 125 && s.total === 3000; })());
+ok('size × digits never doubles as multiplier', (() => { const s = parseSize('حليب × 125مل'); return s.pack === 1 && s.total === 125; })());
 ok('sizeLabel', sizeLabel(parseSize('Milk 2 L')) === '2 L');
 
 // --- unit price ---
@@ -38,6 +40,11 @@ ok('milk chocolate demoted below plain', relevance({ name: 'Milk Chocolate Bar 9
 ok('coffee dropped for milk', !isRelevant({ name: 'Nescafe Coffee Jar' }, 'milk'));
 ok('arabic query matches arabic name', isRelevant({ name: 'حليب المراعي طازج 1 لتر' }, 'حليب'));
 ok('arabic query drops juice', !isRelevant({ name: 'عصير برتقال' }, 'حليب'));
+ok('eggs drops eggplant (short-stem prefix guard)', !isRelevant({ name: 'Round Eggplant' }, 'eggs'));
+ok('eggs still keeps real eggs', isRelevant({ name: 'White Eggs Tray 30 pcs' }, 'eggs'));
+ok('بيض drops بيضاء (white)', !isRelevant({ name: 'بصل ابيض طازج' }, 'بيض'));
+ok('بيض keeps real eggs', isRelevant({ name: 'بيض ابيض ٣٠ حبه' }, 'بيض'));
+ok('EN query matches AR staple via synonyms', isRelevant({ name: 'حليب المراعي 2 لتر' }, 'milk'));
 
 // --- equivalence grouping ---
 const tagged = [

@@ -4,7 +4,24 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-02 (evening) · **Phase just completed:** **Brochure
+> **Last updated:** 2026-07-03 · **Phase just completed:** **Intelligent
+> Shopping — Price Comparison Engine + Unified Search + Price Monitoring (see
+> §20).** The search page now runs a value-aware **Price Comparison Engine**
+> (`src/compare.js`): the "Best buy" is decided by **per-unit value across BOTH
+> worlds** — live online results AND this week's flyer offers — with the lowest
+> total price kept as its own honest line, a median outlier guard against
+> size-parse errors, and the same confidence ladder as before. **Price
+> Monitoring (Personal Alerts, Roadmap priority 4) is BUILT**: watches with a
+> target price (product-specific by stable id — e.g. Amazon ASIN — or grocery
+> across all sources), a daily cron check with strict relevance + size trust
+> gates, in-app alerts + optional free ntfy.sh push, and a new **Alerts page**
+> (`#/alerts`). Offer search relevance was rebuilt on word boundaries + a
+> bilingual synonym bridge (the "eggs returns white-onion flyer offers" class
+> of bug is gone), shared by a new engine module (`src/matching.js`).
+> **⚠️ DEPLOYMENT STATUS: see §20.H — the code is complete and fully verified
+> locally; the production D1 migration + Worker deploy + git pushes were
+> blocked by the session's permission gate and need the user to run/allow
+> them.** **Before this**, the prior phase was **Brochure
 > Intelligence — Structured Offers + Coverage Expansion + Retention — DEPLOYED &
 > VERIFIED IN PRODUCTION (see §19).** The Brochure Engine is now a source of
 > STRUCTURED shopping data: it extracts **per-product offers** (price, was-price,
@@ -114,10 +131,14 @@
    price points **anchored to brochure editions** (the *when*/*where*), price
    *number* from the search connector, lowest-ever (price + where + when) derived
    on read. Deployed & verified; M1/M2 intact. Free plan, D1-only, $0.
-4. **Personal Alerts** — ⏭ **next milestone.** Let the user set a target on a
-   tracked product and be notified when its price drops (personal, single-user
-   notifications — not a subscription/marketing system). Builds directly on §13's
-   price points.
+4. **Personal Alerts** — ✅ **done (as Price Monitoring, §20).** Watches with a
+   user-set target price, checked daily across ALL sources (live online stores
+   + current flyer offers): product-specific watches re-find the exact product
+   by its stable result id (e.g. an Amazon ASIN); grocery watches sweep every
+   source behind relevance + size trust gates. In-app alerts (badge + Alerts
+   page) plus optional free push via ntfy.sh (`NTFY_TOPIC` secret). Personal,
+   single-user, $0. (It monitors live prices rather than only §13's weekly
+   capture — a strict superset of the originally-planned alert.)
 5. **Unified Frontend** — ✅ **done (redesigned, §16;** first integration pass
    was §14). The frontend is now a two-experience app: **Live Search** and a
    dedicated **Brochures** page, with Price History woven into search as a
@@ -407,14 +428,15 @@ wired into the UI (dropdown + checkbox chips).
 > Engine, Price History) are complete, and the **Unified Interface first pass**
 > (§14) is now integrated; the next milestone is **Personal Alerts**.
 
-1. **Personal Alerts (Pillar 3 cont.) — next milestone.** Let the user set a
-   target price on a tracked product (the §13 watchlist) and be notified when a
-   captured price drops below it — personal, single-user notifications, not a
-   marketing/subscription system. Builds directly on §13's edition-anchored price
-   points and runs on the same weekly capture. Stay on the **Free plan** ($0);
-   design not yet written — this is the milestone to start. Alerts now have a
-   natural home in the UI (the §14 price banner is where a target/notification
-   control would live).
+1. **Finish the §20 production deployment (BLOCKED-ON-USER).** The Intelligent
+   Shopping milestone is code-complete and locally verified, but the four
+   production actions were denied by the session permission gate — run them in
+   this order (details §20.H): (a) D1 migration
+   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-watches.sql`,
+   (b) `npx wrangler deploy` (from `brochure-engine/`), (c) `git push` both
+   repos, (d) optionally `npx wrangler secret put NTFY_TOPIC` for phone push
+   (topic name = the shared secret; pick something unguessable and subscribe to
+   it in the ntfy app — no account needed). Then verify per §20.H's checklist.
 2. **Usability gaps found integrating the Unified Interface (§14.D) — mostly
    closed by the §16 redesign.** Status:
    (a) **partially addressed** — the home state now advertises which products
@@ -1943,6 +1965,229 @@ stores up automatically from ENGINE_STORES.
   raise it only with the subrequest math (each +500 = +1 POST).
 - **Manuel** (§9.8) remains the one dead store; everything else was current at
   ingest time.
+
+---
+
+## 20. Intelligent Shopping — Price Comparison Engine, Unified Search, Price Monitoring
+
+> **Status (2026-07-03): CODE COMPLETE & FULLY VERIFIED LOCALLY; PRODUCTION
+> DEPLOYMENT BLOCKED-ON-USER (§20.H).** All engine selftests (including live
+> D4D legs) and all frontend unit suites are green; the full search flow was
+> verified in a live browser against the production connector + engine. The
+> four production actions (D1 migration, engine Worker deploy, both git
+> pushes) were denied by the session's permission gate and are listed in
+> §20.H exactly as they must be run.
+
+### 20.A What this milestone delivers
+1. **A value-aware Price Comparison Engine** (`src/compare.js`, pure +
+   unit-tested): the "Best buy" is decided by **per-unit value**, not the
+   smallest total — a 30-egg tray at 0.33 SAR/pc now beats a 6-pack at 0.75
+   SAR/pc even though 4.50 < 9.95 (the milestone's flagship example, verified
+   live). The lowest TOTAL price is never hidden: it renders as its own
+   "Lowest price · if you need less" line when it differs from the best buy.
+2. **Unified search across sources**: flyer offers are **first-class
+   comparison candidates** — the best buy can (and does) come from a physical
+   store's flyer, clearly badged "this week's flyer" with the machine-
+   extraction caveat and a click-through to verify. The flyer panel and the
+   summary share one relevance pipeline, so they always agree.
+3. **Price Monitoring (Keepa-inspired)**: target-price watches, checked daily
+   across every source, with strict trust gates; alerts in-app (badge +
+   `#/alerts` page) and optionally pushed to the phone via free ntfy.sh.
+4. **Search relevance quality**: the engine's `/offers` search was rebuilt on
+   word-boundary scoring + a bilingual synonym bridge; short-stem substring
+   false-positives (Arabic "بيض" eggs → "بيضاء" white; English "egg" →
+   "eggplant") are gone on BOTH sides (engine `matching.js`, frontend
+   `match.js` got matching ≥4-char prefix guards). Per-unit prices now render
+   on every result card and flyer card.
+
+### 20.B The comparison model (frontend `src/compare.js` + `summary.js`)
+`computeComparison(query, tagged, flyerOffers, prices, storeLabel)` returns a
+plain model rendered by `summary.js` (now rendering-only):
+- **Listings** — one normalized shape for both worlds. Online results and
+  flyer offers each pass `isRelevant` + a relevance floor; flyer offers also
+  need a display name. Sizes parse from names (`parseSize`), giving `SAR/L`,
+  `SAR/kg`, `SAR/pc`.
+- **Best-value analysis** — within the DOMINANT unit family only (never
+  SAR/L vs SAR/kg), with a **median outlier guard** (unit prices >6× off the
+  family median are size-parse noise, dropped — one bad parse must never
+  become the recommendation).
+- **Headline decision** — value first, price as tiebreak: value pick ≡
+  cheapest → one "Best buy"; value pick beats the cheapest's unit price by
+  >10% (or the cheapest is unsized/other-family) → value pick leads and the
+  cheapest keeps its own honest line; within 10% → cheapest wins ("equal
+  value, less money").
+- **Confidence ladder unchanged in spirit**: high = the headline sits in a
+  confident same-brand+size ≥2-store equivalence group (flyer offers NEVER
+  join those groups — OCR names carry no reliable brand, so a flyer headline
+  caps at medium); medium = unit-value comparison; low = neither (with the
+  explicit "different sizes/variants" note).
+- **Price History verdict** unchanged, computed vs today's best total price.
+- **Parser fixes found by live verification:** "24 قطعة × 125مل" no longer
+  parses as pack=125 (count-word pack form added; the trailing ×N multiplier
+  now refuses digits followed by a unit token); taa-marbuta count words
+  (قطعة/حبة/عبوة) parse. Fixed identically in BOTH `src/match.js` and the
+  engine's `src/matching.js` — **keep these two in sync**.
+
+### 20.C Engine matching module (`brochure-engine/src/matching.js`, NEW)
+One PURE home for "does this text match the query", shared by the `/offers`
+read API and the watch monitor so server relevance ≡ client relevance:
+normalization (now the single source; `offers/contract.js` re-exports it),
+bilingual synonyms, tiered token scoring (whole word 100 > word-start prefix
+70, ≥4 chars only > long substring 40, ≥5 chars), compound-noun demotion
+(×0.45), `nameRelevance`/`isRelevantName`, plus the ported `parseSize` +
+`sizeComparable` (±25%) for the monitor's size gate. `offerRelevance` now
+returns `{ score, nameMatch }`; `/offers` ranks fully-name-matched offers
+above text-only matches, strongest first, then cheapest
+(`isNameMatch`/`relevanceScore` helpers). The D1 offer store's SQL LIKE
+prefilter ORs each token's synonym variants so an English query reaches
+Arabic-only OCR rows (final word-boundary filtering happens in JS).
+
+### 20.D Price Monitoring (engine: `monitor.js`, `storage/watchStore.js`, routes)
+- **Model:** `watches` + `alerts` D1 tables (same database; schema.sql updated,
+  one-time delta in `migrate-2026-07-watches.sql`). A watch is
+  `{ kind: 'product'|'grocery', query, targetPrice, … }`:
+  - **product** — provider + stable `productId` (e.g. Amazon ASIN): evaluation
+    re-finds THAT product in the provider's live results (id match, then
+    link-contains-id); vanished/priceless → honest `no-data`, state untouched.
+  - **grocery** — sweeps ALL sources: every `MONITOR_PROVIDERS` connector
+    search (7 stores, per-store failures non-fatal) + the current flyer
+    offers already in D1 (zero subrequests). Best trustworthy price wins.
+- **Trust gates:** candidates must pass `isRelevantName` at floor 50 (a
+  compound look-alike "milk chocolate" scores 45 — below the gate); grocery
+  watches remember a **reference size** parsed at creation (from the watched
+  product's name) and only accept size-comparable candidates (±25%, same
+  family) — a 200 ml milk can never trigger a 2 L milk watch; flyer candidates
+  must be NAME-tier matches and alerts carry `source: 'flyer'` + a verify
+  note.
+- **Crossing semantics:** an alert fires when the price crosses DOWN to ≤
+  target (`is_below` arms/re-arms); still-below re-checks don't re-alert; a
+  no-data run never re-arms.
+- **Scheduling:** a second cron `45 5 * * *` (daily 08:45 AST) checks all
+  active watches via the same SELF fan-out in batches of 3 (each batch gets
+  its own Free-plan subrequest budget; a grocery watch ≈ 7 subrequests).
+  Kept OUT of the weekly Tue/Wed fire so invocation caps never compound.
+  `scheduled()` branches on `event.cron`.
+- **Notifications:** in-app always (unseen count on health + `/watches`;
+  badge in the UI). **ntfy.sh push optional**: set secret `NTFY_TOPIC`
+  (+ optional `NTFY_SERVER`) and each alert POSTs to the topic (free, no
+  account; the topic name is the only secret — pick something unguessable).
+  Non-ASCII titles are folded into the body (HTTP headers are Latin-1).
+- **API:** `GET /watches` (list + unseenAlerts + max), `POST /watches`
+  (validated: kind/query/target bounds, product needs provider∈providers +
+  id; capped at 24 active), `DELETE /watches?id=`, `GET /alerts[?unseen=1]`,
+  `POST /alerts/seen`, and the secret-guarded `POST /watches/check[?ids=…]`
+  (the cron's fan-out target; bare = check everything, for manual runs).
+  User-facing watch writes are deliberately **open like the rest of this
+  personal tool's API but strictly validated + capped** — acceptable for a
+  single-user tool; revisit if the URL ever becomes shared.
+
+### 20.E Frontend Price Monitoring UI
+- **Alerts page** (`src/alertsPage.js`, route `#/alerts`, nav + tab added in
+  `index.html`): watch list (target vs last-seen price with hit/above state,
+  store + source, checked-at, delete), alerts feed (unseen highlighted,
+  flyer-verify note, link out), honest empty/unreachable states. Viewing the
+  page marks alerts seen; an **unseen badge** renders on the Alerts nav/tab
+  (polled once at boot via `refreshAlertsBadge`).
+- **Watch creation:** "🔔 Watch price" in the summary header (grocery watch,
+  prefilled with the headline's price + name as the size reference) and a
+  bell on every priced result card (product watch: provider + result id +
+  first-6-words query). Both open the shared `<dialog>` (`openWatchDialog`).
+- **API clients** live in `src/brochure.js` (project rule 2 — the one place
+  the frontend knows the engine): `listWatches/createWatch/deleteWatch/
+  listAlerts/markAlertsSeen`. All never-throwing.
+
+### 20.F Files changed
+```
+serverless-connector/brochure-engine/
+  src/matching.js                 NEW   shared bilingual matching + size parsing (§20.C)
+  src/monitor.js                  NEW   Price Monitoring (§20.D)
+  src/storage/watchStore.js       NEW   D1 watches+alerts store (memory twin in local.js)
+  src/offers/contract.js          EDIT  normalization moved to matching.js; offerRelevance rebuilt
+  src/storage/offerStore.js       EDIT  synonym-expanded SQL prefilter
+  src/storage/local.js            EDIT  + createMemoryWatchStore; relevanceScore usage
+  src/engine.js                   EDIT  + /watches, /alerts routes; /offers re-rank; health.watches
+  src/scheduler.js                EDIT  + runWatchFanOut + createWatchCheckDispatcher
+  src/index.js                    EDIT  watchStore+notifier in ctx; scheduled() branches on event.cron
+  schema.sql                      EDIT  + watches + alerts (canonical)
+  migrate-2026-07-watches.sql     NEW   the one-time delta for the LIVE D1 (NOT YET APPLIED)
+  wrangler.toml                   EDIT  crons: + "45 5 * * *" (daily watch check)
+  dev.mjs                         EDIT  + selftestMatching + selftestWatches (`node dev.mjs watchtest`);
+                                        POST bodies now pass through the local dev server
+live-shopping-assistant/
+  src/compare.js                  NEW   the Price Comparison Engine (§20.B)
+  src/compare.test.mjs            NEW   22 tests (`node src/compare.test.mjs`)
+  src/summary.js                  REWRITTEN  renders the comparison model (rendering only)
+  src/match.js                    EDIT  ≥4-char prefix guards; pack-parse fixes (§20.B)
+  src/match.test.mjs              EDIT  30 tests now (eggplant/بيضاء guards, pack forms)
+  src/alertsPage.js               NEW   Alerts page + watch dialog + badge (§20.E)
+  src/brochure.js                 EDIT  + watch/alert API clients
+  src/app.js                      EDIT  3rd route; summary feeds on flyer offers; card unit
+                                        prices + watch bells; alerts badge at boot
+  src/flyerOffers.js              EDIT  client-side relevance via flyerListing; fo-unit
+  index.html                      EDIT  Alerts nav/tab + page section; hero copy 6→7 stores
+  styles.css                      EDIT  summary v2, unit prices, bell, dialog, badge, Alerts page
+```
+
+### 20.G Validation performed (all ✅)
+- **Engine offline:** `node dev.mjs watchtest` (matching: word boundaries,
+  synonyms both directions, compound gate at floor 50, size gate, name/text
+  tiering; monitoring: validation, cross-source best price, flyer-vs-online,
+  crossing semantics incl. re-arm, product-id matching + not-found, all API
+  routes + guard + cap), `offerstest`, `pricetest`.
+- **Engine full (`node dev.mjs selftest`):** M1 Othaim PDF byte-exact, M2
+  lulu live from D4D, fallback, Price History, offers live (1,176 stored /
+  1,176 linked), retention, matching, monitoring — end-to-end green.
+- **Frontend unit:** `node src/match.test.mjs` (30) + `node src/compare.test.mjs`
+  (22) — all green.
+- **Live browser (local bundle vs PRODUCTION connector+engine):** "eggs" →
+  Best buy **30 pcs 9.95 SAR (0.33 SAR/pc) from Makkah's flyer**, badge +
+  caveat shown, secondary "Lowest price · if you need less: 4.50 SAR · 6 pcs ·
+  Ninja" (an eggplant surfaced here pre-fix — the prefix guard killed it);
+  "milk" → 12×1 L multipack 58.99 (4.92 SAR/L) with the 125 ml 1.25 SAR as
+  secondary (a bogus "125-pack" parse surfaced here pre-fix — the pack-form
+  fix killed it); Arabic "حليب" works; history verdict renders; unit prices
+  on cards; 28 watch bells; watch dialog opens prefilled and shows a clean
+  error while the prod engine lacks /watches; Alerts page shows the honest
+  unreachable note; Brochures page regression-checked (19 sections, 47
+  covers); **zero console errors/warnings**.
+
+### 20.H Production deployment — REQUIRED NEXT (blocked-on-user)
+Run in this order (Node PATH note §8):
+```
+cd serverless-connector/brochure-engine
+npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-watches.sql
+npx wrangler deploy
+# optional phone push:  printf '%s' "<unguessable-topic>" | npx wrangler secret put NTFY_TOPIC
+cd ../.. && cd serverless-connector && git push origin main
+cd ../live-shopping-assistant && git push origin main   # deploys GitHub Pages
+```
+**Then verify:** engine `GET /` health lists `watches:{active,unseenAlerts}`
+and both crons; `GET /offers?q=بيض` returns egg offers (no "white" noise);
+create a test watch (`POST /watches` with a high target), run the guarded
+`POST /watches/check` (INGEST_SECRET — rotate first, prior value uncommitted,
+§12.G), confirm the alert row + `unseenAlerts`, delete the watch; frontend:
+Pages bundle byte-matches, Alerts page lists/creates/deletes watches, badge
+appears, eggs/milk summaries as in §20.G. The daily cron's first real fire is
+the next 05:45 UTC.
+
+### 20.I Notes, caveats & follow-ups
+- **The two matching modules are mirrors** (frontend `src/match.js` ↔ engine
+  `src/matching.js`): same synonyms, same prefix guards, same size parsing.
+  Any change to one belongs in both.
+- **Flyer OCR names remain noisy** (TODO §9-old.7): relevance now gates on
+  word boundaries so noise rarely SURFACES, but derived names like "july فقط
+  ايام days only wow best price fresh eggs white large 30s" still read rough.
+  Improving `deriveNames` stays engine-side follow-up.
+- **Watch caps:** 24 active watches, checked in batches of 3 (≈9 invocations
+  ≤ the 32/event cap; each batch ≪ 50 subrequests). Raising the cap needs
+  that math re-done first.
+- **Product watches at non-Amazon stores** work by result-id match; grocery
+  store ids are stable in practice but unproven long-term — a vanished id
+  degrades to honest `no-data`, never a wrong alert.
+- **The summary's old "flyer offers never take the headline" rule was
+  deliberately superseded** by this milestone's unification directive; the
+  honesty is preserved by the flyer badge + caveat + medium-confidence cap
+  instead of exclusion.
 
 ---
 
