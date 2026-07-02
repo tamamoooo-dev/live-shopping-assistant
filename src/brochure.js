@@ -29,7 +29,18 @@ export const ENGINE_STORES = [
   { id: 'othaim', label: 'Othaim', color: '#0d9488', search: null },
   { id: 'carrefour', label: 'Carrefour', color: '#2563eb', search: null },
   { id: 'nesto', label: 'Nesto', color: '#d97706', search: null },
-  { id: 'manuel', label: 'Manuel', color: '#9333ea', search: null },
+  { id: 'farm', label: 'Farm', color: '#65a30d', search: null },
+  { id: 'almadina', label: 'Al Madina', color: '#dc2626', search: null },
+  { id: 'ramez', label: 'Ramez', color: '#7c3aed', search: null },
+  { id: 'cityflower', label: 'City Flower', color: '#db2777', search: null },
+  { id: 'marksave', label: 'Mark & Save', color: '#0891b2', search: null },
+  { id: 'amarket', label: 'A Market', color: '#4f46e5', search: null },
+  { id: 'grandhyper', label: 'Grand Hyper', color: '#ca8a04', search: null },
+  { id: 'makkah', label: 'Makkah', color: '#059669', search: null },
+  { id: 'prime', label: 'Prime', color: '#e11d48', search: null },
+  { id: 'alwafa', label: 'Hyper Al Wafa', color: '#9333ea', search: null },
+  { id: 'aljazera', label: 'AlJazera', color: '#b45309', search: null },
+  { id: 'manuel', label: 'Manuel', color: '#64748b', search: null },
 ];
 const ENGINE_STORE_BY_ID = Object.fromEntries(ENGINE_STORES.map((s) => [s.id, s]));
 const REGION = 'central'; // the personal tool is Riyadh-scoped (HANDOFF §10)
@@ -229,6 +240,42 @@ export function loadBrochurePages(b) {
 export async function loadBrochureCover(b) {
   const data = await loadBrochurePages(b);
   return data && data.pages.length ? data.pages[0] : null;
+}
+
+// --- structured flyer offers (the price-comparison substrate) -----------------
+// GET /offers?q= — per-product deals machine-extracted from the physical
+// stores' current flyers (price, was-price, validity, product image crop,
+// flyer deep-link). This is how the search page compares ONLINE prices with
+// PHYSICAL-store flyer prices. Prices are aggregator-AI-extracted from flyer
+// images (the engine's `note` repeats this), so the UI must keep the "from the
+// flyer" framing and the click-through to the flyer itself. Cached per query
+// for the page session. Never throws.
+const offersCache = new Map();
+export function searchOffers(query, limit = 24) {
+  const q = (query || '').trim();
+  if (!q) return Promise.resolve(null);
+  const key = `${q}:${limit}`;
+  if (!offersCache.has(key)) {
+    if (offersCache.size > 20) offersCache.clear(); // tiny session cache
+    offersCache.set(
+      key,
+      fetch(`${ENGINE_BASE}/offers?q=${encodeURIComponent(q)}&limit=${limit}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => (j && Array.isArray(j.offers) && j.offers.length ? j : null))
+        .catch(() => null),
+    );
+  }
+  return offersCache.get(key);
+}
+
+// The held brochure a flyer offer belongs to (same engine store + edition), so
+// a click can open the in-app viewer instead of leaving the app. Null when the
+// edition isn't held/current — the caller falls back to the offer's sourceUrl.
+export async function brochureForOffer(offer) {
+  if (!offer || !offer.store || !offer.edition) return null;
+  const byStore = await loadBrochures();
+  const list = byStore[`${offer.store}:${offer.region || REGION}`] || [];
+  return list.find((b) => b.edition === offer.edition) || null;
 }
 
 // --- price history (Pillar 3, read-only) -------------------------------------

@@ -29,6 +29,7 @@ import {
   storeLabel,
 } from './brochure.js';
 import { openBrochureViewer } from './viewer.js';
+import { fillFlyerOffers } from './flyerOffers.js';
 import { initBrochuresPage } from './brochures.js';
 import { rankItems as smartRank, relevance as matchRelevance, isRelevant } from './match.js';
 import { computeSummary, summaryElement } from './summary.js';
@@ -260,6 +261,14 @@ async function runSearch(query) {
   summarySlot.className = 'summary-slot';
   summarySlot.appendChild(summarySkeleton());
   results.appendChild(summarySlot);
+
+  // Physical-store flyer deals for this query (the Brochure Engine's structured
+  // offers). Independent of the live store searches, so it fills as soon as the
+  // engine answers — including stores that have no live search at all.
+  const offersSlot = document.createElement('div');
+  offersSlot.className = 'flyer-offers-slot';
+  results.appendChild(offersSlot);
+  fillFlyerOffers(offersSlot, q, () => inFlight !== token);
 
   // Lay out a section per store immediately (with skeleton cards); fill each
   // as its search resolves. The same layout serves 1 store or 8.

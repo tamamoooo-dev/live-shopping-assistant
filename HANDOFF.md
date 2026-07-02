@@ -4,8 +4,21 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-02 · **Phase just completed:** **Search Intelligence
-> & Reliability — DEPLOYED & VERIFIED IN PRODUCTION (see §18).** An **intelligent
+> **Last updated:** 2026-07-02 (evening) · **Phase just completed:** **Brochure
+> Intelligence — Structured Offers + Coverage Expansion + Retention — DEPLOYED &
+> VERIFIED IN PRODUCTION (see §19).** The Brochure Engine is now a source of
+> STRUCTURED shopping data: it extracts **per-product offers** (price, was-price,
+> validity, product image, flyer deep-link, bilingual OCR text) from every
+> covered store's current flyers via D4D's `/products/search` JSON API — **no
+> OCR of our own, $0** — and serves them at **`GET /offers?q=`** (15,800+
+> current offers at deploy). Coverage grew **8 → 19 stores** (Farm, Al Madina,
+> Ramez, City Flower, Mark & Save, A Market, Grand Hyper, Makkah, Prime, Hyper
+> Al Wafa, AlJazera — all Riyadh, all with current flyers). A **retention
+> policy** (metadata forever, bytes a rolling window) now keeps the KV
+> namespace inside the Free plan permanently. The frontend search page gained
+> an **"In this week's flyers" panel** that puts physical-store flyer prices
+> next to the live online results (in-app viewer click-through). **Before
+> this**, the prior phase was **Search Intelligence & Reliability (§18).** An **intelligent
 > shopping summary** now sits ABOVE the results (cheapest option, best value per
 > unit, a **confidence indicator**, and Price History woven in) — and it **only**
 > claims a strong "Lowest price" for a **confidently-equivalent product** (same
@@ -89,11 +102,14 @@
    summary** before results, rebuilt matching/ranking + equivalent-product
    grouping (`src/match.js`), "Show all", Arabic+English, all routed through the
    connector.
-2. **Brochure Engine** — ✅ **done** (§10–§12). M1 `PdfIndexCollector` (Othaim PDF)
-   + `AggregatorCollector` for 7 stores, 8 brochures held in production, weekly
-   Tue+Wed fan-out scheduler on the Free plan. **Aggregator migrated OffersInMe →
-   D4D + official-offers-page fallback (§15) — deployed & verified; all covered
-   stores current at 2026-W27.**
+2. **Brochure Engine** — ✅ **done, upgraded to structured intelligence (§19).**
+   M1 `PdfIndexCollector` (Othaim PDF) + `AggregatorCollector`, weekly Tue+Wed
+   fan-out scheduler on the Free plan; aggregator = D4D + official-offers-page
+   fallback (§15). **Now 19 stores** (§19: +11 Riyadh groceries), ~49 current
+   brochures held, **plus structured per-product OFFERS** (15,800+ current)
+   served at `GET /offers?q=` — the price-comparison substrate for physical
+   retailers — and a storage **retention policy** that keeps KV inside the
+   Free plan forever.
 3. **Price History** — ✅ **done** (§13). A **feature of the Brochure Engine**:
    price points **anchored to brochure editions** (the *when*/*where*), price
    *number* from the search connector, lowest-ever (price + where + when) derived
@@ -424,6 +440,20 @@ wired into the UI (dropdown + checkbox chips).
    the connector's best-ranked result for a query, which can mis-match loosely
    (e.g. "milk" → a milk *chocolate* biscuit at some stores). Tighten with a
    per-product `match` rule or explicit per-store product ids when it matters.
+   **New option since §19:** the structured flyer offers are themselves a
+   candidate price source for the capture (the §13.G seam takes any source) —
+   a flyer-offer price IS a brochure price, but its OCR-derived matching needs
+   the same care before wiring it in.
+7. **Offer display-name quality (§19 follow-up).** `name`/`name_ar` are derived
+   heuristically from the aggregator's OCR text; most are good, some are noisy
+   and some English names land in `name_ar` (mixed-script OCR lines). The UI
+   fallback chain (name → nameAr → category) plus the product image crop keeps
+   cards usable. Improving the deriver is engine-side only (`offers/contract.js`
+   `deriveNames`); names self-refresh on every weekly ingest (upsert).
+8. **Manuel is effectively dead on D4D** (dropped from the Riyadh directory,
+   §19.G). Its provider keeps failing honestly and the UI shows "no current
+   flyer". Either find an official Manuel source someday or retire the
+   provider.
 
 **Deferred (per §0 — not TODOs now):** `StoreSessionCollector` (former M3), OCR /
 brochure price extraction, AI/LLM extraction, advanced analytics, and any paid
@@ -1732,6 +1762,187 @@ items across stores, and builds the summary when the last store answers.
   milestone did not build it. The summary is a natural future home for a target-
   price control (the old disabled "Alerts soon" affordance was removed with the
   price panel; re-add it in the summary header when Alerts lands).
+
+---
+
+## 19. Brochure Intelligence — Structured Offers, Coverage 8→19, Retention
+
+> **Status:** **DEPLOYED & VERIFIED IN PRODUCTION** (2026-07-02 evening).
+> Engine Worker version `4bb6dbbf`; frontend pushed to `main` (GitHub Pages).
+> This is the milestone that turns the Brochure Engine from "images of flyers"
+> into a **source of structured shopping data**: per-product prices from
+> physical stores' flyers, queryable next to the live online prices — with
+> **no OCR of our own, no paid APIs, $0**.
+
+### 19.A The discovery that unlocked it
+D4D Online doesn't just host flyer page images — it also machine-extracts
+(its own AI/OCR) **per-product offer records** from every flyer and serves
+them from a JSON endpoint, **`POST /products/search`**:
+`{ price, was_price, valid_from/valid_to, idproduct_category, product image
+crop (CDN), flyer deep-link (…?page=…), bilingual OCR description, idoffer_company
+(the flyer id) }`. The endpoint needs a CSRF token + session cookie, both
+minted by a plain GET of any store page — **verified working from a Cloudflare
+Worker (datacenter IP) on the real edge** before anything was built. Volumes:
+300–1,500 current offers per store, ~500 per POST, so a full store costs
+**~4 subrequests**. D4D's own UI marks these prices "AI-generated — official
+flyer prices prevail"; the engine carries that disclaimer through (§19.D).
+
+### 19.B What was built (engine, all in `brochure-engine/`)
+```
+src/offers/contract.js     NEW  PURE: Offer contract, OCR name derivation (EN+AR),
+                                price sanity gates, normalizeText (AR fold +
+                                Arabic-Indic digits), search relevance, row mapping
+src/offers/d4dOffers.js    NEW  the D4D offers SOURCE adapter (CSRF flow, paging,
+                                D4D_CATEGORIES id→slug map harvested live)
+src/offers/ingest.js       NEW  store-agnostic ingest: source → normalize → gate →
+                                link offers to held brochure editions → upsert
+src/storage/offerStore.js  NEW  D1 store: batch upsert, token-AND LIKE search,
+                                counts, pruneExpiredBefore (in-memory twin in local.js)
+src/retention.js           NEW  pruneStoredBytes: METADATA FOREVER, BYTES A ROLLING
+                                WINDOW (see §19.E)
+src/providers/d4dStores.js NEW  PURE CONFIG: the 11 coverage-expansion providers
+src/providers/othaim.js    EDIT + offers:{company:72} (brochure stays official PDF)
+src/collectors/aggregator.js EDIT maxPages/maxTotalPages 40→36 (budget headroom for
+                                offers in the same child; oversize flyers TRUNCATE
+                                to 36 pages rather than starve — see note below)
+src/engine.js              EDIT + GET /offers, POST /prune, offers in /ingest +
+                                health; storage backends gain delete/listPrunable/
+                                markPruned
+src/index.js               EDIT registry 8→19; offerStore+offersSource in ctx;
+                                cron: fan-out → price capture → prune
+schema.sql                 EDIT + offers table (+ux_offer, validity indexes) +
+                                brochures.pruned_at (canonical, fresh installs)
+migrate-2026-07-offers.sql NEW  the one-time delta applied to the LIVE D1 (done)
+dev.mjs                    EDIT + selftestOffers/selftestRetention (offline) +
+                                selftestOffersLive; `node dev.mjs offerstest`
+```
+**Discipline preserved:** store knowledge is provider config only (the offers
+`company` id is parsed from the existing D4D store key, e.g.
+`lulu-hypermarket-63` → 63; Othaim's is explicit config). The offers source is
+an **adapter** like the brochure adapters — a second aggregator would be a new
+file, zero ingest change. The Offer contract is source-agnostic.
+
+### 19.C How ingest runs (Free-plan budget, unchanged architecture)
+The existing Architecture-C fan-out is untouched: each per-store child
+invocation (`POST /ingest?store=<id>`) now runs **brochures first, then that
+store's offers** (offers link to the freshly committed editions). Budget per
+child: 1 store page + ≤6 leaflets + ≤36 page images (~43) + offers (~4) ≤ 47
+of 50. Offers are **upserted** (unique `store:region:source:offer_id`), so
+re-ingest is idempotent and names/prices refresh weekly. "Current" is derived
+from `valid_to` at read time — no flag maintenance. Coordinator: 19 SELF calls
++ 8 price-capture calls + prune ≈ 28 invocations total (cap 32). ⚠️ **KV write
+budget:** a worst-case drop-day (every store publishing a full new flyer set
+in one day) is ~700–900 KV writes vs the 1,000/day Free cap; a partial failure
+self-heals on the Wednesday fire. Adding many more image stores needs this
+math re-done first.
+
+### 19.D Read API (the price-comparison substrate)
+- **`GET /offers?q=<query>&store=&region=&limit=`** → `{ query, count, note,
+  offers:[Offer] }` — current offers only (validity contains today), token-AND
+  search over normalized OCR text (Arabic+English, Arabic-Indic digits folded),
+  name-matched offers ranked before text-only matches, cheapest first within
+  each tier. `note` is the extraction disclaimer; every Offer carries
+  `sourceUrl` (flyer deep-link) + `imageUrl` (the product's own flyer crop) +
+  `edition` (the held brochure it came from, when linkable via flyer id ↔
+  brochure source_url).
+- Health (`GET /`) now reports `offers: { total, current, stores }`.
+- Guarded: `POST /ingest?store=` (now also offers; `&offers=0` skips),
+  `POST /prune`.
+
+### 19.E Retention (production stability — REQUIRED at 19 stores)
+KV Free = 1 GB total; 19 stores × ~30 pages × ~150 KB ≈ 85 MB/week of new
+bytes — unpruned, the namespace dies in weeks. Policy: **metadata is forever,
+bytes are a rolling window.** A brochure that is non-current AND expired
+>28 days has its object bytes deleted (pages, meta.json, original.pdf) and its
+row marked `pruned_at` — the row (edition, validity, checksum, source URL)
+stays forever, so history, dedupe and Price-History anchoring are untouched.
+Caps: ≤250 KV deletes + ≤12 rows per run (KV allows 1,000 deletes/day; cron
+fires 2×/week; a backlog drains across fires). Offers rows expire after ~180
+days (D1 delete). Runs in the cron coordinator after price capture; manual via
+`POST /prune`. Verified in production: first run pruned 2 stale editions
+(41 KV deletes); re-run is a no-op.
+
+### 19.F Coverage expansion (priority 1): 8 → 19 stores
+All of D4D's Riyadh grocery directory was probed live; every store below has
+≥1 current flyer AND structured offers. Added (engine id → D4D key):
+farm→`farm-101` (official-site fallback), almadina→`al-madina-hypermarket-212`,
+ramez→`aswaq-ramez-88`, cityflower→`city-flower-556`, marksave→`mark-save-3179`,
+amarket→`a-market-3351`, grandhyper→`grand-hyper-3181`,
+makkah→`makkah-hypermarket-796`, prime→`prime-supermarket-471`,
+alwafa→`hyper-al-wafa-3041`, aljazera→`aljazera-shopping-center-210`.
+Not added (still available as one-line configs): sanam, supermarket-stor,
+family-corner, family-discount, elite-10, danah, nasim, ala-kaifak — micro
+marts; adding them must re-check the §19.C KV write budget. **Farm** rides
+D4D (68-page flyer, truncated to 36); its official-PDF `PdfIndexCollector`
+upgrade stays deferred. **Othaim** brochure stays the official PDF; only its
+offers come from D4D. **Manuel** vanished from D4D's Riyadh directory —
+honest-failure state persists (TODO §9.8).
+
+### 19.G Frontend (this repo)
+```
+src/brochure.js     EDIT ENGINE_STORES 8→19 (labels/colors); searchOffers(q)
+                         (session-cached, never throws); brochureForOffer(o)
+                         (held edition ↔ offer, for in-app click-through)
+src/flyerOffers.js  NEW  the "In this week's flyers" panel: top 8 offer cards
+                         (flyer crop image, name dir=auto with name→nameAr→
+                         category fallback, price + was-price strike, store,
+                         "until <date>"), extraction disclaimer, click → in-app
+                         viewer when the edition is held, else the flyer page
+src/app.js          EDIT offers slot between summary and store sections; fills
+                         independently of the live searches (token-guarded)
+styles.css          EDIT .flyer-offers / .fo-* (design-system tokens, dark-mode
+                         safe, horizontal scroll row)
+```
+**Honesty rule kept:** flyer offers NEVER take over the summary's "Lowest
+price" headline — they are a separate, clearly-labelled "physical stores"
+group with the extraction disclaimer. The Brochures page picks the 11 new
+stores up automatically from ENGINE_STORES.
+
+### 19.H Production verification (all ✅, 2026-07-02)
+- **Local:** `node dev.mjs offerstest` (offline: gates, bilingual name
+  derivation, edition linking, idempotence, search, disclaimer; retention:
+  bytes pruned / metadata kept / current untouched / no-op re-run) and full
+  `node dev.mjs selftest` (M1 PDF sha256 `3ec0bce0…` intact, M2 lulu converges
+  to 6 flyers with the 40-page main as plain `2026-W27`, fallback, Price
+  History, live offers lulu: 1,309 fetched / 1,293 stored / 1,271 linked) —
+  plus `selftest farm` for a new store (flyer truncation + 937 offers).
+- **Migration applied** to live D1 (additive only); deployed `4bb6dbbf`;
+  `INGEST_SECRET` rotated (again — still uncommitted, rotate with
+  `npx wrangler secret put INGEST_SECRET`).
+- **All 19 stores ingested in production, zero failures** (manuel's honest
+  `d4d: no brochure` expected). Convergence passes ran for multi-flyer stores.
+  End state: health `19 providers`, **49 current brochures across 19 stores**,
+  **offers `{ total: 15,823+, current: 15,823+, stores: 18 }`**.
+- **Reads verified:** `/offers?q=milk` (cheapest 2.75 SAR @ Othaim, was 4.25,
+  with image+flyer link), Arabic `/offers?q=حليب` matches, store filter works,
+  new-store assets stream (farm `page00.webp` 200 KB), `POST /prune` pruned 2
+  stale editions.
+- **No regression:** connector 7 providers + panda milk 30 live results;
+  `/prices?product=milk` intact; weekly capture re-anchored to `2026-W27`
+  (8 points recorded); Othaim PDF byte-exact (`3ec0bce0…3528f607`).
+- **Frontend (preview vs prod engine):** "milk" search → summary unchanged
+  (High confidence, 1.25 SAR headline) + **flyer panel: 24 offers, 8 cards**
+  with images/strike-through/store/validity; card click opened the **in-app
+  viewer** on A Market's held brochure (`…/amarket/central/2026-W27/page00.webp`,
+  counter 1/27); Brochures page renders **all 19 stores** with correct flyer
+  counts; **no console errors**.
+
+### 19.I Notes & caveats
+- **Offer prices are the aggregator's AI extraction** — same data D4D shows its
+  own users, but not gospel. The disclaimer + flyer deep-link + product crop
+  keep it honest. Never promote a flyer offer into the summary's
+  equivalence-based "Lowest price" claim without a human-verifiable size/brand
+  parse.
+- **`maxPages` must never exceed `maxTotalPages`** (aggregator collector): a
+  flyer longer than the per-run budget would never fit any run and starve
+  forever. Oversize flyers (Farm 68pp, family-discount 226pp) truncate to 36.
+- **CSRF flow fragility:** if D4D changes the `_csrf-frontend` input or the
+  endpoint, offers ingest fails cleanly per store (brochures unaffected).
+  The next session's fix lives entirely in `src/offers/d4dOffers.js`.
+- **Nesto/alwafa hit the 1,500-offers cap** (`maxOffers`) — deliberate bound;
+  raise it only with the subrequest math (each +500 = +1 POST).
+- **Manuel** (§9.8) remains the one dead store; everything else was current at
+  ingest time.
 
 ---
 
