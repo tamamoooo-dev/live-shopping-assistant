@@ -4,8 +4,18 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-02 · **Phase just completed:** **Brochure Source
-> Migration — DEPLOYED & VERIFIED IN PRODUCTION (see §15).** OffersInMe is
+> **Last updated:** 2026-07-02 · **Phase just completed:** **Frontend Redesign
+> (Unified Frontend, full pass) — DEPLOYED & VERIFIED IN PRODUCTION (see §16).**
+> The frontend is now a two-experience app — **Live Search** (`#/search`) and
+> **Brochures** (`#/brochures`) — under one hash-routed shell with desktop top
+> nav + mobile bottom tab bar, a rewritten design system (dark mode, skeletons,
+> reduced-motion), a price-intelligence panel (lowest recorded + latest per
+> store), a dedicated Brochures page (every engine store, every active flyer,
+> current/expired clearly distinguished), and an upgraded in-app viewer (swipe,
+> preload, focus trap, PDF branch for Othaim). **Frontend-only:** the Core,
+> providers, result contract, connector, and Brochure Engine are untouched; no
+> API changed; Alerts NOT built (still next). **Before this**, the prior phase
+> was the **Brochure Source Migration — deployed & verified (§15).** OffersInMe is
 > **removed entirely** as a brochure source and
 > replaced by **D4D Online** as the primary aggregator, with a new
 > **official-offers-page fallback** when D4D has no current flyer (never a second
@@ -71,15 +81,14 @@
    tracked product and be notified when its price drops (personal, single-user
    notifications — not a subscription/marketing system). Builds directly on §13's
    price points.
-5. **Unified Frontend** — ✅ **first pass done (§14).** The existing search page
-   now surfaces all three built pillars: live search results (Pillar 1), the
-   historical lowest price for tracked products (Pillar 3, `/lowest`), and a
-   per-store "Weekly flyer" opening an **in-app brochure viewer** (Pillar 2,
-   `/brochures` + engine-served page images, §14.F). Integration only — the
-   UI was reused, not redesigned; no new backend. Alerts, once built, slot into
-   this same page. **Note on ordering:** this was done *before* Alerts by explicit
-   user direction (integrate-and-evaluate first); Alerts (priority 4) is still the
-   next build.
+5. **Unified Frontend** — ✅ **done (redesigned, §16;** first integration pass
+   was §14). The frontend is now a two-experience app: **Live Search** and a
+   dedicated **Brochures** page, with Price History woven into search as a
+   price-intelligence panel and the UI pre-shaped for Alerts (a disabled
+   target-price affordance marks where the control will live). Frontend-only —
+   no backend/API change. **Note on ordering:** both the §14 integration and the
+   §16 redesign were done *before* Alerts by explicit user direction; Alerts
+   (priority 4) is still the next build.
 
 **Explicitly deferred (do NOT build until the above are done and only if still
 warranted):**
@@ -164,8 +173,8 @@ Key architectural facts:
 
 | Role | GitHub | Local path | HEAD at handoff |
 |---|---|---|---|
-| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | `cbf6389` Show all toggle |
-| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `d227889` Brochure Engine M2 (AggregatorCollector) |
+| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | `c97945e` Frontend redesign (§16) + a docs commit for this handoff |
+| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `286c7a4` Brochure Source Migration (D4D) |
 
 > Note: the connector's **local folder** is `serverless-connector` but its GitHub
 > **repo name** is `shopping-connector`. Both `origin` remotes are under the
@@ -226,29 +235,33 @@ wired into the UI (dropdown + checkbox chips).
 
 ## 6. Current UI / features
 
-- **Branding:** "Souq — Live shopping search". Single-page app: `index.html` +
-  `styles.css` + ES modules in `src/`.
-- **Two search modes** (same Core, providers, and result contract underneath):
-  - **All stores** (default) — searches every checked store in **parallel**,
-    results **grouped by store** with a colored dot + count badge per section.
-    Store selection via checkbox chips (+ "All").
-  - **Single store** — one store via dropdown, flat results grid.
+> **Redesigned 2026-07-02 — the authoritative description is §16.** Summary:
+
+- **Branding:** "Souq — personal shopping assistant". Single-page app:
+  `index.html` + `styles.css` + ES modules in `src/`. No build step.
+- **Two primary experiences under one hash-routed shell** (`#/search`,
+  `#/brochures`): desktop top nav, mobile bottom tab bar.
+- **One search model** (same Core, providers, and result contract underneath):
+  the store chips are the single scope control — every selected store is
+  searched in **parallel**, results **grouped by store** with a colored dot +
+  count badge per section (one store selected behaves the same, just one
+  section). The old All/Single mode toggle is gone. Selection persists in
+  localStorage. Recent searches + tracked-product hints on the home state.
 - **Smart Ranking:** client-side re-ranking of each store's results by relevance
   to the query; the top `DEFAULT_LIMIT = 4` are shown up front.
   - Tiering per field: exact (100) > prefix (80) > whole-word (70) > partial (60)
     > multi-token all-present (45) / some-present (20+hits). Name match dominates;
     brand match counts ×0.7. Stable sort (ties keep store order).
   - Implemented entirely in `src/app.js` (`tierScore` / `relevance` / `rankItems`,
-    wired into `runSingle` and `runMulti`). Result objects are untouched — only
+    wired into `runSearch`). Result objects are untouched — only
     order and count shown.
 - **"Show all" expansion:** each store keeps its **full ranked list** (all
   already-fetched results, typically up to 20–60) and shows a **"Show all N" /
   "Show fewer"** toggle below its top 4. Expanding renders the rest from memory —
-  **no new search / network call**. Each store section (and the single-store view)
-  expands independently. Implemented as `resultsBlock(items, limit)` in
-  `src/app.js`; button style `.show-all` in `styles.css`. Store count badges show
-  the **true total found** (e.g. "30"); single-store status shows the full result
-  count.
+  **no new search / network call**. Each store section expands independently.
+  Implemented as `resultsBlock(items, limit)` in `src/app.js`; button style
+  `.show-all` in `styles.css`. Store count badges show the **true total found**
+  (e.g. "30").
 - **Arabic + English:** input language auto-detected; Arabic input searches the
   Arabic catalogue and links to Arabic product pages. Product names render RTL.
 - **Adaptive search:** the Core tries a provider's strategies in order, remembers
@@ -256,16 +269,17 @@ wired into the UI (dropdown + checkbox chips).
   another if it stops working.
 - **Mobile-first:** 16px inputs (avoids iOS Safari zoom), safe-area insets,
   spinner/loading states, per-store loading and failure notes. No login/settings.
-- **Brochure + Price History integration (§14):** results now carry two read-only
-  Brochure-Engine capabilities. A **"Lowest recorded" banner** (price + store +
-  date) appears above results when the query is a tracked product (milk/eggs,
-  from `/lowest`). Each store section shows a **"📖 Weekly flyer"** button
-  (from `/brochures`) that opens that store's current brochure in an **in-app
-  viewer** (pages served through the engine's `/asset`; prev/next, counter, zoom,
-  store, date) — the user never leaves the app. Covers Panda, Tamimi, Danube, Lulu
-  (Amazon/Noon have no brochure). All Brochure-Engine knowledge is
-  isolated in `src/brochure.js`; both features are best-effort (engine down →
-  nothing shown) and never block or alter the live search.
+- **Brochure + Price History integration (§14, redesigned in §16):** search
+  results carry read-only Brochure-Engine capabilities. A **price-intelligence
+  panel** (lowest recorded + latest capture per store with delta vs the low)
+  appears above results when the query is a tracked product (milk/eggs, from
+  `/prices`). Each store section shows a **flyer chip with the validity date**
+  (stale-marked when expired) that opens the brochure in the **in-app viewer**
+  (`src/viewer.js`; pages served through the engine's `/asset`). Covers Panda,
+  Tamimi, Danube, Lulu (Amazon/Noon have no brochure). The dedicated
+  **Brochures page** (`src/brochures.js`, §16) shows all 8 engine stores. All
+  Brochure-Engine knowledge is isolated in `src/brochure.js`; every feature is
+  best-effort (engine down → nothing shown) and never blocks the live search.
 
 ---
 
@@ -281,8 +295,9 @@ wired into the UI (dropdown + checkbox chips).
    Providers list their most reliable strategy first.
 4. **Trunk-based development.** Work commits directly to `main`; pushing `main`
    deploys. No feature-branch/PR flow is in use for this project.
-5. **Commit trailer:** end commit messages with
-   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+5. **Commit trailer:** end commit messages with a `Co-Authored-By:` line naming
+   the current Claude model (currently
+   `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`).
 6. **Docs are partially stale.** `README.md` and `CHANGELOG.md` still describe the
    original single-store "Panda Live Search v1.0.0". The app has since been
    renamed **Souq**, grown to **6 stores**, routed everything through the
@@ -347,23 +362,18 @@ wired into the UI (dropdown + checkbox chips).
    design not yet written — this is the milestone to start. Alerts now have a
    natural home in the UI (the §14 price banner is where a target/notification
    control would live).
-2. **Usability gaps found integrating the Unified Interface (§14.D) — address
-   opportunistically.** Discovered through real use of the integrated page:
-   (a) the "Lowest recorded" banner only appears for the **2 tracked products**
-   (milk/eggs) and there is **no cue** telling the user which queries have
-   history — a user searching anything else silently gets nothing. Growing the
-   watchlist (`products.js`) and/or hinting tracked terms would help.
-   (b) The in-app viewer (§14.F) opens the **whole store brochure**, not the
-   searched product within it (per-product location needs OCR — out of scope, §0).
-   (c) The flyer **button** in the results list shows **no date**, so a stale flyer
-   (e.g. Danube `2025-W37`, Hyper Panda `2026-W20`) looks as current as a fresh one
-   until you open it (the viewer header *does* show the date). Surfacing `validTo`
-   on the button, or a "may be outdated" hint, would help (ties into the §12.G
-   freshness monitor).
-   (d) The banner shows the **lowest-ever** price but not the **current** price
-   next to it, so the user can't see at a glance whether today is a good deal —
-   a "current vs lowest" comparison is the obvious next enhancement (and is
-   Alerts-adjacent).
+2. **Usability gaps found integrating the Unified Interface (§14.D) — mostly
+   closed by the §16 redesign.** Status:
+   (a) **partially addressed** — the home state now advertises which products
+   have history ("Price history available" chips), but the watchlist is still
+   only milk/eggs; growing `products.js` remains the real fix (the UI picks new
+   products up automatically via `trackedProducts()`).
+   (b) **still open** — the viewer opens the whole brochure, not the searched
+   product within it (per-product location needs OCR — out of scope, §0).
+   (c) **fixed (§16)** — flyer chips now show the validity date and a visible
+   stale marker when the newest held flyer has expired.
+   (d) **fixed (§16)** — the price-intelligence panel shows the latest captured
+   price per store next to the lowest ever, with the delta.
 3. **Amazon durability.** Configure PA-API secrets on the Worker (Amazon Associate
    account with PA-API access) so `pa-api` becomes the active path and results stop
    depending on the fragile HTML scraper — or formally accept Amazon as best-effort.
@@ -1282,6 +1292,134 @@ connector `lulu` "milk" 20 results; Price History `/lowest?product=milk` intact
   hard dependency for the "no current flyer" case.
 - **Freshness monitor (§12.G) is still the natural follow-up** — now cheaper to
   reason about since D4D exposes `expires` per flyer.
+
+---
+
+## 16. Frontend Redesign — the two-experience app (Unified Frontend, full pass)
+
+> **Status:** **DEPLOYED & VERIFIED IN PRODUCTION** (2026-07-02) at
+> https://tamamoooo-dev.github.io/live-shopping-assistant/ (commit `c97945e`).
+> A complete frontend/UI/UX redesign from first principles, replacing the §14
+> "integration only" pass. **Frontend-only by explicit rule:** the backend was
+> not touched — no API changed, no new backend service, Search Engine / Brochure
+> Engine / Price History logic unchanged, Alerts NOT implemented. The connector
+> repo has no changes from this milestone.
+
+### 16.A Information architecture (the design)
+Souq is a **personal shopping assistant**, not an e-commerce site — the design
+treats it as a daily-use app with **two primary experiences** under one shell:
+
+1. **Live Search (`#/search`, default)** — the daily loop: search, compare, done.
+2. **Brochures (`#/brochures`)** — the weekly loop: browse what every store's
+   flyer says this week.
+
+Navigation is a **hash router** (works on GitHub Pages with zero server config,
+deep-linkable, back-button friendly): a **top segmented nav** on desktop and an
+app-like **bottom tab bar** on mobile (safe-area aware). Route state drives
+`aria-current`, per-page titles, and page visibility; the Brochures page renders
+lazily on first visit.
+
+**Key design decisions (and why):**
+- **The All/Single mode toggle is gone.** One mental model: the **store chips
+  are the single scope control**. Selecting one store or six is the same flow —
+  results are always store-grouped sections (one section when one store). This
+  removed a whole control (the dropdown) without losing any capability.
+  Selection persists in localStorage (a daily tool should remember its scope).
+- **Daily-use accelerators on the home state:** recent searches (localStorage,
+  last 8) and **"Price history available" chips** for the tracked watchlist —
+  the discoverability cue §14.D.a said was missing. Both are one-tap searches.
+- **Price History is woven in, not bolted on.** A tracked query renders a
+  **price-intelligence panel**: the lowest recorded price (price + store + date
+  + product link) *plus the latest captured price per store, cheapest first,
+  each with its delta vs the low* (`/prices`). "Is today a good deal?" is now
+  answerable at a glance (§14.D.d). A **disabled bell affordance ("Alerts
+  soon")** sits in the panel header — the exact slot where the Personal Alerts
+  target-price control will live, so Alerts lands without another redesign.
+- **Flyer staleness is visible (§14.D.c).** The per-store flyer chip carries the
+  validity date ("until Jul 7") and switches to a warn-styled "expired …" state
+  when the newest held flyer is out of window.
+- **Brochures got their own page** (not attached to search): every engine store
+  (all 8 — Panda, Lulu, Tamimi, Danube, **plus Othaim/Carrefour/Nesto/Manuel,
+  which search never showed**) is its own section, and **every currently ACTIVE
+  brochure** the engine holds for that store is displayed under it (a store may
+  run several at once; active = validity window contains today, sourced from
+  `/brochures/history`, so a still-valid prior edition shows alongside a new
+  one). Cards show a real **cover** (first page image, engine-served), title,
+  validity dates, page count, and a status badge (**Current / Ends today /
+  Ends tomorrow / Expired**). A store with no active flyer says **"No current
+  flyer"** and shows its newest expired brochure greyed + badged — unavailable
+  is a legible state, not an empty hole. External `link` brochures (official
+  offers pages) render as marked `↗` cards opening a new tab. Search-capable
+  stores get a **"Search this store"** shortcut that jumps to `#/search`
+  pre-scoped to that store.
+- **The viewer stays and improves.** Extracted to `src/viewer.js` (shared by
+  both pages): prev/next + arrow keys, **touch swipe**, page counter, zoom with
+  pan, **next/prev page preloading**, store + title + validity in the header,
+  Esc/backdrop/✕ close, scroll lock, **focus trap + focus restore**. New **PDF
+  branch**: Othaim's official PDF opens in-app in an embedded frame streaming
+  the **engine-stored** `original.pdf`, with an "Open PDF ↗" fallback.
+- **Design system rewrite** (`styles.css`): refined violet identity, **dark
+  mode** via `prefers-color-scheme` (with matching `theme-color` metas),
+  skeleton loaders for search + brochure cards, subtle fade-up motion with a
+  global `prefers-reduced-motion` kill switch, `focus-visible` rings, skip
+  link, tabular numerals for prices, product `dir="auto"`/RTL handling.
+
+### 16.B Files (frontend repo only)
+```
+index.html         REWRITTEN  app shell: topbar nav, two <section> pages, bottom tab bar, skip link
+styles.css         REWRITTEN  the design system (light+dark, skeletons, viewer, brochures page)
+src/app.js         REWRITTEN  router + Live Search page (Core usage, ranking, Show-all, cards kept)
+src/brochures.js   NEW        the Brochures page (per-store sections, active/expired cards, covers)
+src/viewer.js      NEW        the shared in-app viewer (extracted from app.js; + swipe/preload/trap/PDF)
+src/brochure.js    EXTENDED   the one Brochure-Engine client: + /brochures/history reader, active/
+                              validity helpers, cover/pages cache, /prices reader, ENGINE_STORES map
+src/core.js, src/providers/*  UNTOUCHED (Core, providers, 10-key result contract — project rule 1/2)
+```
+Cross-page coupling is one `souq:search-store` CustomEvent (Brochures → Search
+scope), so `brochures.js` never imports `app.js`. All engine knowledge stays in
+`brochure.js` (project rule 2 discipline held). Everything remains best-effort:
+engine down → search still works, Brochures page shows honest empty states.
+
+### 16.C Verification (local against production backends, then production)
+- **Local (preview + real prod connector/engine):** all-stores "milk" → 120
+  results across 6 stores; price panel (7.00 SAR @ Lulu lowest; Panda +8.99,
+  Danube +16.50, Tamimi +54.90 latest); dated flyer chips on the 4 brochure
+  stores, none on Amazon/Noon; Amazon best-effort failure message (expected,
+  §5); Arabic "حليب" single-store Lulu → 20 results, RTL names, panel present.
+  Viewer: Lulu 1/40 → Next→3/40 (engine-served `page02.webp`), zoom 150%, Esc
+  closes + scroll restores. Brochures page: 8 store sections; 7 with a current
+  flyer (correct badges/dates/covers/page counts); **Manuel correctly "No
+  current flyer" + greyed Expired card (Sep 2025)**; Othaim PDF card opens the
+  in-app PDF frame streaming `/asset/...original.pdf`; "Search this store"
+  jumps to search scoped to Lulu with input focused. Mobile 375px: bottom tab
+  bar on, top nav hidden; dark mode: full dark palette. Desktop 1280px: top
+  nav on, tab bar off. **No console errors** (only the known Amazon warn).
+- **Production:** deployed via push (`c97945e`); **every served file
+  byte-matches the committed source** (curl + diff on index.html, styles.css,
+  and all 5 src modules). Services healthy: connector `GET /` ok (6 providers)
+  + live `panda` "milk" → 30 results (strategy `products-v3`); engine `GET /`
+  ok (8 providers, 8 held, tracked eggs/milk); `/prices?product=milk` intact;
+  `/asset` streams (lulu `page00.webp`, 198 KB). **No Worker deploy needed**
+  (frontend-only milestone — connector repo untouched and clean).
+
+### 16.D UX findings from this pass (candidate follow-ups, not started)
+- **Tamimi's current pick is a 1-page banner** (D4D carries several concurrent
+  promos; the engine's `pickCurrent` chose a single-image one). §15.G's "prefer
+  the largest page-count flyer" refinement would make its brochure card feel
+  fuller. Engine-side, one function — do it opportunistically.
+- **iOS Safari renders embedded PDFs first-page-only**; the viewer's
+  "Open PDF ↗" link is the fallback. A future PDF→page-image path (deferred,
+  §0) would make Othaim first-class in the flipper.
+- **Brochures page cost:** first visit makes 8 `/brochures/history` + up to 8
+  `meta.json` reads (then session-cached) — gentle, but if the engine ever grows
+  a "current + pages in one call" read, the page gets cheaper for free. Do NOT
+  build that now (read APIs are frozen by rule).
+- **The Alerts slot is ready:** the disabled bell in the price panel is where
+  the target-price control goes; the panel already has per-store latest prices
+  to anchor the "notify me below X" UX. Alerts (§9.1) remains the next milestone.
+- **Watchlist growth is now purely engine config:** add products to the engine's
+  `products.js` and the frontend's `PRODUCTS` mirror in `src/brochure.js` — the
+  home-state chips and the price panel pick them up automatically.
 
 ---
 
