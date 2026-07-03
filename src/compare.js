@@ -38,6 +38,7 @@ import {
   tokens,
   productFamily,
   queryFamily,
+  offerFamily,
   normalizeText,
 } from './match.js';
 
@@ -114,8 +115,9 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     up: unitPrice(item),
     rel,
     // OCR names span both languages — classify over both so the family gate
-    // sees whatever script the family keyword landed in.
-    family: productFamily(`${offer.name || ''} ${offer.nameAr || ''}`),
+    // sees whatever script the family keyword landed in; and when the name
+    // yields nothing, fall back to the aggregator's own category (offerFamily).
+    family: offerFamily(offer),
     offer,
   };
 }

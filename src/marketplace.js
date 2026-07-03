@@ -170,9 +170,15 @@ function priceRow(price, oldPrice, currency, discountLabel, up) {
 
 function onlineCard(store, item) {
   const a = el('a', 'card');
-  a.href = item.link;
-  a.target = '_blank';
-  a.rel = 'noopener';
+  // Only navigate when the result carries a real absolute product URL — never
+  // send the user to a broken/relative href (a card should always lead exactly
+  // where it says, or stay put).
+  const href = typeof item.link === 'string' && /^https?:\/\//.test(item.link) ? item.link : null;
+  if (href) {
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener';
+  }
 
   // Watch bell: one tap sets a target-price watch on THIS product (the engine
   // re-finds it daily by its stable result id — Keepa-style monitoring).
@@ -237,7 +243,9 @@ function flyerCard(listing) {
     // PDFs); otherwise the offer's flyer page.
     const b = await brochureForOffer(offer).catch(() => null);
     if (b && (b.sourceType === 'images' || b.sourceType === 'pdf')) {
-      openBrochureViewer(b, storeLabel(offer.store));
+      // Open the in-app viewer ON this offer's own flyer page (pageRef is the
+      // aggregator page id); the viewer falls back to page 1 if it's unknown.
+      openBrochureViewer(b, storeLabel(offer.store), { targetPageId: offer.pageRef });
     } else if (offer.sourceUrl) {
       window.open(offer.sourceUrl, '_blank', 'noopener,noreferrer');
     }

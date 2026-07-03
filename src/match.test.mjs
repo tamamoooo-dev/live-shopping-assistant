@@ -8,7 +8,7 @@
 
 import {
   parseSize, sizeLabel, unitPrice, isRelevant, relevance, groupEquivalents, normalizeText,
-  productFamily, queryFamily, tokenCoverage,
+  productFamily, queryFamily, tokenCoverage, categoryFamily, offerFamily,
 } from './match.js';
 
 let pass = 0, fail = 0;
@@ -81,6 +81,14 @@ ok('ingredient marker بال does NOT classify: بالبيض stays non-eggs', pr
 ok('no family keyword -> null', productFamily('كرسي مكتب دوار') === null);
 ok('query family: حليب -> milk', queryFamily('حليب نادك') === 'milk');
 ok('query family: brand-only query -> null', queryFamily('كيري مربعات') === null);
+
+// --- category-as-family (retailer-taxonomy signal; mirrors the engine) ---
+ok('category eggs -> eggs family', categoryFamily('eggs') === 'eggs');
+ok('category chocolates-candies -> chocolate', categoryFamily('chocolates-candies') === 'chocolate');
+ok('ambiguous category milk-laban unmapped', categoryFamily('milk-laban') === null);
+ok('offerFamily: name wins over category', offerFamily({ name: 'Milk Chocolate Bar', category: 'chocolates-candies' }) === 'chocolate');
+ok('offerFamily: category recovers a debris name', offerFamily({ name: 'casc 18 200ml', category: 'eggs' }) === 'eggs');
+ok('offerFamily: ambiguous category not used', offerFamily({ name: 'weekly promo', category: 'tea-coffee' }) === null);
 
 // --- token coverage ---
 ok('full coverage on a real match', tokenCoverage({ name: 'جبنة كيري مربعات 8 قطع' }, 'كيري مربعات') === 1);

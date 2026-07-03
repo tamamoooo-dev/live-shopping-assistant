@@ -231,12 +231,14 @@ export function loadBrochurePages(b) {
         .then((r) => (r.ok ? r.json() : null))
         .then((meta) => {
           if (!meta) return null;
-          const pages = (meta.pages || [])
-            .slice()
-            .sort((a, z) => a.index - z.index)
-            .map((p) => assetUrl(p.imageUrl));
+          const ordered = (meta.pages || []).slice().sort((a, z) => a.index - z.index);
+          const pages = ordered.map((p) => assetUrl(p.imageUrl));
           if (!pages.length) return null;
-          return { pages, title: meta.title, validFrom: meta.validFrom, validTo: meta.validTo };
+          // Aligned with pages[]: the aggregator page id an offer deep-links to
+          // (null when the edition predates page-id capture), so the viewer can
+          // open on the offer's own page. See openBrochureViewer.
+          const pageIds = ordered.map((p) => (p.pageId != null ? String(p.pageId) : null));
+          return { pages, pageIds, title: meta.title, validFrom: meta.validFrom, validTo: meta.validTo };
         })
         .catch(() => null),
     );

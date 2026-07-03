@@ -146,6 +146,14 @@ const label = (id) => id;
     'flyerListing still rejects offers relevant in NEITHER name',
     flyerListing({ store: 'farm', name: 'office chair', nameAr: 'كرسي مكتب', price: 99 }, 'juice', label) === null,
   );
+
+  // Category-as-family: a debris-named eggs offer whose name yields no family
+  // gets its family from the aggregator category (offerFamily fallback), so the
+  // family gate can still reason about it. Name still wins when present.
+  const debris = flyerListing({ store: 'makkah', name: 'fresh eggs 30', category: 'eggs', price: 9 }, 'eggs', label);
+  ok('flyerListing sets family from category when name is thin', debris && debris.family === 'eggs');
+  const namedChoc = flyerListing({ store: 'makkah', name: 'milk chocolate bar 90g', category: 'chocolates-candies', price: 4 }, 'chocolate', label);
+  ok('flyerListing name family wins over category', namedChoc && namedChoc.family === 'chocolate');
 }
 
 // --- PRODUCT FAMILIES: different families never compete --------------------------

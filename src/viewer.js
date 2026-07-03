@@ -28,11 +28,16 @@ export function brochureDateLabel(b) {
   return from || to || b.edition || '';
 }
 
-export function openBrochureViewer(b, storeName) {
+// opts.targetPageId — the aggregator page id a flyer offer deep-links to. When
+// the loaded brochure has a page carrying that id, the viewer OPENS on it (so a
+// tapped flyer offer lands on its own page, not page 1). Falls back to page 1
+// when the id is unknown (e.g. an edition ingested before page-id capture).
+export function openBrochureViewer(b, storeName, opts = {}) {
   if (viewerOpen) return;
   viewerOpen = true;
   const restoreFocus = document.activeElement;
   const isPdf = isPdfBrochure(b);
+  const targetPageId = opts && opts.targetPageId != null ? String(opts.targetPageId) : null;
 
   const overlay = document.createElement('div');
   overlay.className = 'bv-overlay';
@@ -232,6 +237,11 @@ export function openBrochureViewer(b, storeName) {
       return;
     }
     pages = data.pages;
+    // Open on the offer's own page when we know which one carries it.
+    if (targetPageId && Array.isArray(data.pageIds)) {
+      const found = data.pageIds.indexOf(targetPageId);
+      if (found >= 0) idx = found;
+    }
     stage.replaceChildren(img);
     render();
   });

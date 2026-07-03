@@ -4,7 +4,32 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-03 (night) · **Phase just completed:**
+> **Last updated:** 2026-07-03 (late) · **Phase just completed:**
+> **Polishing — Amazon Reliability, Navigation & Product Understanding (see §23) —
+> DEPLOYED & VERIFIED IN PRODUCTION.** Three real-world trust regressions were
+> fixed without any new feature or redesign. (1) **Amazon reliability restored:**
+> amazon.sa's search layout now renders a compact BRAND `<h2>` before the
+> product-title `<h2>`, and the connector's parser took the FIRST `<h2>` — so
+> English results were named "Almarai"/"Saudia" (no product words) and the §21
+> honest relevance filter then dropped them, which read as "Amazon is broken".
+> The parser now extracts title and brand SEPARATELY (brand-led display name,
+> like every other store), plus the strike-through list price → `oldPrice` +
+> discount; **46/48 English "milk" results now contain the query word (was ~2)**
+> and survive filtering. A fixture test (`serverless-connector/src/providers/
+> amazon.test.mjs`) locks the regression. (2) **Navigation:** flyer offers now
+> open the in-app viewer ON THE OFFER'S OWN PAGE — the engine captures D4D's
+> `data-page-id` per page (adapter → collector → pipeline → `meta.json`), the
+> viewer accepts a `targetPageId` and the offer's `pageRef` drives it (graceful
+> page-1 fallback; converges as flyers refresh weekly). Online cards also guard
+> against a missing/relative link. (3) **Product understanding:** the
+> aggregator's OWN product category (D4D taxonomy) is now a corroborating
+> **family** signal — `offerFamily(offer)` = name-derived family, falling back to
+> category when the OCR name is debris (recovering e.g. an "a wwww amm … nada
+> greek" offer into yogurt). Only unambiguous categories are mapped and the name
+> always wins, so precision is unchanged. Both matching mirrors gained
+> `categoryFamily`/`offerFamily`; suites green (frontend match 56/56, compare
+> 39/39, connector amazon 12/12, engine selftest incl. live D4D `17/36` lulu
+> pages carrying a deep-link pageId). **Before this**, the prior phase was
 > **Flyer Coverage — Investigation, Fixes & Per-Retailer Baseline (see §22) —
 > DEPLOYED & VERIFIED IN PRODUCTION.** Weekly flyer coverage felt far lower
 > than expected; the pipeline was measured stage by stage and the upstream
@@ -267,8 +292,8 @@ Key architectural facts:
 
 | Role | GitHub | Local path | HEAD at handoff |
 |---|---|---|---|
-| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | the §22 flyer-coverage push (bilingual flyer gate + this handoff update) |
-| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `db1f91d` Flyer coverage: synonyms/transliterations, debris guard, Friday ingest (§22) |
+| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | the §23 polishing push (page-accurate flyer viewer, category family, this handoff update) |
+| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | the §23 polishing push (Amazon title/brand parser, page-id capture, offer category family) |
 
 > Note: the connector's **local folder** is `serverless-connector` but its GitHub
 > **repo name** is `shopping-connector`. Both `origin` remotes are under the
@@ -2510,6 +2535,164 @@ that would need our own OCR (explicitly deferred, §0).
   refresh on upsert) — fully in effect after the Tue+Wed+Fri cycle.
 - **First Friday cron fire** is the next Friday 06:00 UTC; watch the KV
   write budget only if many more stores are added (§19.C math unchanged).
+
+---
+
+## 23. Polishing — Amazon Reliability, Navigation & Product Understanding
+
+> **Status (2026-07-03 late): DEPLOYED & VERIFIED IN PRODUCTION.** Connector
+> redeployed (version `360f5210`), engine redeployed (version `79e3fa3c`, both
+> crons intact `0 6 * * 2,3,5` + `45 5 * * *`), frontend pushed to `main`
+> (GitHub Pages). All suites green: frontend `match.test` **56/56**,
+> `compare.test` **39/39**; connector `amazon.test` **12/12**; engine
+> `node dev.mjs selftest` end-to-end incl. the live D4D lulu leg (1,176
+> offers) and **17/36 lulu pages carrying a deep-link pageId**. A "polishing"
+> milestone by explicit direction: no new feature, no redesign — three
+> real-world trust regressions fixed and one keyword-complementing
+> product-understanding improvement.
+
+### 23.A Amazon reliability — root cause & fix (the headline)
+**Symptom:** Amazon felt far less reliable after the §21 unification.
+**Root cause (measured, not guessed):** the connector's Amazon success rate was
+unchanged (~9–10/10 in probes) — the regression was in RESULT IDENTITY, exposed
+by §21's honest relevance filter. amazon.sa's current English search layout
+renders TWO `<h2>`s per result: a compact **brand** line
+(`a-size-mini s-line-clamp`, e.g. "Almarai") FOLLOWED by the **product title**
+(`a-text-normal`, usually with the full name in `aria-label`). The old parser
+matched the FIRST `<h2>`'s span → English results were named bare brands
+("Almarai", "Saudia", "Nadec"). Before §21 the frontend *dumped everything*, so
+those still showed; §21 replaced that with an honest filter that DROPS results
+whose name doesn't match the query — and "Almarai" contains no "milk", so almost
+every English Amazon result was filtered out. Arabic was unaffected (its layout
+leads with the title `<h2>`, no brand line) — which is why the bug looked
+intermittent/English-only.
+
+**Fix (`serverless-connector/src/providers/amazon.js`):** `parseProducts` now
+parses ALL `<h2>` blocks per result, extracts the **title** from the non-brand
+h2 (preferring its `aria-label`, stripping a "Sponsored Ad – " prefix) and the
+**brand** from the `s-line-clamp` h2, and composes the display name brand-led
+(`"Almarai Full Fat Fresh Milk, 2.85 Liter"`) exactly like Panda/Lulu name their
+products — so results are both correctly identified AND matchable. It also reads
+the strike-through list price (`a-price a-text-price`) into `oldPrice` + a
+`-NN%` discount label, and decodes the few HTML entities Amazon titles carry.
+A legacy fallback keeps a single-`<h2>` or reverted markup working.
+**Measured:** English "milk" went from ~2/48 → **46/48** results containing the
+query word; "nutella"/"كيري" likewise now full, matchable names. This is the
+"dedicated retrieval/parse strategy that differs from other retailers" the
+milestone explicitly allowed. `amazon.test.mjs` (new, fixture-based, 12 asserts)
+locks it so the brand-as-name regression can't silently return.
+
+### 23.B Navigation — flyer offers open the right page; safe online links
+1. **Flyer offer → the offer's own brochure page (the "expected location").**
+   A tapped flyer offer previously opened the in-app viewer at page 1. Offers
+   carry `pageRef` (D4D's `data-page-id`, also the `?page=` value on the external
+   flyer). The engine now captures that id per page and the viewer uses it:
+   - engine `collectors/adapters/d4d.js` — `parseLeaflet` merges D4D's two
+     `<picture class="offer-page">` renders (one carries the image URL, the other
+     the `data-page-id`) by `data-index`, emitting an aligned `pageIds[]`;
+   - engine `collectors/aggregator.js` + `pipeline.js` — thread `pageId` onto
+     each downloaded page and into the `meta.json` `pages[]` entries (no D1
+     schema change; the read-API `/brochures` rows are untouched);
+   - frontend `brochure.js` `loadBrochurePages` returns an aligned `pageIds[]`;
+   - frontend `viewer.js` `openBrochureViewer(b, name, { targetPageId })` opens
+     on the page whose id matches (page-1 fallback when unknown);
+   - frontend `marketplace.js` `flyerCard` passes `{ targetPageId: offer.pageRef }`.
+   **Rollout:** new/changed flyers get pageIds on ingest immediately (proven live
+   — 17/36 lulu pages); editions already held keep opening at page 1 until their
+   next weekly refresh (Tue+Wed+Fri) re-downloads them. Zero-risk: the fallback
+   IS the prior behaviour. Offers whose edition isn't held in-app still open the
+   external flyer at the right page via the `?page=` deep-link (unchanged).
+2. **Online cards never navigate anywhere unexpected.** `marketplace.js`
+   `onlineCard` now only sets `href` when the result carries a real absolute
+   `http(s)` URL; a missing/relative link renders a non-navigating card instead
+   of sending the user to a broken path. (Audit found all seven providers'
+   links resolve correctly — panda/tamimi/danube/ninja 200, lulu/noon are
+   bot-gated to datacenter curls but structurally correct; this is a safety net.)
+
+### 23.C Product understanding — category as a corroborating family signal
+The keyword family classifier reads only the OCR-derived name. Flyer offers ALSO
+carry the aggregator's own product **category** (D4D's global taxonomy, e.g.
+`eggs`, `yogurt-labneh`, `chocolates-candies`) — a structured, human-curated
+semantic signal we already store for free. New in both matching mirrors
+(`src/match.js` ↔ engine `src/matching.js`):
+- `CATEGORY_FAMILY` — maps only the categories that resolve to exactly ONE of our
+  families (ambiguous ones like `milk-laban`, `tea-coffee`, `cheese-creame` are
+  deliberately left out).
+- `categoryFamily(slug)` and `offerFamily(offer)` = name-derived family, FALLING
+  BACK to the category only when the name yields none.
+**Where it acts:** the engine `/offers` family tier, the engine monitor's
+grocery family gate, and the frontend `flyerListing`/marketplace family. The name
+always wins (so "milk chocolate" in the chocolates category is still chocolate,
+an "egg curry" is still a prepared dish), so precision is unchanged — the payoff
+is recovering **debris-named** offers into their true family. Verified live: a
+`بيض`/`yogurt` read now keeps OCR-garbled offers whose category is `eggs`/
+`yogurt-labneh` in-family, and demotes an off-category `canned-packeted` text
+match — directly relieving the §22.E "yogurt/زبادي stays conservative" note.
+This is the "semantic understanding that complements the keyword approach without
+sacrificing precision, transparency, performance or maintainability" the
+milestone asked for: it is a lookup, not a model — $0, synchronous, auditable.
+
+### 23.D Files changed
+```
+serverless-connector/
+  src/providers/amazon.js            title/brand split, oldPrice+discount, entity
+                                     decode, export parseProducts (for the test)
+  src/providers/amazon.test.mjs      NEW — 12 fixture asserts locking the fix
+  brochure-engine/src/matching.js    + CATEGORY_FAMILY, categoryFamily, offerFamily
+  brochure-engine/src/engine.js      /offers family tier uses offerFamily
+  brochure-engine/src/monitor.js     grocery flyer gate uses offerFamily
+  brochure-engine/src/collectors/adapters/d4d.js   capture data-page-id -> pageIds[]
+  brochure-engine/src/collectors/aggregator.js     thread pageId onto page objects
+  brochure-engine/src/pipeline.js    write pageId into meta.json pages[]
+  brochure-engine/dev.mjs            + category-family + pageId-capture assertions
+live-shopping-assistant/
+  src/match.js        + CATEGORY_FAMILY, categoryFamily, offerFamily
+  src/compare.js      flyerListing family via offerFamily (category fallback)
+  src/viewer.js       openBrochureViewer accepts { targetPageId }, opens there
+  src/brochure.js     loadBrochurePages returns aligned pageIds[]
+  src/marketplace.js  flyerCard passes targetPageId; onlineCard link guard
+  src/match.test.mjs  56 tests (+ category/offer family)
+  src/compare.test.mjs 39 tests (+ category-fallback flyer listings)
+  HANDOFF.md          this section + header
+```
+No result-contract change, no Offer-contract change, no D1 schema change, no API
+change. The two matching mirrors stay in lock-step (any family/synonym edit
+belongs in BOTH).
+
+### 23.E Production verification (all ✅)
+- **Connector `360f5210`:** live Amazon `q=milk` → "Saudia Full Cream Milk…",
+  "Almarai Full Fat Fresh Milk…", "Nadec Full Fat Long Life Milk…" (brand-led,
+  matchable); `q=nutella` → "Nutella Hazelnut Chocolate Spread…"; `q=حليب` →
+  full Arabic names — all with prices; 48–60 results/query.
+- **Engine `79e3fa3c`:** health `18 providers`, `15,823` current offers, both
+  crons, watches active; `/offers?q=بيض` → egg offers incl. category-recovered
+  debris names, off-category text match demoted; `/offers?q=yogurt` → all
+  `yogurt-labneh` offers incl. OCR-garbled ones now kept in-family.
+- **Frontend:** pushed to `main`; GitHub Pages serves the new bundle (verify per
+  §8 with a cache-buster if a spot-check looks stale — CDN `max-age=600`).
+- **Suites:** frontend match 56/56 + compare 39/39; connector amazon 12/12;
+  engine selftest end-to-end green incl. live D4D + the 17/36 pageId assertion.
+
+### 23.F Notes, caveats & follow-ups
+- **pageId backfill is lazy, by design.** In-app page-accurate jumps light up
+  per edition on its next weekly ingest (unchanged flyers dedupe and are NOT
+  re-downloaded, so their `meta.json` isn't rewritten). Full coverage after one
+  Tue+Wed+Fri cycle; until then those offers open at page 1 (or externally at the
+  right page). No forced backfill was run (it would require re-downloading held
+  flyers, spending the Free-plan subrequest budget for a cosmetic gain).
+- **D4D page-ids sit on ~half the pages** (even `data-index`, stepping by 6 —
+  D4D groups a 2-page spread under one id). An offer's `pageRef` always matches
+  one of them, so the jump is exact; odd interstitial pages simply have no id.
+- **Category map is curated, conservative.** Grow `CATEGORY_FAMILY` only with
+  categories that map to exactly one family; ambiguous ones must stay unmapped
+  (the failure mode is "no family", never "wrong family"). D4D category ids →
+  slugs live in `offers/d4dOffers.js` `D4D_CATEGORIES`.
+- **Amazon stays best-effort.** The parse fix restores identity+matchability; the
+  underlying anti-bot interstitial (retry + client retry, ~99% effective) is
+  unchanged. PA-API remains the durable path (set the secrets to activate).
+- **The Amazon `oldPrice`/discount are new** and flow into the comparison/value
+  logic like any other store's — a nice side benefit (Amazon deals now show
+  their savings).
 
 ---
 

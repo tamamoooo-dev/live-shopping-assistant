@@ -181,6 +181,52 @@ export function queryFamily(query) {
   return productFamily(query);
 }
 
+// --- category-as-family (a retailer-taxonomy semantic signal) -------------------
+// Flyer offers carry the aggregator's OWN product category (D4D's global
+// taxonomy). That is a structured, human-curated signal we get for free — a
+// semantic COMPLEMENT to the keyword classifier, used only as a FALLBACK when an
+// offer's OCR name yields no family (recovering a debris-named offer into its
+// true family). Only categories that resolve to exactly ONE of our families are
+// mapped (ambiguous ones like "milk-laban", "tea-coffee", "cheese-creame" are
+// left out); a name keyword always wins, so precision is unchanged. Mirrors the
+// engine's matching.js CATEGORY_FAMILY — keep the two in sync.
+const CATEGORY_FAMILY = {
+  eggs: 'eggs',
+  rice: 'rice',
+  water: 'water',
+  'juices-drinks': 'juice',
+  'oil-ghee': 'oil',
+  'sugar-sweetener': 'sugar',
+  'pasta-noodles': 'pasta',
+  'bread-buns': 'bread',
+  biscuits: 'biscuit',
+  'chocolates-candies': 'chocolate',
+  'yogurt-labneh': 'yogurt',
+  'butter-margarine': 'butter',
+  'fresh-chicken-poultry': 'chicken',
+  'frozen-chicken-poultry': 'chicken',
+  'meat-fresh-chilled': 'meat',
+  'fresh-fish': 'fish',
+  'frozen-fish': 'fish',
+  'cereals-bars': 'cereal',
+};
+
+// The family implied by an aggregator category slug, or null (unmapped/ambiguous).
+export function categoryFamily(slug) {
+  if (!slug) return null;
+  return CATEGORY_FAMILY[String(slug).toLowerCase()] || null;
+}
+
+// The family of a flyer OFFER: its name-derived family (most specific), falling
+// back to its aggregator category. Name always wins — "milk chocolate" in the
+// chocolates category stays chocolate; the category only fills a name gap.
+export function offerFamily(offer) {
+  if (!offer) return null;
+  const nameFam = productFamily(`${offer.name || ''} ${offer.nameAr || ''}`);
+  if (nameFam) return nameFam;
+  return categoryFamily(offer.category);
+}
+
 // What fraction of the query's tokens actually appear in the item (name+brand,
 // any tier, synonyms included)? The comparison layer requires (near-)full
 // coverage before an item may compete: "كيري مربعات" matching only "مربعات"
