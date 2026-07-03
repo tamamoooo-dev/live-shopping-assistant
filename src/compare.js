@@ -59,15 +59,26 @@ function coversQuery(item, query) {
   return n === 2 ? cov >= 1 : cov >= (n - 1) / n;
 }
 
-// WHICH query tokens a listing actually matches (as a Set of token indices),
-// over its name AND brand, with the same primitives match.js uses (whole word,
-// long word-start prefix, long substring, bilingual synonyms). This is the
-// basis of the product-identity lock: two listings are the SAME product only
-// when they match the same discriminating query tokens (the brand "herfy", the
-// cut "breast"). Pure — it only reuses match.js's exported helpers.
-function coveredQueryTokens(name, brand, query) {
+// The full text a listing was matched over — the SAME text that admitted it to
+// the pool, so the identity lock never contradicts the relevance gate. Flyer
+// OCR is bilingual and the product word often lands in only one language (the
+// EN display name may be a flavour line while the AR name carries "بيض"), so a
+// flyer is judged over BOTH derived names, exactly as flyerListing's probe does;
+// online listings use their name + brand.
+function listingMatchText(l) {
+  if (l.source === 'flyer' && l.offer) return `${l.offer.name || ''} ${l.offer.nameAr || ''}`;
+  return `${l.name || ''} ${l.brand || ''}`;
+}
+
+// WHICH query tokens a text actually matches (as a Set of token indices), with
+// the same primitives match.js uses (whole word, long word-start prefix, long
+// substring, bilingual synonyms). This is the basis of the product-identity
+// lock: two listings are the SAME product only when they match the same
+// discriminating query tokens (the brand "herfy", the cut "breast"). Pure — it
+// only reuses match.js's exported helpers.
+function coveredQueryTokens(text, query) {
   const qTokens = tokens(query);
-  const f = normalizeText(`${name || ''} ${brand || ''}`);
+  const f = normalizeText(text || '');
   const words = f.split(' ').filter(Boolean);
   const wordSet = new Set(words);
   const covered = new Set();
@@ -267,10 +278,10 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
       if (bOnline !== lOnline) return lOnline ? l : best;
       return l.price < best.price ? l : best;
     }, null);
-    const anchorSet = coveredQueryTokens(anchor.name, anchor.brand, query);
+    const anchorSet = coveredQueryTokens(listingMatchText(anchor), query);
     if (anchorSet.size) {
       const locked = listings.filter((l) => {
-        const s = coveredQueryTokens(l.name, l.brand, query);
+        const s = coveredQueryTokens(listingMatchText(l), query);
         for (const t of anchorSet) if (!s.has(t)) return false; // must cover ≥ the anchor
         return true;
       });

@@ -282,6 +282,19 @@ const label = (id) => id;
   ok('identity: generic query is free to pick the cheapest', c.headline.listing.price === 11);
 }
 
+// A bilingual flyer relevant via its ARABIC name (its EN display name is debris)
+// must NOT be dropped by the identity lock — it is judged over both OCR names,
+// exactly as the relevance gate that admitted it.
+{
+  const tagged = [T('panda', 'White Eggs 30 pcs', 15)];
+  const offers = [
+    { store: 'othaim', name: 'tray 30', nameAr: 'بيض طازج 30 حبة', price: 11, currency: 'SAR', sourceUrl: 'https://agg/e/1' },
+  ];
+  const c = computeComparison('eggs', tagged, offers, null, label);
+  ok('identity: a flyer relevant only via its Arabic name is kept', c.listings.some((l) => l.source === 'flyer'));
+  ok('identity: bilingual flyer does not inflate the excluded count', c.identityExcluded === 0);
+}
+
 // --- PER-VARIANT PRICE HISTORY: each size keeps its own lowest-ever record -----------
 // Task 2: the verdict judges the recommended product against the record for ITS
 // OWN size — a 30-egg tray is never measured against a 6-egg pack's low.
