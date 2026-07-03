@@ -46,6 +46,12 @@ ok('eggs still keeps real eggs', isRelevant({ name: 'White Eggs Tray 30 pcs' }, 
 ok('بيض drops بيضاء (white)', !isRelevant({ name: 'بصل ابيض طازج' }, 'بيض'));
 ok('بيض keeps real eggs', isRelevant({ name: 'بيض ابيض ٣٠ حبه' }, 'بيض'));
 ok('EN query matches AR staple via synonyms', isRelevant({ name: 'حليب المراعي 2 لتر' }, 'milk'));
+ok('colloquial مويه matches water products', isRelevant({ name: 'مياه نوفا 330 مل' }, 'مويه'));
+ok('مويه bridges to English water', isRelevant({ name: 'Nova Water 40x330ml' }, 'مويه'));
+ok('tissue bridges to مناديل', isRelevant({ name: 'فاين مناديل للجيب' }, 'tissue'));
+ok('شامبو bridges to shampoo', isRelevant({ name: 'Pantene Shampoo 400ml' }, 'شامبو'));
+ok('brand transliteration: تايد matches Tide', isRelevant({ name: 'Tide Detergent 5kg' }, 'تايد'));
+ok('brand transliteration: pepsi matches بيبسي', isRelevant({ name: 'بيبسي كولا 320 مل' }, 'pepsi'));
 
 // --- equivalence grouping ---
 const tagged = [

@@ -53,6 +53,12 @@ const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
 // Best-effort stores get a friendlier "temporarily unavailable" message.
 const BEST_EFFORT = new Set(['amazon', 'noon']);
 
+// How many flyer offers to pull from the engine per query. The engine holds
+// 200+ genuinely-relevant offers for staple queries across 18 stores; 40 was
+// starving the marketplace and the comparison of most of the flyer coverage.
+// One request either way — the grid banding and "Show all" absorb the volume.
+const OFFERS_FETCH_LIMIT = 120;
+
 // --- smart ranking -------------------------------------------------------
 // Ranking, relevance, size parsing and equivalence live in match.js (the
 // search-intelligence module) so the same logic drives both the marketplace
@@ -283,7 +289,7 @@ async function runSearch(query) {
   // the same grid as soon as the engine answers — including stores that have
   // no live search at all. The SAME relevance pipeline the comparison uses
   // (flyerListing) decides what qualifies, so grid and summary always agree.
-  searchOffers(q, 40)
+  searchOffers(q, OFFERS_FETCH_LIMIT)
     .then((data) => {
       if (inFlight !== token) return;
       if (!data) {
@@ -346,7 +352,7 @@ async function fillSummary(slot, query, tagged, token) {
     }
   }
   // The same session-cached call the flyer panel makes — no extra request.
-  const offersData = await searchOffers(query, 40).catch(() => null);
+  const offersData = await searchOffers(query, OFFERS_FETCH_LIMIT).catch(() => null);
   if (inFlight !== token) return;
   const comparison = computeComparison(query, tagged, (offersData && offersData.offers) || [], prices, storeLabel);
   if (!comparison) {

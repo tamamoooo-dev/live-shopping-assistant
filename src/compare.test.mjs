@@ -125,6 +125,27 @@ const label = (id) => id;
   ok('flyerListing parses size from OCR name', l && l.size.unit === 'pcs' && l.size.total === 30);
   ok('unitPriceLabel renders', unitPriceLabel(l) === '0.6 SAR/pc');
   ok('flyerListing rejects nameless offers', flyerListing({ store: 'x', price: 5 }, 'eggs', label) === null);
+
+  // Bilingual gate: the product-type word often lands in only ONE derived
+  // name (EN name is the flavour line, AR name says عصير). The listing must
+  // qualify over BOTH names — dropping these starved the flyer coverage.
+  const bi = flyerListing(
+    { store: 'farm', name: 'guava raspberry pomegranate 3ltr', nameAr: 'ندي عصير كوكتيل فواكه', price: 9 },
+    'juice',
+    label,
+  );
+  ok('flyerListing matches via the OTHER language name', !!bi);
+  ok('flyerListing shows EN name for an EN query', bi && bi.name === 'guava raspberry pomegranate 3ltr');
+  const biAr = flyerListing(
+    { store: 'farm', name: 'guava raspberry pomegranate 3ltr', nameAr: 'ندي عصير كوكتيل فواكه', price: 9 },
+    'عصير',
+    label,
+  );
+  ok('flyerListing prefers the AR name for an AR query', biAr && biAr.name === 'ندي عصير كوكتيل فواكه');
+  ok(
+    'flyerListing still rejects offers relevant in NEITHER name',
+    flyerListing({ store: 'farm', name: 'office chair', nameAr: 'كرسي مكتب', price: 99 }, 'juice', label) === null,
+  );
 }
 
 // --- PRODUCT FAMILIES: different families never compete --------------------------

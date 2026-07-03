@@ -4,8 +4,23 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-03 (evening) · **Phase just completed:**
-> **Unified Marketplace + Product Understanding + Price Monitoring LIVE (see
+> **Last updated:** 2026-07-03 (night) · **Phase just completed:**
+> **Flyer Coverage — Investigation, Fixes & Per-Retailer Baseline (see §22) —
+> DEPLOYED & VERIFIED IN PRODUCTION.** Weekly flyer coverage felt far lower
+> than expected; the pipeline was measured stage by stage and the upstream
+> (D4D) was proven NOT to be the limit — the frontend was discarding most of
+> the engine's relevant offers (a single-language name gate + a 40-offer
+> fetch cap), compounded by synonym gaps (colloquial "مويه" returned zero)
+> and a weekend freshness hole (no ingest between Wed and Tue while ~21% of
+> offers expire Fri–Mon). Fixes: bilingual flyer-offer gating + query-script
+> display names (`src/compare.js`), fetch limit 40→120, synonym +
+> brand-transliteration additions in BOTH matching mirrors, an OCR-debris
+> name guard in the engine's `deriveNames`, and a third weekly ingest cron
+> (Tue+Wed+**Fri**). Measured result: **2.75× more flyer offers surfaced**
+> on a 40-query bilingual battery, Arabic ≡ English results, and a
+> per-retailer extraction/matching baseline recorded in §22.D. **Before
+> this**, the prior phase was **Unified Marketplace + Product Understanding +
+> Price Monitoring LIVE (see
 > §21) — DEPLOYED & VERIFIED IN PRODUCTION.** The search page is now ONE
 > unified marketplace: online results and flyer offers render in a single
 > ranked grid (source = a store badge + a small "flyer · until <date>" tag),
@@ -252,8 +267,8 @@ Key architectural facts:
 
 | Role | GitHub | Local path | HEAD at handoff |
 |---|---|---|---|
-| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | `7ff4c28` Search intelligence + Ninja (§18) + this handoff update |
-| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `43bd753` Ninja provider + Amazon/Danube reliability (§18) |
+| Frontend (this repo) | `tamamoooo-dev/live-shopping-assistant` | `C:\Users\majed\Desktop\claude\live-shopping-assistant` | the §22 flyer-coverage push (bilingual flyer gate + this handoff update) |
+| Connector | `tamamoooo-dev/shopping-connector` | `C:\Users\majed\Desktop\claude\serverless-connector` | `db1f91d` Flyer coverage: synonyms/transliterations, debris guard, Friday ingest (§22) |
 
 > Note: the connector's **local folder** is `serverless-connector` but its GitHub
 > **repo name** is `shopping-connector`. Both `origin` remotes are under the
@@ -2370,6 +2385,125 @@ serverless-connector/
   `npx wrangler secret put NTFY_TOPIC` (TODO §9.1).
 - **The daily watch cron's first real fire** is the next 05:45 UTC; the
   guarded manual `POST /watches/check` path is verified.
+
+---
+
+## 22. Flyer Coverage — Investigation, Fixes & Per-Retailer Baseline
+
+> **Status (2026-07-03 night): DEPLOYED & VERIFIED IN PRODUCTION.** Engine
+> Worker redeployed (version `7a54b3e7`, now with a **Friday ingest cron**),
+> frontend pushed to `main` (GitHub Pages). All suites green (engine
+> `node dev.mjs selftest` incl. the live D4D leg; frontend `match.test` 50/50,
+> `compare.test` 37/37); coverage measured before/after with a 40-query
+> bilingual battery against production. **Result: 2.75× more flyer offers
+> surfaced for the same queries, and Arabic/English queries now return
+> symmetric results.**
+
+### 22.A The investigation (what was actually limiting flyer coverage)
+The complaint: flyer results appear far fewer than expected despite current
+brochures being available. The whole pipeline was measured stage by stage:
+
+1. **Upstream (D4D) — NOT the problem.** Live probes of the 6 majors compared
+   D4D's current offers with our D1: hyperpanda 1105 vs 1077 held, tamimi
+   849/847, carrefour 673/671, danube 1367/1362, lulu 1176/1176, othaim
+   523/523 — in sync. Extraction density is healthy: **10–37 offers per flyer
+   page** (see baseline, §22.D).
+2. **Ingest gates / name derivation — NOT the problem.** 15,706 current
+   offers across 18 stores; only 486 (~3%) had no derived name at all.
+3. **Engine `/offers` search — NOT the problem.** For staple queries the
+   engine returns abundant relevant offers (most queries filled the 200 cap).
+4. **THE PROBLEM — the frontend threw most of it away, twice:**
+   - **`flyerListing` gated relevance on ONE derived name** (`name ||
+     nameAr`). Flyer OCR names are bilingual and the product-type word often
+     lands in only one language ("guava raspberry pomegranate 3ltr" EN + "ندى
+     عصير كوكتيل" AR) — the single-name probe dropped **30–60% of the
+     engine's genuinely-relevant offers** (measured: juice 200→96, tissue
+     200→59, coffee 200→108, sugar 196→113). Sampled drops were real
+     products, not noise.
+   - **The app fetched only 40 offers per query** while the engine held 200+
+     relevant ones.
+5. **Secondary losses:** missing synonym bridges (colloquial **مويه** (water)
+   returned **ZERO** offers; no tuna/تونه, shampoo/شامبو, tissue/مناديل,
+   chocolate/شوكولاته bridge; no brand transliterations بيبسي/تايد/نوتيلا) —
+   and a **weekend freshness hole**: ingest fired only Tue+Wed while ~21% of
+   offers (3,263 of 15,706 measured) expire Fri–Mon and weekend flyers
+   publish Thu/Fri — the marketplace thinned exactly when the user shops.
+
+### 22.B What changed
+```
+live-shopping-assistant/
+  src/compare.js       flyerListing now (a) judges relevance/coverage over BOTH
+                       derived names concatenated, (b) picks the DISPLAY name in
+                       the query's script (Arabic query -> Arabic card name)
+  src/app.js           OFFERS_FETCH_LIMIT = 120 (was 40) for grid + summary
+  src/match.js         SYNONYMS += مويه (water), tuna/تونه/تن, shampoo/شامبو,
+                       tissue/مناديل/محارم, chocolate/شوكولاته/شوكولا,
+                       diapers/حفاضات/حفايض, pepsi/بيبسي, cola/كولا,
+                       tide/تايد, nutella/نوتيلا
+  src/match.test.mjs   50 tests (new synonym + transliteration cases)
+  src/compare.test.mjs 37 tests (bilingual flyer gate, display-language pick)
+serverless-connector/brochure-engine/
+  src/matching.js      the SAME synonym additions (the two mirrors stay in sync)
+  src/offers/contract.js deriveNames: a lone <5-char fragment ("casc") is OCR
+                       debris -> null, so the other language's name carries the
+                       card (names refresh at next ingest upsert)
+  wrangler.toml        ingest cron "0 6 * * 2,3" -> "0 6 * * 2,3,5" (Friday
+                       fire closes the weekend hole; same per-fire budget,
+                       unchanged flyers dedupe to zero KV writes)
+  dev.mjs              selftestMatching + selftestOffers extended (synonyms,
+                       transliterations, debris guard)
+```
+No schema change; no API change; the Offer contract and both repos' provider
+layers untouched.
+
+### 22.C Validation (all ✅)
+- **Engine:** `node dev.mjs selftest` end-to-end green incl. the live D4D
+  lulu leg (1,176 fetched/stored/linked); deployed `7a54b3e7`; health shows
+  both crons (`0 6 * * 2,3,5`, `45 5 * * *`), 18 providers, 15,706 current
+  offers. Production reads: `مويه` → 200 offers (was 0), `بيض` → real egg
+  trays cheapest-first (no pastry/white noise), rice/milk/eggs correct.
+- **Frontend:** 50 + 37 unit tests green. Live preview against production
+  backends: "juice" → flyer chip **96 offers** (was ~34), "مناديل" → **103
+  offers** (was ~15) with Arabic card names, summary "263 offers across 23
+  stores · 119 from this week's flyers"; zero console errors (only the known
+  Amazon best-effort warnings).
+- **Before/after battery** (40 bilingual staple+brand queries, production
+  data, old gates vs new): **1,466 → 4,034 offers surfaced (2.75×)**; every
+  Arabic query now returns exactly what its English twin returns.
+
+### 22.D Per-retailer coverage baseline (measure future work against this)
+Current offers in D1 (2026-07-03) · D4D extraction density · offers surfaced
+by the 40-query battery through the frontend gates (old → new):
+
+| Store | Current offers | Offers/page | Battery: old → new |
+|---|---|---|---|
+| Panda (hyperpanda) | 1,077 | 26.9 (40pp) | 82 → 328 |
+| Tamimi | 847 | 19.7 (43pp, 3 flyers) | 102 → 260 |
+| Carrefour | 671 | 14.9 (45pp, 2 flyers) | 64 → 192 |
+| Danube | 1,362 | 34.0 (40pp) | 114 → 414 |
+| Lulu | 1,176 | 10.3 (114pp, 6 flyers) | 50 → 154 |
+| Othaim | 523 | n/a (official PDF) | 58 → 190 |
+| Nesto | 1,451 | 37.2 (39pp, 3 flyers) | 112 → 286 |
+
+(Remaining 11 stores: 323–1,498 current offers each; battery totals in the
+same run: danube/farm/hyperpanda/prime/alwafa top the surfaced counts.)
+**Ceiling note:** the upstream bound is D4D's own AI extraction — it is dense
+(10–37 offers/page) and matches what D4D shows its own users; anything beyond
+that would need our own OCR (explicitly deferred, §0).
+
+### 22.E Notes, caveats & follow-ups
+- **The two matching mirrors** (`src/match.js` ↔ engine `src/matching.js`)
+  now share the enlarged synonym table — any future entry belongs in BOTH.
+- **The synonym/transliteration table is curated, not generative.** Grow it
+  as real queries surface gaps (the مويه-class of miss is one line to fix).
+- **yogurt/زبادي stays conservative** (42 of 120 engine hits pass the name
+  gate): many engine matches are text-only (روب/زبادي in OCR but not in the
+  derived name) — honest, but a future deriveNames improvement could recover
+  them.
+- **The debris-name guard takes effect per store at its next ingest** (names
+  refresh on upsert) — fully in effect after the Tue+Wed+Fri cycle.
+- **First Friday cron fire** is the next Friday 06:00 UTC; watch the KV
+  write budget only if many more stores are added (§19.C math unchanged).
 
 ---
 

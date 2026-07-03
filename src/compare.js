@@ -85,9 +85,16 @@ export function onlineListing(t, query) {
 
 export function flyerListing(offer, query, storeLabelFn = (x) => x) {
   if (!offer || offer.price == null) return null;
-  const name = offer.name || offer.nameAr;
+  // Display name: prefer the query's script when both languages were derived
+  // (an Arabic search should read Arabic cards); fall back across languages.
+  const arQuery = /[؀-ۿ]/.test(query || '');
+  const name = arQuery ? offer.nameAr || offer.name : offer.name || offer.nameAr;
   if (!name) return null; // no display name -> not comparable material
-  const probe = { name, brand: '', size: '' };
+  // Relevance is judged over BOTH derived names: flyer OCR names are bilingual
+  // and the product-type word often lands in only one language ("guava
+  // raspberry pomegranate 3ltr" / "ندى عصير فراولة") — gating on a single name
+  // silently dropped a third of the engine's genuinely-relevant offers.
+  const probe = { name: `${offer.name || ''} ${offer.nameAr || ''}`.trim(), brand: '', size: '' };
   if (!isRelevant(probe, query)) return null;
   const rel = relevance(probe, query);
   if (rel < REL_FLOOR) return null;
