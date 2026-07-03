@@ -2470,6 +2470,12 @@ layers untouched.
 - **Before/after battery** (40 bilingual staple+brand queries, production
   data, old gates vs new): **1,466 → 4,034 offers surfaced (2.75×)**; every
   Arabic query now returns exactly what its English twin returns.
+- **Pages propagation note (at handoff time):** the new build IS deployed —
+  `src/match.js` from commit `efaf12f` serves live and remote `main`
+  byte-matches local HEAD — but the CDN edge still held pre-push copies of
+  `app.js`/`compare.js` (`Cache-Control: max-age=600`; they roll over within
+  minutes of their TTL). If a spot-check ever looks stale, re-fetch with a
+  cache-buster after 10 minutes before suspecting the deploy (§8).
 
 ### 22.D Per-retailer coverage baseline (measure future work against this)
 Current offers in D1 (2026-07-03) · D4D extraction density · offers surfaced
