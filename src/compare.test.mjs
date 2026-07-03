@@ -127,5 +127,80 @@ const label = (id) => id;
   ok('flyerListing rejects nameless offers', flyerListing({ store: 'x', price: 5 }, 'eggs', label) === null);
 }
 
+// --- PRODUCT FAMILIES: different families never compete --------------------------
+// The real-world bug: "نادك منزوع الدسم" suggested a yogurt as the cheapest
+// alternative to milk. All tokens match the yogurt too — only the family
+// layer can separate them.
+{
+  const tagged = [
+    T('panda', 'حليب نادك طويل الاجل منزوع الدسم 1 لتر', 6.5),
+    T('lulu', 'حليب نادك منزوع الدسم 1 لتر', 6.75),
+    T('danube', 'زبادي نادك منزوع الدسم 170 جم', 2.5), // yogurt — different family
+  ];
+  const c = computeComparison('نادك منزوع الدسم', tagged, [], null, label);
+  ok('family: yogurt excluded from a milk-dominant comparison', !c.listings.some((l) => l.name.includes('زبادي')));
+  ok('family: headline is a milk', c.headline.listing.name.includes('حليب'));
+  ok('family: exclusion is counted', c.familyExcluded === 1);
+}
+
+// --- COVERAGE: a look-alike matching only one of two tokens never competes -------
+// The real-world bug: "كيري مربعات" recommended puff pastry (matches only
+// "مربعات"/squares, never the brand).
+{
+  const tagged = [
+    T('panda', 'جبنة كيري مربعات 8 قطع 108 جم', 12.5),
+    T('lulu', 'كيري جبنة مربعات ٨ قطع', 13),
+    T('danube', 'عجينة بف باستري مربعات 400 جم', 7.95), // puff pastry look-alike
+  ];
+  const c = computeComparison('كيري مربعات', tagged, [], null, label);
+  ok('coverage: puff pastry never enters the comparison', !c.listings.some((l) => l.name.includes('عجينه') || l.name.includes('عجينة')));
+  ok('coverage: headline is a Kiri cheese', c.headline.listing.name.includes('كيري'));
+}
+
+// --- family classification handles derived products -------------------------------
+{
+  const tagged = [
+    T('panda', 'Almarai Fresh Milk 2 L', 12),
+    T('lulu', 'Nadec Milk 2 L', 11.5),
+    T('danube', 'Milk Chocolate Bar 100 g', 3), // derived family: chocolate
+  ];
+  const c = computeComparison('milk', tagged, [], null, label);
+  ok('family: milk chocolate never competes with milk', !c.listings.some((l) => /chocolate/i.test(l.name)));
+}
+
+// --- flyer offers respect the family gate too --------------------------------------
+{
+  const tagged = [T('panda', 'White Eggs Tray 30 pcs', 11.95)];
+  const offers = [
+    { store: 'nesto', name: 'egg spring roll pastry 550g', price: 3.49, currency: 'SAR' }, // pastry
+    { store: 'prime', name: 'egg tray 30 pcs', price: 9.95, currency: 'SAR' },
+  ];
+  const c = computeComparison('eggs', tagged, offers, null, label);
+  ok('family: egg pastry flyer offer excluded', !c.listings.some((l) => /pastry/i.test(l.name)));
+  ok('family: real egg tray flyer offer competes and wins', c.headline.listing.price === 9.95 && c.headline.listing.source === 'flyer');
+}
+
+// --- SHARED BEST PRICE: same product, same price, several stores --------------------
+{
+  const tagged = [
+    T('panda', 'Almarai Milk 2 L', 11, { brand: 'Almarai' }),
+    T('lulu', 'Almarai Milk 2 L', 11, { brand: 'Almarai' }),
+    T('danube', 'Almarai Milk 2 L', 12, { brand: 'Almarai' }),
+  ];
+  const c = computeComparison('milk', tagged, [], null, label);
+  ok('shared: best price attributed to both stores', c.sharedWith.length === 1 && ['panda', 'lulu'].includes(c.sharedWith[0].id));
+  ok('shared: pricier store not in the shared set', !c.sharedWith.some((s) => s.id === 'danube'));
+}
+
+// --- shared best price requires the same product, not just the same number ----------
+{
+  const tagged = [
+    T('panda', 'Almarai Milk 2 L', 11),
+    T('lulu', 'Dishwashing Liquid 1 L', 11), // same price, different thing
+  ];
+  const c = computeComparison('milk', tagged, [], null, label);
+  ok('shared: a coincidental equal price on a different product does not share', c.sharedWith.length === 0);
+}
+
 console.log(`\ncompare.test: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

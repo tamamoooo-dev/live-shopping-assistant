@@ -30,11 +30,11 @@ import {
   storeLabel,
 } from './brochure.js';
 import { openBrochureViewer } from './viewer.js';
-import { fillFlyerOffers } from './flyerOffers.js';
 import { initBrochuresPage } from './brochures.js';
-import { rankItems as smartRank, relevance as matchRelevance, isRelevant, sizeLabel, unitPrice } from './match.js';
-import { computeComparison, unitPriceLabel } from './compare.js';
+import { rankItems as smartRank, relevance as matchRelevance, isRelevant, sizeLabel } from './match.js';
+import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
+import { createMarketplace } from './marketplace.js';
 import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.js';
 
 const memory = createMemory('app');
@@ -54,19 +54,17 @@ const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
 const BEST_EFFORT = new Set(['amazon', 'noon']);
 
 // --- smart ranking -------------------------------------------------------
-// Ranking, relevance, size parsing and equivalence now live in match.js (the
-// search-intelligence module) so the same logic drives both the per-store lists
-// and the shopping summary. Here we just rank each store's results and drop the
-// ones that don't match the query at all (reduces cross-noise like "coffee" for
-// a "milk" search) while keeping everything else for "Show all".
-const DEFAULT_LIMIT = 4;
-
+// Ranking, relevance, size parsing and equivalence live in match.js (the
+// search-intelligence module) so the same logic drives both the marketplace
+// grid and the shopping summary. Each store's results are ranked and the ones
+// that don't match the query at all are DROPPED — honestly counted, never
+// shown. (The old "fall back to everything when nothing matches" behaviour is
+// gone on purpose: when Amazon fuzz-matches a query to 48 unrelated products,
+// dumping them made Amazon look broken and fed garbage into the comparison.)
 function rankAndFilter(items, query) {
   const ranked = smartRank(items, query); // attaches _size and _rel
   const relevant = ranked.filter((it) => isRelevant(it, query) && matchRelevance(it, query) > 0);
-  // If filtering would empty the list (unusual queries), fall back to the ranked
-  // set so the user still sees what the store returned.
-  return relevant.length ? relevant : ranked;
+  return { relevant, hidden: ranked.length - relevant.length };
 }
 
 const $ = (id) => document.getElementById(id);
@@ -274,23 +272,32 @@ async function runSearch(query) {
   summarySlot.appendChild(summarySkeleton());
   results.appendChild(summarySlot);
 
-  // Physical-store flyer deals for this query (the Brochure Engine's structured
-  // offers). Independent of the live store searches, so it fills as soon as the
-  // engine answers — including stores that have no live search at all.
-  const offersSlot = document.createElement('div');
-  offersSlot.className = 'flyer-offers-slot';
-  results.appendChild(offersSlot);
-  fillFlyerOffers(offersSlot, q, () => inFlight !== token);
+  // ONE unified marketplace below the summary: every result is an offer —
+  // live online results and this week's flyer offers in a single ranked grid,
+  // the source shown as a lightweight badge. Per-store status (and the weekly
+  // flyer chips) live in the compact sources strip above the grid.
+  const market = createMarketplace(results, stores, q);
+  for (const s of stores) fillFlyer(market.flyerSlot(s.id), s.id, token); // best-effort
 
-  // Lay out a section per store immediately (with skeleton cards); fill each
-  // as its search resolves. The same layout serves 1 store or 8.
-  const sections = new Map();
-  for (const s of stores) {
-    const sec = storeSection(s);
-    results.appendChild(sec.el);
-    sections.set(s.id, sec);
-    fillFlyer(sec.flyer, s.id, token); // weekly-flyer chip, best-effort
-  }
+  // Physical-store flyer offers (the Brochure Engine's structured offers) join
+  // the same grid as soon as the engine answers — including stores that have
+  // no live search at all. The SAME relevance pipeline the comparison uses
+  // (flyerListing) decides what qualifies, so grid and summary always agree.
+  searchOffers(q, 40)
+    .then((data) => {
+      if (inFlight !== token) return;
+      if (!data) {
+        market.flyersUnavailable();
+        return;
+      }
+      const listings = (data.offers || [])
+        .map((o) => flyerListing(o, q, storeLabel))
+        .filter(Boolean);
+      market.addFlyers(listings);
+    })
+    .catch(() => {
+      if (inFlight === token) market.flyersUnavailable();
+    });
 
   const tagged = []; // { store, it } across all stores — feeds the comparison
   let total = 0;
@@ -300,20 +307,21 @@ async function runSearch(query) {
       try {
         const { results: found } = await adaptiveSearch(s.provider, q, memory);
         if (inFlight !== token) return;
-        // Smart ranking + irrelevance filtering per store; the section shows the
-        // top few + "Show all".
-        const ranked = rankAndFilter(found, q);
-        total += ranked.length;
-        for (const it of ranked) tagged.push({ store: s, it });
-        fillSection(sections.get(s.id), ranked, s);
+        // Smart ranking + irrelevance filtering per store; only genuinely
+        // matching results enter the marketplace and the comparison.
+        const { relevant, hidden } = rankAndFilter(found, q);
+        total += relevant.length;
+        for (const it of relevant) tagged.push({ store: s, it });
+        market.addOnline(s, relevant, hidden);
       } catch (err) {
         if (inFlight !== token) return;
-        failSection(sections.get(s.id), s);
+        market.failStore(s, BEST_EFFORT.has(s.id));
         console.warn(`${s.label} search failed:`, (err && err.details) || err);
       } finally {
         finished += 1;
         if (inFlight === token && finished === stores.length) {
           setBusy(false);
+          market.finish();
           status.textContent = `${total} result${total === 1 ? '' : 's'} across ${stores.length} store${stores.length > 1 ? 's' : ''} for “${q}”`;
           fillSummary(summarySlot, q, tagged, token);
         }
@@ -364,56 +372,9 @@ async function fillSummary(slot, query, tagged, token) {
 }
 
 // --- rendering -----------------------------------------------------------
-// Render a ranked result list: the top `limit` up front, plus a "Show all"
-// toggle that reveals the rest. Everything is already fetched, so expanding
-// never triggers a new search — it just renders more of the same list.
-function resultsBlock(items, store, limit = DEFAULT_LIMIT) {
-  const wrap = document.createElement('div');
-  const g = document.createElement('div');
-  g.className = 'results-grid';
-  wrap.appendChild(g);
-
-  const render = (n) => {
-    g.innerHTML = '';
-    for (const item of items.slice(0, n)) g.appendChild(card(item, store));
-  };
-
-  if (items.length <= limit) {
-    render(items.length);
-    return wrap;
-  }
-
-  let expanded = false;
-  render(limit);
-
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'show-all';
-  const sync = () => {
-    btn.textContent = expanded ? 'Show fewer' : `Show all ${items.length}`;
-    btn.setAttribute('aria-expanded', String(expanded));
-  };
-  btn.addEventListener('click', () => {
-    expanded = !expanded;
-    render(expanded ? items.length : limit);
-    sync();
-  });
-  sync();
-  wrap.appendChild(btn);
-  return wrap;
-}
-
-function skeletonGrid(n = 4) {
-  const g = document.createElement('div');
-  g.className = 'results-grid';
-  for (let i = 0; i < n; i++) {
-    const c = document.createElement('div');
-    c.className = 'skeleton-card';
-    c.innerHTML = '<div class="sk-img sk"></div><div class="sk-line sk"></div><div class="sk-line sk"></div>';
-    g.appendChild(c);
-  }
-  return g;
-}
+// Result cards, the unified grid, and the sources strip live in
+// marketplace.js; this file keeps only the summary skeleton and the
+// weekly-flyer chip that decorates the strip.
 
 function summarySkeleton() {
   const c = document.createElement('div');
@@ -423,65 +384,6 @@ function summarySkeleton() {
     '<div class="sk-line sk" style="width:65%;height:22px"></div>' +
     '<div class="sk-line sk" style="width:55%"></div>';
   return c;
-}
-
-function storeSection(store) {
-  const el = document.createElement('section');
-  el.className = 'store-group';
-
-  const head = document.createElement('div');
-  head.className = 'store-head';
-  const dot = document.createElement('span');
-  dot.className = 'store-dot';
-  dot.style.background = store.color;
-  const name = document.createElement('span');
-  name.className = 'store-name';
-  name.textContent = store.label;
-  const count = document.createElement('span');
-  count.className = 'store-count';
-  count.textContent = '…';
-  // Flyer slot: filled asynchronously with a "weekly flyer" chip if this store
-  // has a brochure. Pushed to the right so it never crowds the name.
-  const flyer = document.createElement('span');
-  flyer.className = 'store-flyer-slot';
-  head.append(dot, name, count, flyer);
-
-  const body = document.createElement('div');
-  body.className = 'store-body';
-  body.appendChild(skeletonGrid());
-
-  el.append(head, body);
-  return { el, body, count, flyer };
-}
-
-function fillSection(sec, items, store) {
-  // Badge shows the full count found; the body shows the top few + "Show all".
-  sec.count.textContent = String(items.length);
-  sec.body.innerHTML = '';
-  if (!items.length) {
-    const note = document.createElement('div');
-    note.className = 'store-note';
-    note.textContent = 'No results.';
-    sec.body.appendChild(note);
-    return;
-  }
-  sec.body.appendChild(resultsBlock(items, store));
-}
-
-function failSection(sec, store) {
-  sec.count.textContent = '—';
-  sec.body.innerHTML = '';
-  const note = document.createElement('div');
-  note.className = 'store-note';
-  note.textContent = BEST_EFFORT.has(store.id)
-    ? `${store.label} is temporarily unavailable.`
-    : `Could not reach ${store.label}.`;
-  sec.body.appendChild(note);
-}
-
-function money(value, currency) {
-  if (value == null) return '';
-  return `${value.toFixed(2)} ${currency}`;
 }
 
 function fmtDateShort(iso) {
@@ -534,121 +436,6 @@ async function fillFlyer(slot, storeId, token) {
     btn.addEventListener('click', () => openBrochureViewer(b, label));
   }
   slot.replaceChildren(btn);
-}
-
-// The search query a product watch uses to re-find this product daily: the
-// name's first few words (a full product title is often too specific for the
-// store's own search to return the item).
-function watchQueryFor(item) {
-  return (item.name || '')
-    .split(/\s+/)
-    .slice(0, 6)
-    .join(' ')
-    .slice(0, 80);
-}
-
-function card(item, store) {
-  const a = document.createElement('a');
-  a.className = 'card';
-  a.href = item.link;
-  a.target = '_blank';
-  a.rel = 'noopener';
-
-  // Watch bell: one tap sets a target-price watch on THIS product (the engine
-  // re-finds it daily by its stable result id — Keepa-style monitoring).
-  if (store && item.id != null && item.price != null) {
-    const bell = document.createElement('button');
-    bell.type = 'button';
-    bell.className = 'card-watch';
-    bell.textContent = '🔔';
-    bell.title = 'Watch this product’s price';
-    bell.setAttribute('aria-label', `Watch the price of ${item.name}`);
-    bell.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openWatchDialog({
-        kind: 'product',
-        provider: store.id,
-        productId: String(item.id),
-        query: watchQueryFor(item),
-        label: item.name,
-        suggestedPrice: item.price,
-        currentPrice: item.price,
-        link: item.link,
-        image: item.image,
-      });
-    });
-    a.appendChild(bell);
-  }
-
-  const imgWrap = document.createElement('div');
-  imgWrap.className = 'card-img';
-  if (item.image) {
-    const img = new Image();
-    img.loading = 'lazy';
-    img.alt = item.name;
-    img.src = item.image;
-    img.addEventListener('error', () => imgWrap.classList.add('no-img'));
-    imgWrap.appendChild(img);
-  } else {
-    imgWrap.classList.add('no-img');
-  }
-
-  const body = document.createElement('div');
-  body.className = 'card-body';
-
-  const name = document.createElement('div');
-  name.className = 'card-name';
-  name.dir = 'auto';
-  name.textContent = item.name;
-  body.appendChild(name);
-
-  const meta = [item.brand, item.size].filter(Boolean).join(' · ');
-  if (meta) {
-    const m = document.createElement('div');
-    m.className = 'card-meta';
-    m.textContent = meta;
-    body.appendChild(m);
-  }
-
-  const prices = document.createElement('div');
-  prices.className = 'card-prices';
-  if (item.price != null) {
-    const price = document.createElement('span');
-    price.className = 'price';
-    price.textContent = money(item.price, item.currency);
-    prices.appendChild(price);
-    if (item.oldPrice != null) {
-      const old = document.createElement('span');
-      old.className = 'old-price';
-      old.textContent = money(item.oldPrice, item.currency);
-      prices.appendChild(old);
-    }
-    if (item.discountLabel) {
-      const tag = document.createElement('span');
-      tag.className = 'discount';
-      tag.textContent = item.discountLabel;
-      prices.appendChild(tag);
-    }
-    // Per-unit price (SAR/L, SAR/kg, SAR/pc) — the value lens on every card,
-    // so the comparison engine's reasoning is visible everywhere.
-    const up = unitPriceLabel({ up: unitPrice(item) });
-    if (up) {
-      const u = document.createElement('span');
-      u.className = 'unit-price';
-      u.textContent = up;
-      prices.appendChild(u);
-    }
-  } else {
-    const noPrice = document.createElement('span');
-    noPrice.className = 'no-price';
-    noPrice.textContent = 'Tap to see price';
-    prices.appendChild(noPrice);
-  }
-  body.appendChild(prices);
-
-  a.append(imgWrap, body);
-  return a;
 }
 
 // --- boot ---------------------------------------------------------------------

@@ -11,19 +11,32 @@
 
 const CONNECTOR_BASE = 'https://shopping-connector.tamamoooo.workers.dev';
 
+// Amazon's anti-bot interstitial still gets through occasionally (~10% of
+// Worker invocations, even after the connector's own in-Worker retries). A
+// SECOND connector request is a fresh Worker invocation — new egress IP, a
+// fresh retry budget — so one client-side retry converts most of those
+// residual failures into results instead of an "unavailable" note.
 const connectorStrategy = {
   name: 'connector',
   async run(query) {
     const url = `${CONNECTOR_BASE}/search?provider=amazon&q=${encodeURIComponent(query)}`;
-    const res = await fetch(url);
-    const json = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error((json && json.error) || `Connector HTTP ${res.status}`);
+    const attempt = async () => {
+      const res = await fetch(url);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error((json && json.error) || `Connector HTTP ${res.status}`);
+      }
+      if (!json || !Array.isArray(json.results)) {
+        throw new Error('Unexpected connector response');
+      }
+      return json.results;
+    };
+    try {
+      return await attempt();
+    } catch {
+      await new Promise((r) => setTimeout(r, 400));
+      return attempt();
     }
-    if (!json || !Array.isArray(json.results)) {
-      throw new Error('Unexpected connector response');
-    }
-    return json.results;
   },
 };
 

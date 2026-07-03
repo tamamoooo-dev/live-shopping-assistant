@@ -52,6 +52,9 @@ const SYNONYMS = [
   ['yogurt', 'yoghurt', 'زبادي', 'روب'],
   ['juice', 'عصير'],
   ['butter', 'زبده', 'زبدة'],
+  // fat-content descriptors: "منزوع الدسم" and "خالي الدسم" both mean skimmed
+  ['skimmed', 'skim', 'منزوع', 'خالي'],
+  ['squares', 'مربعات'],
 ];
 const SYN_INDEX = (() => {
   const m = new Map();
@@ -70,6 +73,125 @@ export function expandToken(tok) {
 export function tokens(s) {
   const n = normalizeText(s);
   return n ? n.split(' ').filter((t) => t.length > 1 || /\p{N}/u.test(t)) : [];
+}
+
+// --- product families ---------------------------------------------------------
+// A coarse, bilingual product-family classifier so products from DIFFERENT
+// families never compete in a recommendation, however similar their names are
+// ("كيري مربعات" must never be answered with puff-pastry squares; a milk search
+// must never offer yogurt as the cheaper alternative).
+//
+// Two tiers, because compound products belong to the DERIVED family, not the
+// ingredient's: "milk chocolate" is chocolate, "egg spring roll pastry" is
+// pastry. Any derived-family keyword in a name outranks every base-family
+// keyword; within a tier the EARLIEST keyword wins (retail names lead with the
+// head noun in both Arabic and English).
+//
+// Classification matches whole words only, with the Arabic definite article
+// (ال / وال) stripped — but NOT the attached prepositions بال/لل ("بالبيض" =
+// "with egg" marks an ingredient, and must not classify the product as eggs).
+const BASE_FAMILIES = {
+  milk: ['milk', 'حليب'],
+  laban: ['laban', 'لبن'],
+  yogurt: ['yogurt', 'yoghurt', 'زبادي', 'روب'],
+  cheese: ['cheese', 'جبن', 'جبنه', 'موزاريلا', 'mozzarella', 'شيدر', 'cheddar', 'حلوم', 'halloumi', 'فيتا', 'feta', 'قشقوان'],
+  cream: ['cream', 'قشطه', 'قشده', 'كريمه'],
+  butter: ['butter', 'زبده'],
+  eggs: ['egg', 'eggs', 'بيض'],
+  chicken: ['chicken', 'دجاج', 'فراخ'],
+  meat: ['meat', 'beef', 'لحم', 'لحوم', 'بقري', 'غنم', 'mutton'],
+  fish: ['fish', 'tuna', 'سمك', 'تونه', 'سلمون', 'salmon'],
+  rice: ['rice', 'رز', 'ارز'],
+  pasta: ['pasta', 'spaghetti', 'مكرونه', 'معكرونه', 'سباغيتي', 'نودلز', 'noodles', 'شعيريه'],
+  bread: ['bread', 'toast', 'خبز', 'توست', 'صامولي'],
+  oil: ['oil', 'زيت', 'زيوت'],
+  water: ['water', 'ماء', 'مياه', 'مويه'],
+  juice: ['juice', 'عصير'],
+  tea: ['tea', 'شاي'],
+  coffee: ['coffee', 'قهوه', 'نسكافيه', 'nescafe'],
+  sugar: ['sugar', 'سكر'],
+  flour: ['flour', 'دقيق', 'طحين'],
+  dates: ['dates', 'تمر', 'تمور'],
+  honey: ['honey', 'عسل'],
+};
+const DERIVED_FAMILIES = {
+  chocolate: ['chocolate', 'cocoa', 'شوكولاته', 'شوكولا', 'كاكاو'],
+  biscuit: ['biscuit', 'biscuits', 'cookie', 'cookies', 'wafer', 'cracker', 'crackers', 'بسكويت', 'كوكيز', 'ويفر'],
+  cake: ['cake', 'cakes', 'muffin', 'croissant', 'كيك', 'كعك', 'مافن', 'كرواسون'],
+  pastry: ['pastry', 'pastries', 'puff', 'dough', 'عجينه', 'عجين', 'فطاير', 'فطيره', 'سمبوسه', 'سمبوسك', 'بف', 'باف', 'donut', 'donuts', 'دونات'],
+  icecream: ['icecream', 'gelato', 'ايس', 'بوظه'],
+  powder: ['powder', 'بودره', 'مجفف', 'مجففه'],
+  cereal: ['cereal', 'cereals', 'flakes', 'oats', 'granola', 'muesli', 'كورن', 'فليكس', 'شوفان', 'جرانولا'],
+  candy: ['candy', 'gum', 'marshmallow', 'حلوى', 'حلاوه', 'جيلي', 'علكه'],
+  chips: ['chips', 'crisps', 'شيبس'],
+  sauce: ['sauce', 'ketchup', 'mayonnaise', 'صوص', 'صلصه', 'كاتشب', 'مايونيز', 'مسطرده'],
+  dessert: ['dessert', 'custard', 'pudding', 'حلا', 'مهلبيه', 'كاسترد', 'بودينج'],
+  // prepared dishes: an "egg curry chappati" or "egg dosa" is a meal, not eggs
+  prepared: ['curry', 'كاري', 'chappati', 'شاباتي', 'dosa', 'دوسا', 'sandwich', 'ساندويتش', 'burger', 'برجر', 'pizza', 'بيتزا', 'شاورما', 'shawarma', 'combo', 'كومبو', 'وجبه', 'meal'],
+};
+const FAMILY_INDEX = (() => {
+  const m = new Map(); // keyword -> { family, derived }
+  for (const [family, words] of Object.entries(DERIVED_FAMILIES)) {
+    for (const w of words) m.set(normalizeText(w), { family, derived: true });
+  }
+  for (const [family, words] of Object.entries(BASE_FAMILIES)) {
+    const k = (w) => normalizeText(w);
+    for (const w of words) if (!m.has(k(w))) m.set(k(w), { family, derived: false });
+  }
+  return m;
+})();
+
+// Strip the Arabic definite article for family lookup ("الحليب" -> "حليب").
+// بال/لل are left attached on purpose — they mark ingredients/purpose.
+function familyKey(word) {
+  if (FAMILY_INDEX.has(word)) return word;
+  const stripped = word.replace(/^(وال|ال)/, '');
+  return stripped !== word && FAMILY_INDEX.has(stripped) ? stripped : null;
+}
+
+// The product family of a name, or null when no family keyword appears.
+export function productFamily(name) {
+  const words = normalizeText(name).split(' ');
+  let base = null;
+  for (const w of words) {
+    const key = familyKey(w);
+    if (!key) continue;
+    const hit = FAMILY_INDEX.get(key);
+    if (hit.derived) return hit.family; // earliest derived keyword wins outright
+    if (!base) base = hit.family; // earliest base keyword, kept unless derived appears
+  }
+  return base;
+}
+
+// The family the QUERY itself names (e.g. "حليب نادك" -> milk), or null when
+// the query carries no family keyword (e.g. a brand-only query like "كيري").
+export function queryFamily(query) {
+  return productFamily(query);
+}
+
+// What fraction of the query's tokens actually appear in the item (name+brand,
+// any tier, synonyms included)? The comparison layer requires (near-)full
+// coverage before an item may compete: "كيري مربعات" matching only "مربعات"
+// (squares) is a look-alike, not a candidate.
+export function tokenCoverage(item, query) {
+  const qTokens = tokens(query);
+  if (!qTokens.length) return 1;
+  const f = normalizeText(`${item.name || ''} ${item.brand || ''}`);
+  const fWords = new Set(f.split(' '));
+  let matched = 0;
+  for (const qt of qTokens) {
+    for (const v of expandToken(qt)) {
+      if (
+        fWords.has(v) ||
+        (v.length >= 4 && new RegExp(`(^| )${escapeRegex(v)}`).test(f)) ||
+        (v.length >= 5 && f.includes(v))
+      ) {
+        matched += 1;
+        break;
+      }
+    }
+  }
+  return matched / qTokens.length;
 }
 
 // --- size / quantity parsing -------------------------------------------------

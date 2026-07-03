@@ -40,7 +40,9 @@ export const ENGINE_STORES = [
   { id: 'prime', label: 'Prime', color: '#e11d48', search: null },
   { id: 'alwafa', label: 'Hyper Al Wafa', color: '#9333ea', search: null },
   { id: 'aljazera', label: 'AlJazera', color: '#b45309', search: null },
-  { id: 'manuel', label: 'Manuel', color: '#64748b', search: null },
+  // Manuel was RETIRED (2026-07-03): dead on D4D since Sep 2025 with no
+  // official offers page — an uncurrentable store is removed, never shown
+  // stale (milestone rule). Its engine history rows remain in D1.
 ];
 const ENGINE_STORE_BY_ID = Object.fromEntries(ENGINE_STORES.map((s) => [s.id, s]));
 const REGION = 'central'; // the personal tool is Riyadh-scoped (HANDOFF §10)
@@ -57,6 +59,13 @@ export function storeLabel(id) {
   if (!id) return '';
   const s = ENGINE_STORE_BY_ID[id];
   return s ? s.label : id[0].toUpperCase() + id.slice(1);
+}
+
+// The engine store's chip color (for the unified marketplace's store badges);
+// a neutral slate for stores without one.
+export function storeColor(id) {
+  const s = ENGINE_STORE_BY_ID[id];
+  return s ? s.color : '#64748b';
 }
 
 // Tracked price-history products (HANDOFF §13 watchlist). A search query maps to

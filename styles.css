@@ -643,6 +643,15 @@ a.summary-name:hover { text-decoration: underline; }
   padding: 6px 10px;
   border-radius: 8px;
 }
+/* the best price is shared by several stores — say so, prominently */
+.summary-shared-note {
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--brand);
+}
+/* look-alikes from a different product family were excluded — quiet trust cue */
+.summary-family-note { margin-top: 6px; font-size: 12px; color: var(--muted); }
 
 .summary-value {
   display: flex;
@@ -1019,72 +1028,82 @@ a.summary-name:hover { text-decoration: underline; }
 .bv-zoom { margin-left: auto; display: flex; gap: 6px; }
 .bv-zoom button { width: 40px; padding: 9px 0; text-align: center; }
 
-/* ---- flyer offers (structured physical-store deals on the search page) ---- */
-.flyer-offers-slot { margin: 0 0 20px; }
-.flyer-offers {
+/* ---- the unified marketplace (one grid, every source; source = metadata) ---- */
+.sources-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.src-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  animation: fade-up 0.25s ease both;
-  border-left: 4px solid var(--brand-2);
-  padding: 14px 16px;
-}
-.fo-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.fo-title { font-weight: 800; font-size: 15px; }
-.fo-count { font-size: 12.5px; color: var(--muted); }
-.fo-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(132px, 156px);
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-  scrollbar-width: thin;
-  -webkit-overflow-scrolling: touch;
-}
-.fo-card {
-  display: flex;
-  flex-direction: column;
-  text-align: start;
-  background: var(--surface-2);
-  border: 1px solid transparent;
-  border-radius: 12px;
-  padding: 8px;
-  cursor: pointer;
-  font: inherit;
+  border-radius: var(--pill);
+  padding: 5px 12px;
+  font-size: 12.5px;
   color: var(--text);
-  transition: border-color 0.15s ease, transform 0.15s ease;
 }
-.fo-card:hover { border-color: var(--brand-ring); transform: translateY(-1px); }
-.fo-img {
-  height: 96px;
-  border-radius: 8px;
-  background: var(--surface);
+.src-chip .chip-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.src-name { font-weight: 700; }
+.src-state { color: var(--muted); font-variant-numeric: tabular-nums; }
+.src-chip.is-loading .src-state { opacity: 0.6; }
+.src-chip.is-failed { border-color: var(--warn-soft); }
+.src-chip.is-failed .src-state { color: var(--warn); font-weight: 600; }
+.src-chip.is-empty .src-state { opacity: 0.7; }
+.src-chip .store-flyer { padding: 2px 8px; font-size: 11px; }
+
+.market { margin-top: 4px; }
+.market-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.market-title { font-size: 17px; font-weight: 800; letter-spacing: -0.2px; }
+.market-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: var(--pill);
+  padding: 2px 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* store badge on every card — the source shown the same lightweight way for
+   both worlds; flyer-sourced cards add a small tag */
+.card-store {
   display: flex;
   align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  margin-bottom: 8px;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 4px;
 }
-.fo-img img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.fo-img.no-img::after { content: '📄'; font-size: 26px; opacity: 0.45; }
-.fo-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.fo-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.card-store .chip-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.card-store-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-src-flyer {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: var(--pill);
+  padding: 2px 7px;
+  white-space: nowrap;
 }
-.fo-price-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.fo-price { font-weight: 800; font-size: 14px; color: var(--brand); font-variant-numeric: tabular-nums; }
-.fo-old { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.fo-meta { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
-.fo-store { font-weight: 700; }
-.fo-note { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+/* flyer offers render as the SAME card, just a <button> with a click-through */
+.card-flyer {
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+}
+.card-flyer .card-img img { padding: 6px; }
+.card-flyer .card-img.no-img::after { content: '📄'; }
 
 /* ==========================================================================
    Milestone: Intelligent Shopping — comparison summary v2, unit prices,

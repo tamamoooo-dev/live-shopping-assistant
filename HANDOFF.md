@@ -4,7 +4,27 @@
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-03 · **Phase just completed:** **Intelligent
+> **Last updated:** 2026-07-03 (evening) · **Phase just completed:**
+> **Unified Marketplace + Product Understanding + Price Monitoring LIVE (see
+> §21) — DEPLOYED & VERIFIED IN PRODUCTION.** The search page is now ONE
+> unified marketplace: online results and flyer offers render in a single
+> ranked grid (source = a store badge + a small "flyer · until <date>" tag),
+> per-store state lives in a compact sources strip, and the old per-store
+> sections + separate flyer panel are gone. Product understanding gained a
+> bilingual **product-family layer** (`productFamily`/`queryFamily`, mirrored
+> in frontend `src/match.js` and engine `src/matching.js`): products from
+> different families never compete ("كيري مربعات" no longer recommends puff
+> pastry; "نادك منزوع الدسم" no longer offers yogurt as the milk alternative),
+> full-token-coverage gating keeps look-alikes out of the comparison, and a
+> shared best price is attributed to EVERY store that offers it. The §20
+> engine deployment that was blocked-on-user is DONE: **Price Monitoring is
+> live and verified in production** (watch create → daily check → alert →
+> delete, plus the Alerts page end-to-end; a `/offers` search-starvation bug
+> and a missing CORS DELETE were found and fixed on the way). **Manuel was
+> retired** (dead on D4D since 2025-09; 18 stores remain, all current).
+> Amazon's perceived instability was fixed (honest irrelevance filtering +
+> client-side retry); Danube's 422 on multi-word Arabic queries was fixed in
+> the connector. **Before this**, the prior phase was **Intelligent
 > Shopping — Price Comparison Engine + Unified Search + Price Monitoring (see
 > §20).** The search page now runs a value-aware **Price Comparison Engine**
 > (`src/compare.js`): the "Best buy" is decided by **per-unit value across BOTH
@@ -429,17 +449,12 @@ wired into the UI (dropdown + checkbox chips).
 > Engine, Price History) are complete, and the **Unified Interface first pass**
 > (§14) is now integrated; the next milestone is **Personal Alerts**.
 
-1. **Finish the §20 engine deployment (BLOCKED-ON-USER).** Both repos are
-   pushed and the new frontend is live on Pages; only the engine steps remain
-   (details §20.H): from `serverless-connector/brochure-engine/`, (a) D1
-   migration
-   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-watches.sql`,
-   (b) `npx wrangler deploy`, (c) optionally
-   `npx wrangler secret put NTFY_TOPIC` for phone push (topic name = the
-   shared secret; pick something unguessable and subscribe to it in the ntfy
-   app — no account needed). Then verify per §20.H's checklist. Until then the
-   live Alerts page shows an honest "service unreachable" note and everything
-   else works.
+1. ~~**Finish the §20 engine deployment**~~ — **DONE (§21, 2026-07-03):** the
+   D1 migration + engine deploy ran, Price Monitoring is live and verified in
+   production. Only the optional phone-push step remains:
+   `npx wrangler secret put NTFY_TOPIC` (topic name = the shared secret; pick
+   something unguessable and subscribe to it in the ntfy app — no account
+   needed).
 2. **Usability gaps found integrating the Unified Interface (§14.D) — mostly
    closed by the §16 redesign.** Status:
    (a) **partially addressed** — the home state now advertises which products
@@ -475,10 +490,10 @@ wired into the UI (dropdown + checkbox chips).
    fallback chain (name → nameAr → category) plus the product image crop keeps
    cards usable. Improving the deriver is engine-side only (`offers/contract.js`
    `deriveNames`); names self-refresh on every weekly ingest (upsert).
-8. **Manuel is effectively dead on D4D** (dropped from the Riyadh directory,
-   §19.G). Its provider keeps failing honestly and the UI shows "no current
-   flyer". Either find an official Manuel source someday or retire the
-   provider.
+8. ~~**Manuel is effectively dead on D4D**~~ — **RETIRED (§21, 2026-07-03):**
+   provider removed from the engine + frontend, stale D1 row marked
+   non-current (history rows kept). Re-add as a one-line provider config if
+   D4D ever republishes it.
 
 **Deferred (per §0 — not TODOs now):** `StoreSessionCollector` (former M3), OCR /
 brochure price extraction, AI/LLM extraction, advanced analytics, and any paid
@@ -2195,6 +2210,166 @@ the next 05:45 UTC.
   deliberately superseded** by this milestone's unification directive; the
   honesty is preserved by the flyer badge + caveat + medium-confidence cap
   instead of exclusion.
+
+---
+
+## 21. Unified Marketplace + Product Understanding + Price Monitoring LIVE
+
+> **Status (2026-07-03): DEPLOYED & VERIFIED IN PRODUCTION.** Engine Worker
+> redeployed (final version `c750ac05`), search connector redeployed
+> (`e81538cd`), frontend pushed to `main` (GitHub Pages). All offline suites
+> green (engine `node dev.mjs selftest` incl. live D4D legs; frontend
+> `match.test` 44/44, `compare.test` 33/33); full search/watch/brochure flows
+> verified in a live browser against production backends.
+
+### 21.A What this milestone delivers
+1. **§20's blocked engine deployment is DONE — Price Monitoring is LIVE.**
+   The D1 watches migration was applied and the engine deployed with both
+   crons (`0 6 * * 2,3` ingest, `45 5 * * *` watch check). Verified in
+   production end-to-end: watch create → guarded check → alert row + unseen
+   count → mark-seen → delete; the Alerts page lists/creates/deletes watches
+   against the live engine. `INGEST_SECRET` was rotated (uncommitted, as
+   always). `NTFY_TOPIC` is still unset (in-app alerts only) — optional.
+2. **ONE unified marketplace (the milestone's centerpiece).** The search page
+   no longer renders per-store sections plus a separate flyer panel. Every
+   result is an OFFER in a single ranked grid (`src/marketplace.js`): online
+   results and flyer offers together, ranked relevance-band-first then price,
+   each card carrying a **store badge** (colored dot + name) and flyer cards
+   a small **"flyer · until <date>"** tag. Flyer cards click through to the
+   in-app viewer when the engine holds that edition (now including the PDF
+   branch), else the flyer page. D4D branch/language duplicates of the same
+   offer collapse to one card (≥70% token overlap within store+price). A
+   compact **sources strip** keeps per-store state honest (result count /
+   "no matches" with hidden-count tooltip / "temporarily unavailable") and
+   hosts the weekly-flyer chips. `src/flyerOffers.js` was deleted.
+3. **Product-family understanding.** A bilingual two-tier family classifier
+   (BASE families like milk/laban/yogurt/cheese/eggs…; DERIVED families like
+   chocolate/pastry/prepared-dishes that OUTRANK base keywords — "milk
+   chocolate" is chocolate, "egg spring roll pastry" is pastry, "egg curry
+   chappati" is a prepared dish) lives in BOTH mirrors: frontend
+   `src/match.js` (`productFamily`/`queryFamily`/`tokenCoverage`) and engine
+   `src/matching.js`. Arabic definite articles (ال/وال) are stripped for
+   classification; ingredient markers (بال "with") deliberately are NOT.
+   Where it acts:
+   - **compare.js:** listings of a KNOWN different family than the target
+     family (query's own family, else the dominant family of the matches)
+     are excluded from the comparison — with a visible "N similar-name
+     products from a different category excluded" note. **Fixes "نادك منزوع
+     الدسم → yogurt".**
+   - **compare.js coverage gate:** a listing may only compete when it matches
+     (nearly) every query token — 2-token queries demand both. **Fixes "كيري
+     مربعات → puff pastry".** New synonym groups: skimmed/منزوع/خالي,
+     squares/مربعات (both mirrors).
+   - **marketplace grid:** family-mismatched entries drop to the bottom band.
+   - **engine `/offers`:** family-tier ranking (query family > family-less >
+     mismatched) — "بيض" now returns egg trays above egg-pastry.
+   - **engine monitor:** a watch whose query names a family never alerts on a
+     KNOWN different family (a 2 L laban can no longer satisfy a milk watch —
+     the selftest traps exactly this).
+4. **Shared best price.** `computeComparison` now reports `sharedWith`: every
+   other store selling the same thing (same price AND size within 3% / same
+   normalized name) — the summary renders "at Lulu · Panda" plus a "Best
+   price shared by N stores" line instead of crediting one store.
+5. **Amazon stability regression — root-caused and fixed.** The connector was
+   NOT the regression (measured 9/10 success, same as §18). The frontend was:
+   `rankAndFilter` fell back to showing a store's ENTIRE result list when
+   nothing was relevant — Amazon's fuzzy matches ("كيري مربعات" → 48 office
+   chairs) rendered as-is and fed the comparison. Now irrelevant results are
+   dropped and honestly counted ("52 unrelated results hidden" tooltip), and
+   the amazon/noon providers retry once client-side (a fresh Worker
+   invocation = new egress IP + fresh in-Worker retry budget), lifting
+   effective availability to ~99%.
+6. **Production bugs found & fixed along the way:**
+   - **`/offers` search starvation (critical):** the D1 prefilter window
+     (`ORDER BY price LIMIT n`) filled with substring noise — "rice" lives
+     inside "price" (2,568 rows), "بيض" inside "بيضاء/ابيض" — so the JS
+     word-boundary filter dropped everything and real queries returned ZERO
+     offers. The prefilter now fills the window word-boundary-matches-first
+     (exact-word band > word-start band > substring, price within each) and
+     the read route over-fetches with a floor of 120. "eggs"/"بيض"/"rice"
+     all return correct offers in production now.
+   - **CORS DELETE missing:** `Access-Control-Allow-Methods` lacked DELETE,
+     so deleting a watch from the browser was preflight-blocked. Fixed.
+   - **Danube 422 on multi-word Arabic queries** (connector): Danube's Spree
+     origin 422s any multi-word query starting with Arabic ("كيري مربعات");
+     single Arabic words and English multi-word are fine. The provider now
+     falls back to the longest single token and lets client ranking narrow.
+7. **Manuel retired (brochure-source consistency).** Dead on D4D since
+   2025-09 (its store page holds zero flyers) with no official offers page.
+   Removed from the engine registry (19→18 providers) and the frontend's
+   ENGINE_STORES; its stale D1 row marked `is_current=0` (metadata/history
+   kept forever, per the retention model). All 18 remaining stores verified
+   current at deploy (validTo 2026-07-03…07-14). D4D remains the single
+   primary source + officialLink fallback (§15 model unchanged).
+
+### 21.B Files changed
+```
+live-shopping-assistant/
+  src/marketplace.js   NEW   unified grid + sources strip + cards (both worlds)
+  src/flyerOffers.js   DELETED (separate flyer panel retired)
+  src/match.js         EDIT  + product families, tokenCoverage, new synonyms
+  src/compare.js       EDIT  + family gate, coverage gate, sharedWith
+  src/summary.js       EDIT  renders shared stores + family-excluded note
+  src/app.js           EDIT  runSearch feeds the marketplace; honest filtering
+  src/brochure.js      EDIT  + storeColor(); Manuel removed from ENGINE_STORES
+  src/providers/amazon.js, noon.js  EDIT  one client-side retry
+  src/match.test.mjs   EDIT  44 tests (families, coverage, synonyms)
+  src/compare.test.mjs EDIT  33 tests (family/coverage/shared-price cases)
+  styles.css           EDIT  marketplace styles replace the flyer-panel styles
+  HANDOFF.md           EDIT  this section
+serverless-connector/
+  src/providers/danube.js               EDIT  422 multi-word-Arabic fallback
+  brochure-engine/src/matching.js       EDIT  + families (mirror), synonyms
+  brochure-engine/src/monitor.js        EDIT  + family gate in evaluateGrocery
+  brochure-engine/src/engine.js         EDIT  /offers family ranking + overfetch
+                                              floor; CORS + DELETE
+  brochure-engine/src/storage/offerStore.js EDIT word-boundary-banded prefilter
+  brochure-engine/src/providers/manuel.js   DELETED
+  brochure-engine/src/index.js, dev.mjs     EDIT  registry 19→18; family+laban
+                                              trap tests added
+```
+
+### 21.C Production verification (all ✅, 2026-07-03)
+- **Engine:** health `18 providers`, `watches:{active:0}`, both crons; watch
+  lifecycle (create → check → alert 1.25 SAR @ tamimi → seen → delete) run
+  against production; `/offers?q=بيض` → real egg offers (trays, no
+  white-noise, no pastry first), `q=rice`/`q=eggs`/`q=milk` all correct;
+  Manuel absent from providers and `held`.
+- **Connector:** `danube` "كيري مربعات" → 20 results (was HTTP 502); amazon
+  10-run probe 9/10 (unchanged §18 baseline) + client retry on top.
+- **Frontend (live browser vs production backends):** "eggs" → Best buy
+  **9.95 SAR Makkah 30 pcs (0.33 SAR/pc)** from the flyer, grid leads with
+  real eggs; **"كيري مربعات"** → all-Kiri grid, Kiri headline, "52 unrelated
+  results hidden" on Amazon's chip, no pastry anywhere; **"نادك منزوع الدسم"**
+  → milk headline + milk cheapest-alternative, "47 … different category
+  excluded"; "milk"/"حليب" → 165–193 results, history verdict, watch dialog
+  prefilled; Alerts page create/list/delete against production; Brochures
+  page 18 stores / 46 covers / no Manuel; flyer card click → in-app viewer
+  (`makkah/central/2026-W27/page00.webp`); **zero console errors**.
+- **GitHub Pages:** served bundle byte-verified against `main` after push.
+
+### 21.D Notes, caveats & follow-ups
+- **The two matching modules are mirrors** — now including the FAMILY lexicon
+  and synonyms. Any change to one belongs in both (`src/match.js` ↔
+  `brochure-engine/src/matching.js`).
+- **The family lexicon is a curated keyword list**, not a taxonomy: names
+  with no family keyword ("Kinder Joy Egg") classify by their base word and
+  can still slip into a family they only borrow a word from. The comparison
+  only ever EXCLUDES on a provable mismatch, so the failure mode is "not
+  excluded", never "wrongly excluded". Grow the lexicon as real queries
+  surface gaps.
+- **Coverage tolerance:** 2-token queries demand both tokens; ≥3-token
+  queries tolerate one unmatched descriptor (so "قليل الدسم" low-fat can
+  stand in for "منزوع الدسم" skimmed in a 12×1L headline — name is always
+  shown). Tighten per-token if real confusion appears.
+- **Othaim flyer offers never open in-app**: its brochure is the official
+  PDF while offers come from D4D, so the edition link can't exist — those
+  cards open the flyer page externally (by design; all-image stores open
+  in-app).
+- **NTFY_TOPIC remains unset** — alerts are in-app only until the user runs
+  `npx wrangler secret put NTFY_TOPIC` (TODO §9.1).
+- **The daily watch cron's first real fire** is the next 05:45 UTC; the
+  guarded manual `POST /watches/check` path is verified.
 
 ---
 

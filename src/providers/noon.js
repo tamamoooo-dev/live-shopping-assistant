@@ -7,19 +7,30 @@
 
 const CONNECTOR_BASE = 'https://shopping-connector.tamamoooo.workers.dev';
 
+// Best-effort store: one client-side retry — a second connector request is a
+// fresh Worker invocation (new egress IP), which clears most transient
+// upstream refusals. Mirrors the Amazon provider.
 const connectorStrategy = {
   name: 'connector',
   async run(query) {
     const url = `${CONNECTOR_BASE}/search?provider=noon&q=${encodeURIComponent(query)}`;
-    const res = await fetch(url);
-    const json = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error((json && json.error) || `Connector HTTP ${res.status}`);
+    const attempt = async () => {
+      const res = await fetch(url);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error((json && json.error) || `Connector HTTP ${res.status}`);
+      }
+      if (!json || !Array.isArray(json.results)) {
+        throw new Error('Unexpected connector response');
+      }
+      return json.results;
+    };
+    try {
+      return await attempt();
+    } catch {
+      await new Promise((r) => setTimeout(r, 400));
+      return attempt();
     }
-    if (!json || !Array.isArray(json.results)) {
-      throw new Error('Unexpected connector response');
-    }
-    return json.results;
   },
 };
 

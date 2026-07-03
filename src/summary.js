@@ -61,10 +61,16 @@ function nameLink(l) {
 }
 
 // One price line: 12.50 SAR  at Lulu  ·  2 L  ·  6.25 SAR/L  [flyer]
-function priceLine(l, { big = true } = {}) {
+// `shared` lists other stores selling the same thing at the same price — the
+// best price is theirs too, never attributed to a single store.
+function priceLine(l, { big = true, shared = null } = {}) {
   const line = el('div', 'summary-line');
   line.appendChild(el('span', big ? 'summary-price' : 'summary-price-sm', money(l.price, l.currency)));
-  line.appendChild(el('span', 'summary-at', `at ${l.store.label}`));
+  const stores =
+    shared && shared.length
+      ? [l.store.label, ...shared.map((s) => s.label)].join(' · ')
+      : l.store.label;
+  line.appendChild(el('span', 'summary-at', `at ${stores}`));
   const sz = sizeLabel(l.size);
   if (sz) line.appendChild(el('span', 'summary-size', sz));
   const up = unitPriceLabel(l);
@@ -107,7 +113,12 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   const h = s.headline.listing;
   const hero = el('div', 'summary-hero');
   hero.appendChild(el('span', 'summary-kicker', KICKER[s.headline.kind] || 'Best buy'));
-  hero.appendChild(priceLine(h));
+  hero.appendChild(priceLine(h, { shared: s.sharedWith }));
+  if (s.sharedWith && s.sharedWith.length) {
+    hero.appendChild(
+      el('div', 'summary-shared-note', `Best price shared by ${s.sharedWith.length + 1} stores`),
+    );
+  }
   hero.appendChild(nameLink(h));
   if (h.source === 'flyer') {
     hero.appendChild(
@@ -125,6 +136,15 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   }
   if (s.confidence === 'low') {
     hero.appendChild(el('div', 'summary-note', 'Results are different sizes or variants — compare carefully below.'));
+  }
+  if (s.familyExcluded > 0) {
+    hero.appendChild(
+      el(
+        'div',
+        'summary-family-note',
+        `${s.familyExcluded} similar-name product${s.familyExcluded === 1 ? '' : 's'} from a different category excluded from this comparison.`,
+      ),
+    );
   }
   wrap.appendChild(hero);
 

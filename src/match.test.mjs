@@ -8,6 +8,7 @@
 
 import {
   parseSize, sizeLabel, unitPrice, isRelevant, relevance, groupEquivalents, normalizeText,
+  productFamily, queryFamily, tokenCoverage,
 } from './match.js';
 
 let pass = 0, fail = 0;
@@ -61,6 +62,24 @@ ok('different brand NOT merged', !groups.some((g) => g.items.some((i) => i.it.br
 
 // --- normalization ---
 ok('normalize folds alef/diacritics', normalizeText('أَلبان') === normalizeText('البان'));
+
+// --- product families ---
+ok('milk name -> milk family', productFamily('حليب نادك منزوع الدسم 1 لتر') === 'milk');
+ok('yogurt name -> yogurt family', productFamily('زبادي نادك منزوع الدسم') === 'yogurt');
+ok('cheese (Kiri squares) -> cheese', productFamily('جبنة كيري مربعات ٨ قطع') === 'cheese');
+ok('puff pastry -> pastry', productFamily('عجينة بف باستري مربعات') === 'pastry');
+ok('derived beats base: milk chocolate -> chocolate', productFamily('Milk Chocolate Bar 90g') === 'chocolate');
+ok('derived beats base: egg spring roll pastry -> pastry', productFamily('egg spring roll pastry 550g') === 'pastry');
+ok('definite article strips: الحليب -> milk', productFamily('الحليب الطازج كامل الدسم') === 'milk');
+ok('ingredient marker بال does NOT classify: بالبيض stays non-eggs', productFamily('رقايق بالبيض') !== 'eggs');
+ok('no family keyword -> null', productFamily('كرسي مكتب دوار') === null);
+ok('query family: حليب -> milk', queryFamily('حليب نادك') === 'milk');
+ok('query family: brand-only query -> null', queryFamily('كيري مربعات') === null);
+
+// --- token coverage ---
+ok('full coverage on a real match', tokenCoverage({ name: 'جبنة كيري مربعات 8 قطع' }, 'كيري مربعات') === 1);
+ok('half coverage on the pastry look-alike', tokenCoverage({ name: 'عجينة بف باستري مربعات' }, 'كيري مربعات') === 0.5);
+ok('skimmed synonym bridges منزوع/خالي', tokenCoverage({ name: 'حليب نادك خالي الدسم' }, 'نادك منزوع الدسم') === 1);
 
 console.log(`\nmatch.test: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

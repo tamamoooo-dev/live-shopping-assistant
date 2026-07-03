@@ -27,11 +27,33 @@
 //
 // computeComparison() returns a plain model; summary.js renders it.
 
-import { unitPrice, sizeLabel, parseSize, groupEquivalents, isRelevant, relevance } from './match.js';
+import {
+  unitPrice,
+  sizeLabel,
+  parseSize,
+  groupEquivalents,
+  isRelevant,
+  relevance,
+  tokenCoverage,
+  tokens,
+  productFamily,
+  queryFamily,
+  normalizeText,
+} from './match.js';
 
 const REL_FLOOR = 30; // ignore weak/look-alike matches when picking the best
 const VALUE_MARGIN = 0.9; // best-value must beat the cheapest's unit price by >10%
 const OUTLIER_FACTOR = 6; // unit prices >6× off the family median are parse noise
+
+// A listing may only COMPETE when it matches (nearly) every query token: a
+// 2-token query demands both ("كيري مربعات" matching only "مربعات" is puff
+// pastry, not Kiri); longer queries tolerate one unmatched descriptor token.
+function coversQuery(item, query) {
+  const n = tokens(query).length;
+  if (n < 2) return true;
+  const cov = tokenCoverage(item, query);
+  return n === 2 ? cov >= 1 : cov >= (n - 1) / n;
+}
 
 // --- listings: one normalized shape for both worlds ----------------------------
 // online tagged: [{ store: {id,label,color}, it: NormalizedResult }]
@@ -43,6 +65,7 @@ export function onlineListing(t, query) {
   it._size = it._size || parseSize(it.name, it.size);
   it._rel = it._rel != null ? it._rel : relevance(it, query);
   if (it._rel < REL_FLOOR) return null;
+  if (!coversQuery(it, query)) return null;
   return {
     source: 'online',
     store: t.store,
@@ -55,6 +78,7 @@ export function onlineListing(t, query) {
     size: it._size,
     up: unitPrice(it),
     rel: it._rel,
+    family: productFamily(it.name),
     it,
   };
 }
@@ -67,6 +91,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
   if (!isRelevant(probe, query)) return null;
   const rel = relevance(probe, query);
   if (rel < REL_FLOOR) return null;
+  if (!coversQuery(probe, query)) return null;
   const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, '');
   const item = { name, price: offer.price, _size: size };
   return {
@@ -81,6 +106,9 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     size,
     up: unitPrice(item),
     rel,
+    // OCR names span both languages — classify over both so the family gate
+    // sees whatever script the family keyword landed in.
+    family: productFamily(`${offer.name || ''} ${offer.nameAr || ''}`),
     offer,
   };
 }
@@ -120,16 +148,42 @@ export function bestValueAnalysis(listings) {
 // tagged: online results; offers: engine flyer offers; prices: price history
 // ({lowest, latest}) or null; storeLabelFn resolves flyer store ids for display.
 export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
-  const listings = [];
+  const all = [];
   for (const t of tagged || []) {
     const l = onlineListing(t, query);
-    if (l) listings.push(l);
+    if (l) all.push(l);
   }
   for (const o of offers || []) {
     const l = flyerListing(o, query, storeLabelFn);
-    if (l) listings.push(l);
+    if (l) all.push(l);
   }
-  if (!listings.length) return null;
+  if (!all.length) return null;
+
+  // FAMILY GATE — products from different families must not compete, however
+  // similar their names ("نادك منزوع الدسم" must never offer yogurt as the
+  // cheaper alternative to milk). The target family is the one the query names
+  // ("حليب" -> milk); a family-less query (brand-only, "كيري") falls back to
+  // the dominant family across the matches. Listings of a KNOWN different
+  // family are excluded from the comparison (they still render in the results
+  // list — they are real matches, just not comparable); family-less listings
+  // stay (we refuse to guess a mismatch).
+  const targetFamily = (() => {
+    const qf = queryFamily(query);
+    if (qf) return qf;
+    const counts = new Map();
+    let familied = 0;
+    for (const l of all) {
+      if (!l.family) continue;
+      familied += 1;
+      counts.set(l.family, (counts.get(l.family) || 0) + 1);
+    }
+    let top = null;
+    for (const [f, c] of counts) if (!top || c > top.c) top = { f, c };
+    return top && top.c >= 2 && top.c / familied > 0.5 ? top.f : null;
+  })();
+  let listings = targetFamily ? all.filter((l) => !l.family || l.family === targetFamily) : all;
+  if (!listings.length) listings = all; // never let the gate empty the comparison
+  const familyExcluded = all.length - listings.length;
 
   const storeIds = new Set(listings.map((l) => `${l.source}:${l.store.id}`));
   const min = Math.min(...listings.map((l) => l.price));
@@ -188,6 +242,27 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     }
   }
 
+  // SHARED BEST PRICE — when other stores sell the same thing at the same
+  // headline price, the best price belongs to all of them, not to whichever
+  // store happened to sort first. "Same thing" is conservative: identical
+  // price AND (size within 3% in the same unit family, or an identical
+  // normalized name when sizes are unparseable).
+  const h0 = headline.listing;
+  const sameName = (a, b) => normalizeText(a.name) === normalizeText(b.name);
+  const sameSize = (a, b) =>
+    a.size && b.size && a.size.unit && a.size.unit === b.size.unit &&
+    a.size.total != null && b.size.total != null &&
+    Math.abs(a.size.total - b.size.total) / Math.max(a.size.total, b.size.total) <= 0.03;
+  const sharedWith = [];
+  for (const l of listings) {
+    if (l === h0 || l.store.id === h0.store.id) continue;
+    if (Math.abs(l.price - h0.price) > 0.005) continue;
+    if (!(sameSize(l, h0) || sameName(l, h0))) continue;
+    if (!sharedWith.some((s) => s.id === l.store.id)) {
+      sharedWith.push({ id: l.store.id, label: l.store.label, source: l.source });
+    }
+  }
+
   // Confidence in the headline claim.
   let confidence = 'low';
   if (equivalent && headIt && equivalent.sorted.some((i) => i.it === headIt)) confidence = 'high';
@@ -215,6 +290,9 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     stores: storeIds.size,
     flyerCount: listings.filter((l) => l.source === 'flyer').length,
     range: { min, max },
+    family: targetFamily,
+    familyExcluded,
+    sharedWith,
     headline,
     secondary,
     bestValue: value ? value.best : null,
