@@ -39,6 +39,8 @@ import {
   productFamily,
   queryFamily,
   offerFamily,
+  productType,
+  queryType,
   normalizeText,
 } from './match.js';
 
@@ -80,6 +82,7 @@ export function onlineListing(t, query) {
     up: unitPrice(it),
     rel: it._rel,
     family: productFamily(it.name),
+    type: productType(it.name),
     it,
   };
 }
@@ -118,6 +121,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     // sees whatever script the family keyword landed in; and when the name
     // yields nothing, fall back to the aggregator's own category (offerFamily).
     family: offerFamily(offer),
+    type: productType(`${offer.name || ''} ${offer.nameAr || ''}`),
     offer,
   };
 }
@@ -193,6 +197,24 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
   let listings = targetFamily ? all.filter((l) => !l.family || l.family === targetFamily) : all;
   if (!listings.length) listings = all; // never let the gate empty the comparison
   const familyExcluded = all.length - listings.length;
+
+  // TYPE GATE — the second product attribute. When the query names a product
+  // FORM ("chicken nuggets" -> nuggets), listings of a KNOWN different form
+  // ("chicken roll" -> roll) share the family but are not the same product, so
+  // they must not drive the comparison. Type-less listings stay (we never guess
+  // a mismatch); they still render in the results grid — just not the summary.
+  const targetType = queryType(query);
+  let typeExcluded = 0;
+  if (targetType) {
+    const typed = listings.filter((l) => {
+      const t = l.type !== undefined ? l.type : productType(l.name);
+      return !t || t === targetType;
+    });
+    if (typed.length) {
+      typeExcluded = listings.length - typed.length;
+      listings = typed;
+    }
+  }
 
   const storeIds = new Set(listings.map((l) => `${l.source}:${l.store.id}`));
   const min = Math.min(...listings.map((l) => l.price));
@@ -301,6 +323,7 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     range: { min, max },
     family: targetFamily,
     familyExcluded,
+    typeExcluded,
     sharedWith,
     headline,
     secondary,

@@ -209,6 +209,33 @@ const label = (id) => id;
   ok('family: real egg tray flyer offer competes and wins', c.headline.listing.price === 9.95 && c.headline.listing.source === 'flyer');
 }
 
+// --- PRODUCT TYPE: same brand+family, different FORM must not compete/claim same ----
+// The milestone case: "Herfy chicken nuggets" must not be driven by, or claimed
+// same-product with, "Herfy minced chicken roll" (shares brand + chicken family).
+{
+  const tagged = [
+    T('panda', 'Herfy Chicken Nuggets 400 g', 13.5, { brand: 'Herfy' }),
+    T('lulu', 'Herfy Chicken Nuggets 400 g', 12.5, { brand: 'Herfy' }),
+    T('danube', 'Herfy Minced Chicken Roll 400 g', 8.0, { brand: 'Herfy' }), // cheaper look-alike
+  ];
+  const c = computeComparison('herfy chicken nuggets', tagged, [], null, label);
+  ok('type: the chicken roll is excluded from the comparison', !c.listings.some((l) => /roll/i.test(l.name)));
+  ok('type: headline stays a nuggets product', /nuggets/i.test(c.headline.listing.name));
+  ok('type: cheaper different-form roll never becomes the headline', c.headline.listing.price !== 8.0);
+  ok('type: exclusion is counted', c.typeExcluded === 1);
+  ok('type: nuggets are NOT falsely claimed as one high-confidence same product with the roll', c.confidence !== 'high' || !c.equivalent.sorted.some((i) => /roll/i.test(i.it.name)));
+}
+
+// A bare family query keeps every form (respects user intent — no over-gating).
+{
+  const tagged = [
+    T('panda', 'Fresh Chicken Breast 1 kg', 22),
+    T('lulu', 'Chicken Nuggets 400 g', 13),
+  ];
+  const c = computeComparison('chicken', tagged, [], null, label);
+  ok('type: bare "chicken" query gates nothing', c.typeExcluded === 0 && c.listings.length === 2);
+}
+
 // --- SHARED BEST PRICE: same product, same price, several stores --------------------
 {
   const tagged = [

@@ -1,6 +1,6 @@
 // app.js — the app shell (hash router + navigation) and the Live Search page.
 //
-// Souq has two primary experiences, each a full page under one shell:
+// Super Search has two primary experiences, each a full page under one shell:
 //   #/search     — Live Search (this file): parallel live search across stores,
 //                  price intelligence for tracked products, weekly-flyer chips.
 //   #/brochures  — Brochures (src/brochures.js): every store's active flyers.
@@ -100,10 +100,10 @@ function route() {
   pageAlerts.hidden = name !== 'alerts';
   document.title =
     name === 'brochures'
-      ? 'Souq — Weekly brochures'
+      ? 'Super Search — Weekly brochures'
       : name === 'alerts'
-      ? 'Souq — Price alerts'
-      : 'Souq — Live shopping search';
+      ? 'Super Search — Price alerts'
+      : 'Super Search — Live shopping search';
   for (const link of document.querySelectorAll('[data-nav]')) {
     const active = link.dataset.nav === name;
     link.classList.toggle('is-active', active);
@@ -178,7 +178,7 @@ function selectOnlyStore(storeId) {
 }
 
 // The Brochures page can ask "search this store": switch scope + focus input.
-window.addEventListener('souq:search-store', (e) => {
+window.addEventListener('supersearch:search-store', (e) => {
   const id = e.detail && e.detail.store;
   if (id && STORE_BY_ID[id]) selectOnlyStore(id);
   location.hash = '#/search';
@@ -281,8 +281,12 @@ async function runSearch(query) {
   // ONE unified marketplace below the summary: every result is an offer —
   // live online results and this week's flyer offers in a single ranked grid,
   // the source shown as a lightweight badge. Per-store status (and the weekly
-  // flyer chips) live in the compact sources strip above the grid.
-  const market = createMarketplace(results, stores, q);
+  // flyer chips) live in the compact sources strip above the grid. The ranking
+  // perspective (lowest price vs best value) is a remembered daily-use preference.
+  const market = createMarketplace(results, stores, q, {
+    sort: memory.get('rank') === 'value' ? 'value' : 'price',
+    onSort: (mode) => memory.set('rank', mode),
+  });
   for (const s of stores) fillFlyer(market.flyerSlot(s.id), s.id, token); // best-effort
 
   // Physical-store flyer offers (the Brochure Engine's structured offers) join

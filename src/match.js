@@ -181,6 +181,63 @@ export function queryFamily(query) {
   return productFamily(query);
 }
 
+// --- product types (a FORM attribute, orthogonal to family) ---------------------
+// A product has three attributes that decide whether two listings are the SAME
+// product: its BRAND, its FAMILY ("what is it / which aisle" — chicken), and its
+// TYPE ("what form is it" — nuggets vs roll vs breast). Family alone is too
+// coarse: "Herfy chicken nuggets" and "Herfy minced chicken roll" share a brand
+// AND a family (chicken) yet are clearly different products. This coarse,
+// bilingual TYPE classifier is that third attribute — so a match on only some
+// attributes never earns a high-confidence "same product" claim, and a query
+// that names a type ("chicken nuggets") is not driven by a different-type
+// look-alike ("chicken roll").
+//
+// Deliberately narrow: only well-known forms/cuts that make two SAME-family
+// products genuinely different. When a name carries no type keyword its type is
+// null and nothing is gated — a bare "chicken" query still sees every form.
+// Whole-word matches only (Arabic definite article stripped); earliest wins.
+const PRODUCT_TYPES = {
+  nuggets: ['nugget', 'nuggets', 'ناجتس', 'ناغتس', 'نجتس', 'نجت'],
+  burger: ['burger', 'burgers', 'hamburger', 'برجر', 'برغر', 'همبرجر', 'هامبرجر', 'همبرغر'],
+  sausage: ['sausage', 'sausages', 'frankfurter', 'hotdog', 'سجق', 'سوسيس', 'نقانق'],
+  roll: ['roll', 'rolls', 'رول', 'رولات'],
+  mince: ['mince', 'minced', 'مفروم', 'مفرومه'],
+  fillet: ['fillet', 'fillets', 'filet', 'فيليه', 'فيليت'],
+  breast: ['breast', 'breasts', 'صدر', 'صدور'],
+  strips: ['strip', 'strips', 'ستربس', 'شرائح'],
+  wings: ['wing', 'wings', 'جناح', 'اجنحه', 'جوانح'],
+  kofta: ['kofta', 'kufta', 'kabab', 'kebab', 'كفته', 'كباب'],
+  luncheon: ['luncheon', 'mortadella', 'لانشون', 'مرتديلا'],
+};
+const TYPE_INDEX = (() => {
+  const m = new Map();
+  for (const [type, words] of Object.entries(PRODUCT_TYPES)) {
+    for (const w of words) m.set(normalizeText(w), type);
+  }
+  return m;
+})();
+
+function typeKey(word) {
+  if (TYPE_INDEX.has(word)) return word;
+  const stripped = word.replace(/^(وال|ال)/, '');
+  return stripped !== word && TYPE_INDEX.has(stripped) ? stripped : null;
+}
+
+// The product type/form named by a text, or null when none appears.
+export function productType(name) {
+  const words = normalizeText(name).split(' ');
+  for (const w of words) {
+    const key = typeKey(w);
+    if (key) return TYPE_INDEX.get(key);
+  }
+  return null;
+}
+
+// The type the QUERY itself names ("chicken nuggets" -> nuggets), or null.
+export function queryType(query) {
+  return productType(query);
+}
+
 // --- category-as-family (a retailer-taxonomy semantic signal) -------------------
 // Flyer offers carry the aggregator's OWN product category (D4D's global
 // taxonomy). That is a structured, human-curated signal we get for free — a
@@ -519,6 +576,11 @@ function sizeClose(a, b) {
 function sameProduct(x, y) {
   const sx = x.it._size, sy = y.it._size;
   if (!sizeClose(sx, sy)) return false;
+  // Different known FORMS are different products, even at the same brand+size:
+  // "chicken nuggets" is not "chicken roll". A missing type never blocks a match
+  // (we refuse to guess a difference we can't see).
+  const typeX = productType(x.it.name), typeY = productType(y.it.name);
+  if (typeX && typeY && typeX !== typeY) return false;
   const bx = normalizeText(x.it.brand), by = normalizeText(y.it.brand);
   if (bx && by) return bx === by;
   // no reliable brand -> require strong name-token overlap

@@ -61,6 +61,14 @@ function entryRel(e) {
 function entryPrice(e) {
   return e.kind === 'online' ? e.it.price : e.listing.price;
 }
+// The entry's per-unit price ({ value, unit }) or null — the basis of the
+// "Best value" ranking. Cached per entry (parseSize is not free).
+function entryUnit(e) {
+  if (e._unit === undefined) {
+    e._unit = e.kind === 'online' ? unitPrice(e.it) : e.listing.up || null;
+  }
+  return e._unit;
+}
 function entryFamily(e) {
   if (e._family === undefined) {
     e._family =
@@ -83,16 +91,48 @@ function entryBand(e, qFam) {
   const r = entryRel(e);
   return r >= 75 ? 2 : r >= 45 ? 1 : 0;
 }
-function makeComparator(qFam) {
+// Two ranking perspectives the user can switch between (milestone objective 1):
+//   • 'price' — lowest total price first (the original behaviour).
+//   • 'value' — best price per comparable unit first (what the comparison engine
+//     already reasons about). Value is only fair WITHIN one unit family, so the
+//     ranking compares per-unit prices only among entries in the pool's dominant
+//     unit (the one shared by the most sized entries); everything else falls back
+//     to price, after the unit-ranked block. Relevance bands still come first, so
+//     a cheap look-alike never outranks the real product either way.
+function priceKey(a, b) {
+  const pa = entryPrice(a);
+  const pb = entryPrice(b);
+  if (pa == null && pb == null) return entryRel(b) - entryRel(a);
+  if (pa == null) return 1;
+  if (pb == null) return -1;
+  return pa - pb || entryRel(b) - entryRel(a);
+}
+// The unit family shared by the most sized entries in a pool (or null).
+function dominantUnit(pool) {
+  const counts = new Map();
+  for (const e of pool) {
+    const u = entryUnit(e);
+    if (u) counts.set(u.unit, (counts.get(u.unit) || 0) + 1);
+  }
+  let top = null;
+  for (const [unit, c] of counts) if (!top || c > top.c) top = { unit, c };
+  return top ? top.unit : null;
+}
+function makeComparator(qFam, sort, domUnit) {
   return (a, b) => {
     const band = entryBand(b, qFam) - entryBand(a, qFam);
     if (band) return band;
-    const pa = entryPrice(a);
-    const pb = entryPrice(b);
-    if (pa == null && pb == null) return entryRel(b) - entryRel(a);
-    if (pa == null) return 1;
-    if (pb == null) return -1;
-    return pa - pb || entryRel(b) - entryRel(a);
+    if (sort === 'value' && domUnit) {
+      const ua = entryUnit(a);
+      const ub = entryUnit(b);
+      const aIn = ua && ua.unit === domUnit;
+      const bIn = ub && ub.unit === domUnit;
+      if (aIn && bIn) return ua.value - ub.value || priceKey(a, b);
+      if (aIn) return -1; // a has a comparable unit price, b doesn't
+      if (bIn) return 1;
+      // neither is in the dominant unit family -> fall back to price
+    }
+    return priceKey(a, b);
   };
 }
 
@@ -239,8 +279,8 @@ function flyerCard(listing) {
 
   card.addEventListener('click', async () => {
     // Prefer the in-app viewer when the engine holds this offer's edition —
-    // the user never leaves Souq (the viewer handles page images AND stored
-    // PDFs); otherwise the offer's flyer page.
+    // the user never leaves Super Search (the viewer handles page images AND
+    // stored PDFs); otherwise the offer's flyer page.
     const b = await brochureForOffer(offer).catch(() => null);
     if (b && (b.sourceType === 'images' || b.sourceType === 'pdf')) {
       // Open the in-app viewer ON this offer's own flyer page (pageRef is the
@@ -256,9 +296,10 @@ function flyerCard(listing) {
 // --- the factory -----------------------------------------------------------------
 // createMarketplace(root, stores, query) renders the strip + grid into `root`
 // and returns handles the search flow feeds as sources answer.
-export function createMarketplace(root, stores, query = '') {
+export function createMarketplace(root, stores, query = '', opts = {}) {
   const qFam = queryFamily(query);
-  const compareEntries = makeComparator(qFam);
+  let sort = opts.sort === 'value' ? 'value' : 'price';
+  const onSort = typeof opts.onSort === 'function' ? opts.onSort : () => {};
   // Sources strip: one status chip per selected store (+ its flyer chip slot),
   // plus one chip for this week's flyer offers.
   const strip = el('div', 'sources-strip');
@@ -290,6 +331,40 @@ export function createMarketplace(root, stores, query = '') {
   head.appendChild(el('span', 'market-title', 'All offers'));
   const count = el('span', 'market-count', '…');
   head.appendChild(count);
+
+  // Ranking control (milestone objective 1): switch the grid between "Lowest
+  // price" (default) and "Best value" (price per comparable unit). A11y: a radio
+  // group so it reads as one control with two mutually-exclusive options.
+  const sortWrap = el('div', 'sort-toggle');
+  sortWrap.setAttribute('role', 'radiogroup');
+  sortWrap.setAttribute('aria-label', 'Rank results by');
+  const sortButtons = {};
+  const SORTS = [
+    ['price', 'Lowest price'],
+    ['value', 'Best value'],
+  ];
+  for (const [mode, label] of SORTS) {
+    const b = el('button', 'sort-opt', label);
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.dataset.sort = mode;
+    b.setAttribute('aria-checked', String(sort === mode));
+    b.classList.toggle('is-active', sort === mode);
+    b.addEventListener('click', () => {
+      if (sort === mode) return;
+      sort = mode;
+      for (const [m, btn] of Object.entries(sortButtons)) {
+        const on = m === mode;
+        btn.setAttribute('aria-checked', String(on));
+        btn.classList.toggle('is-active', on);
+      }
+      onSort(mode);
+      render();
+    });
+    sortButtons[mode] = b;
+    sortWrap.appendChild(b);
+  }
+  head.appendChild(sortWrap);
   section.appendChild(head);
   const body = el('div', 'market-body');
   const skeleton = el('div', 'results-grid');
@@ -307,7 +382,7 @@ export function createMarketplace(root, stores, query = '') {
   let finished = false;
 
   function render() {
-    pool.sort(compareEntries);
+    pool.sort(makeComparator(qFam, sort, sort === 'value' ? dominantUnit(pool) : null));
     count.textContent = String(pool.length);
     body.innerHTML = '';
     if (!pool.length) {

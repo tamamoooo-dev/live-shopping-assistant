@@ -1,8 +1,9 @@
 /* ==========================================================================
-   Souq — design system
+   Super Search — design system
    A personal shopping assistant: two experiences (Live Search / Brochures)
    under one calm, premium shell. Light + dark, mobile-first, reduced-motion
-   aware. No build step — plain CSS custom properties.
+   aware. No build step — plain CSS custom properties. Primary hue: a light,
+   fresh blue (see --brand / --grad).
    ========================================================================== */
 
 :root {
@@ -14,11 +15,11 @@
   --text: #17181f;
   --muted: #676e7d;
   --line: #e5e6ef;
-  --brand: #6d28d9;
-  --brand-2: #4f46e5;
-  --grad: linear-gradient(135deg, #6d28d9, #4f46e5);
-  --brand-soft: rgba(109, 40, 217, 0.09);
-  --brand-ring: rgba(109, 40, 217, 0.22);
+  --brand: #2563eb;
+  --brand-2: #38bdf8;
+  --grad: linear-gradient(135deg, #38bdf8, #2563eb);
+  --brand-soft: rgba(37, 99, 235, 0.09);
+  --brand-ring: rgba(37, 99, 235, 0.22);
   --accent: #e11d48;
   --accent-soft: rgba(225, 29, 72, 0.1);
   --good: #16a34a;
@@ -29,8 +30,8 @@
   --radius-sm: 12px;
   --pill: 999px;
   --shadow-sm: 0 1px 2px rgba(20, 22, 40, 0.06), 0 1px 3px rgba(20, 22, 40, 0.04);
-  --shadow: 0 12px 32px rgba(30, 27, 75, 0.12);
-  --shadow-lift: 0 18px 44px rgba(30, 27, 75, 0.16);
+  --shadow: 0 12px 32px rgba(23, 43, 84, 0.12);
+  --shadow-lift: 0 18px 44px rgba(23, 43, 84, 0.16);
   --tabbar-h: 60px;
   color-scheme: light;
 }
@@ -45,11 +46,11 @@
     --text: #eceaf6;
     --muted: #9a97ad;
     --line: #2a2839;
-    --brand: #a78bfa;
-    --brand-2: #818cf8;
-    --grad: linear-gradient(135deg, #8b5cf6, #6366f1);
-    --brand-soft: rgba(167, 139, 250, 0.13);
-    --brand-ring: rgba(167, 139, 250, 0.3);
+    --brand: #7cc0fb;
+    --brand-2: #60a5fa;
+    --grad: linear-gradient(135deg, #7cc0fb, #3b82f6);
+    --brand-soft: rgba(124, 192, 251, 0.13);
+    --brand-ring: rgba(124, 192, 251, 0.3);
     --accent: #fb7185;
     --accent-soft: rgba(251, 113, 133, 0.14);
     --good: #4ade80;
@@ -147,7 +148,7 @@ button { font-family: inherit; }
   height: 26px;
   border-radius: 8px;
   background: var(--grad);
-  box-shadow: 0 6px 14px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.35);
 }
 .brand-name {
   font-size: 21px;
@@ -295,10 +296,10 @@ button { font-family: inherit; }
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
   transition: transform 0.12s, box-shadow 0.12s, opacity 0.12s;
 }
-.search-button:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(79, 70, 229, 0.38); }
+.search-button:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(37, 99, 235, 0.38); }
 .search-button:active { transform: none; }
 .search-button:disabled { opacity: 0.6; cursor: default; transform: none; box-shadow: none; }
 
@@ -1071,6 +1072,36 @@ a.summary-name:hover { text-decoration: underline; }
   border-radius: var(--pill);
   padding: 2px 9px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ranking control — segmented "Lowest price / Best value" (objective 1) */
+.sort-toggle {
+  margin-left: auto;
+  align-self: center;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: var(--pill);
+}
+.sort-opt {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  background: transparent;
+  border-radius: var(--pill);
+  padding: 5px 12px;
+  white-space: nowrap;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.sort-opt:hover { color: var(--text); }
+.sort-opt.is-active {
+  color: var(--brand);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 /* store badge on every card — the source shown the same lightweight way for

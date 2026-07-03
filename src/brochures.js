@@ -65,7 +65,7 @@ function storeSection(store) {
     link.href = '#/search';
     link.textContent = 'Search this store';
     link.addEventListener('click', () => {
-      window.dispatchEvent(new CustomEvent('souq:search-store', { detail: { store: store.search } }));
+      window.dispatchEvent(new CustomEvent('supersearch:search-store', { detail: { store: store.search } }));
     });
     head.appendChild(link);
   }

@@ -146,6 +146,15 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
       ),
     );
   }
+  if (s.typeExcluded > 0) {
+    hero.appendChild(
+      el(
+        'div',
+        'summary-family-note',
+        `${s.typeExcluded} product${s.typeExcluded === 1 ? '' : 's'} of a different type excluded from this comparison.`,
+      ),
+    );
+  }
   wrap.appendChild(hero);
 
   // The lowest TOTAL price, when it is a different (smaller) item than the

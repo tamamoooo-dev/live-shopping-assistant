@@ -9,6 +9,7 @@
 import {
   parseSize, sizeLabel, unitPrice, isRelevant, relevance, groupEquivalents, normalizeText,
   productFamily, queryFamily, tokenCoverage, categoryFamily, offerFamily,
+  productType, queryType,
 } from './match.js';
 
 let pass = 0, fail = 0;
@@ -81,6 +82,31 @@ ok('ingredient marker بال does NOT classify: بالبيض stays non-eggs', pr
 ok('no family keyword -> null', productFamily('كرسي مكتب دوار') === null);
 ok('query family: حليب -> milk', queryFamily('حليب نادك') === 'milk');
 ok('query family: brand-only query -> null', queryFamily('كيري مربعات') === null);
+
+// --- product types (the FORM attribute: brand+family shared, still different) ---
+ok('type: nuggets classified', productType('Herfy Chicken Nuggets 750g') === 'nuggets');
+ok('type: minced-roll classifies (earliest form wins)', productType('Herfy Minced Chicken Roll') === 'mince');
+ok('type: نجتس arabic nuggets', productType('هرفي دجاج ناجتس') === 'nuggets');
+ok('type: plain chicken has no type', productType('Fresh Whole Chicken 1kg') === null);
+ok('type: milk has no type', productType('Almarai Fresh Milk 2 L') === null);
+ok('queryType: "chicken nuggets" -> nuggets', queryType('chicken nuggets') === 'nuggets');
+ok('queryType: bare "chicken" -> null', queryType('chicken') === null);
+// The milestone case: same brand + family, different form -> NOT the same product.
+{
+  const grp = groupEquivalents([
+    { store: { id: 'a' }, it: { name: 'Herfy Chicken Nuggets 400 g', brand: 'Herfy', price: 12 } },
+    { store: { id: 'b' }, it: { name: 'Herfy Minced Chicken Roll 400 g', brand: 'Herfy', price: 11 } },
+  ]);
+  ok('type: nuggets and chicken-roll never group as same product', !grp.some((g) => g.items.length === 2));
+}
+// A plain-chicken listing with no form is not split from a typed one (no guessing).
+{
+  const grp = groupEquivalents([
+    { store: { id: 'a' }, it: { name: 'Sadia Chicken Nuggets 400 g', brand: 'Sadia', price: 12 } },
+    { store: { id: 'b' }, it: { name: 'Sadia Chicken Nuggets 400 g', brand: 'Sadia', price: 13 } },
+  ]);
+  ok('type: identical nuggets still group', grp.some((g) => g.items.length === 2));
+}
 
 // --- category-as-family (retailer-taxonomy signal; mirrors the engine) ---
 ok('category eggs -> eggs family', categoryFamily('eggs') === 'eggs');

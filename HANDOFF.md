@@ -1,10 +1,42 @@
-# Project Handoff — Souq (Live Shopping Assistant)
+# Project Handoff — Super Search (Live Shopping Assistant)
+
+> **Branding note:** the app was renamed **Souq → Super Search** in §24. Older
+> sections below still say "Souq" (historical); the product, repos, and Worker
+> names are unchanged — only the user-facing brand and theme changed.
 
 > **Purpose:** This document lets a brand-new session pick up the project cold,
 > without reading any prior conversation. It is the source of truth for the
 > current state. Keep it updated at the end of each phase.
 >
-> **Last updated:** 2026-07-03 (late) · **Phase just completed:**
+> **Last updated:** 2026-07-03 (latest) · **Phase just completed:**
+> **Polishing — Ranking Control, Product Types, Panda Navigation & Super Search
+> Rebrand (see §24) — DEPLOYED & VERIFIED IN PRODUCTION.** Four focused
+> improvements, no architectural change. (1) **Ranking control:** the results
+> grid gained a "Lowest price / Best value" segmented toggle (`src/marketplace.js`);
+> Best value ranks by price per comparable unit within the pool's dominant unit
+> family, and the choice persists (`lsa.app.rank`). (2) **Product types (the FORM
+> attribute):** a new bilingual `productType`/`queryType` classifier (mirrored in
+> frontend `src/match.js` and engine `src/matching.js`) gives the same-product
+> decision a third attribute alongside brand + family — "Herfy chicken nuggets"
+> is no longer treated as, or driven by, "Herfy minced chicken roll" (same brand
+> AND chicken family, different form). The comparison excludes known-different
+> forms (counted + shown in the summary), equivalence grouping refuses to merge
+> them, and the watch monitor got the same `typeMismatch` gate; similar products
+> still render in the grid. **Verified live:** a "herfy chicken nuggets" search
+> excluded "9 products of a different type" while the headline stayed a nuggets
+> product. (3) **Panda navigation restored:** panda.sa's product page is keyed by
+> the VARIETY id, but `products-v3` emitted the catalogue `product.id` — so a
+> Panda result reached Panda and then rendered "No products found". The
+> connector's `normalizeProduct` now emits the variety id for the result `id` AND
+> the link (aligning with the suggestions strategy, which already did). **Verified
+> against live Panda:** variety id `/v3/products/28874` → 200, old product id
+> `18499` → 412; `panda.test.mjs` locks it. (4) **Super Search rebrand:** renamed
+> Souq → Super Search (title, wordmark, meta, internal event) with a lighter-blue
+> primary theme (CSS `--brand`/`--grad` + theme-color), preserving the clean
+> design language. Suites green (frontend match 65/65, compare 45/45, connector
+> panda 9/9 + amazon 12/12, engine matching+watches OK); both Workers redeployed
+> and verified; frontend pushed to GitHub Pages. **Before this**, the prior phase
+> was
 > **Polishing — Amazon Reliability, Navigation & Product Understanding (see §23) —
 > DEPLOYED & VERIFIED IN PRODUCTION.** Three real-world trust regressions were
 > fixed without any new feature or redesign. (1) **Amazon reliability restored:**
@@ -2693,6 +2725,179 @@ belongs in BOTH).
 - **The Amazon `oldPrice`/discount are new** and flow into the comparison/value
   logic like any other store's — a nice side benefit (Amazon deals now show
   their savings).
+
+---
+
+## 24. Polishing — Ranking Control, Product Types, Panda Navigation & Super Search Rebrand
+
+**Status: DEPLOYED & VERIFIED IN PRODUCTION.** A focused polish milestone — four
+targeted improvements, zero architectural change. Every prior contract (Core,
+providers, the 10-key normalized result, the connector/engine split, the
+comparison model shape) is untouched; these changes are additive.
+
+### 24.A Ranking control — "Lowest price" vs "Best value" (objective 1)
+
+The unified results grid always ranked by relevance band then **lowest total
+price**. The comparison summary already reasons about **per-unit value**, so the
+two perspectives existed but only one was exposed in the grid. Now the user
+chooses.
+
+- **UI:** a segmented control in the market head (`.sort-toggle`, a
+  `role="radiogroup"` with two `role="radio"` options — "Lowest price" /
+  "Best value"), styled to match the design system (`styles.css`
+  `.sort-toggle`/`.sort-opt`).
+- **Logic (`src/marketplace.js`):** `makeComparator(qFam, sort, domUnit)`.
+  Relevance bands still come first in BOTH modes (a cheap look-alike never
+  outranks the real product). Within a band:
+  - `price` (default, unchanged) → lowest total price.
+  - `value` → lowest price **per comparable unit**, but only compared **within
+    the pool's dominant unit family** (`dominantUnit(pool)` — the unit shared by
+    the most sized entries, mirroring `compare.js`'s value analysis). Entries
+    without a unit price in that family fall back to price, *after* the
+    unit-ranked block. This keeps the value ranking apples-to-apples (SAR/L never
+    races SAR/kg) instead of comparing raw unit numbers across families.
+  - `entryUnit(e)` caches each entry's `{value, unit}` (online → `unitPrice(it)`,
+    flyer → `listing.up`).
+- **Persistence:** the choice is a remembered daily-use preference —
+  `memory.get('rank')` / `memory.set('rank', mode)` in `app.js` (localStorage key
+  `lsa.app.rank`), passed to `createMarketplace(root, stores, q, { sort, onSort })`.
+- **Verified live** (production connector, "milk"): price mode → 1.25/1.25/1.45…
+  SAR total; toggling to value mode reordered to 3.92/4.33/4.33… SAR/L (higher
+  totals, best value per litre), and the preference persisted across searches.
+
+### 24.B Product types — the FORM attribute (objective 2)
+
+The milestone's example: **"Herfy chicken nuggets"** vs **"Herfy minced chicken
+roll"** share **brand** (Herfy) AND **family** (chicken) yet are different
+products. Family (§21) is the *ingredient/category* attribute and is too coarse
+to separate them; token coverage let the roll through (a 3-token query tolerates
+one missing token). So a third, orthogonal attribute was needed: the product's
+**FORM/type**.
+
+- **New classifier** (`src/match.js`, mirrored in engine `src/matching.js`):
+  `productType(name)` / `queryType(query)` over a narrow bilingual dictionary
+  (`PRODUCT_TYPES`: nuggets, burger, sausage, roll, mince, fillet, breast,
+  strips, wings, kofta, luncheon). Whole-word match, Arabic definite article
+  stripped, earliest keyword wins. A name with no form keyword → `null` (nothing
+  is gated — we never guess a difference we can't see).
+- **Three attributes now decide "same product":** brand (equivalence), family
+  (the ingredient/category gate, §21), and **type** (this):
+  - **Comparison type gate (`compare.js` `computeComparison`)** — parallel to the
+    family gate: when the query names a form, listings of a **KNOWN different
+    form** are excluded from the comparison (`typeExcluded`, surfaced in the
+    summary as "N products of a different type excluded from this comparison").
+    Type-less listings stay. The gate never empties the comparison. Listings
+    carry a cached `type` (online: `productType(name)`; flyer: over both OCR
+    names).
+  - **Equivalence grouping (`match.js` `sameProduct`)** — two items with a KNOWN
+    different form never group as the same product, even at the same brand+size
+    (so no false high-confidence "same product" claim).
+  - **Watch monitor (`engine/src/monitor.js`)** — a `typeMismatch` gate on the
+    grocery sweep (online + flyer), parallel to `familyMismatch`, so a "chicken
+    nuggets" watch is not satisfied by a "chicken roll".
+- **Grid unchanged:** similar-type products still appear in the results grid
+  (the milestone's "similar products may still appear, but must not drive the
+  summary/same-product comparison"). Only the comparison/summary/equivalence and
+  the watch gate enforce type.
+- **Tests:** `match.test.mjs` (65, +9) — form classification, nuggets vs
+  chicken-roll never group, identical nuggets still group; `compare.test.mjs`
+  (45, +6) — the roll is excluded and never becomes the headline, `typeExcluded`
+  counted, a bare "chicken" query gates nothing; engine `dev.mjs` matching
+  selftest — form classification + `queryType`.
+- **Verified live:** a "herfy chicken nuggets" search excluded **9 products of a
+  different type** from the comparison while the headline stayed a nuggets
+  product and Herfy nuggets still filled the grid.
+
+### 24.C Panda navigation restored (objective 3)
+
+**Symptom:** opening a Panda result reached panda.sa and then displayed **"No
+products found."** **Root cause:** panda.sa's product page (and its backing
+`GET /v3/products/<id>` detail call) resolve **only by the VARIETY id**, but the
+`products-v3` strategy built the result `id` + link from the catalogue
+`product.id`. For "Almarai Long Life Milk" the list returns `product.id 18499`
+while the variety is `28874`; the storefront looked up 18499, found nothing, and
+rendered the empty state. (The `suggestions-v3` strategy already emitted the
+variety id — the two strategies were inconsistent.)
+
+- **Fix (`serverless-connector/src/providers/panda.js` `normalizeProduct`):**
+  emit `variety.id` for BOTH the result `id` and the `productLink` (fallback to
+  `product.id` only if a product has no variety). One-line-of-intent change,
+  navigation architecture preserved (still a plain absolute product URL the card
+  opens). `normalizeProduct` is now exported for testing.
+- **Verified against LIVE Panda:** new variety ids resolve —
+  `/v3/products/28874` → **200**, `/v3/products/25945` → 200, `/v3/products/33332`
+  → 200; the old catalogue id `/v3/products/18499` → **412 "Product not found"**
+  (exactly the bug). Production connector now returns variety-id links.
+- **Regression test:** `serverless-connector/src/providers/panda.test.mjs` (9)
+  — a fixture whose `product.id` (18499) ≠ `variety.id` (28874) asserts the
+  result id/link use the variety id and never contain 18499, plus the
+  no-variety fallback.
+- **Watch note:** `monitor.js` re-finds a product watch by `String(r.id) === id`
+  (or `link.includes(id)`). New Panda product watches store the variety id and
+  match cleanly; any pre-existing Panda product watch keyed on the old
+  `product.id` would need re-creating — acceptable for a personal tool, and
+  grocery watches (query-based) are unaffected.
+
+### 24.D Super Search rebrand + lighter-blue theme (objective 4)
+
+- **Name:** Souq → **Super Search** everywhere user-facing — `index.html`
+  `<title>`, meta description, the brand wordmark + `aria-label`; `app.js`
+  `document.title` for all three routes; the internal custom event
+  `souq:search-store` → `supersearch:search-store` (both dispatcher in
+  `brochures.js` and listener in `app.js`); code-comment brand references. No
+  "Souq" remains in shipped files (HANDOFF keeps historical mentions with a
+  branding note at the top).
+- **Theme (lighter blue, `styles.css`):** the design system is fully driven by
+  CSS custom properties, so the refresh is centralized on `--brand`/`--brand-2`/
+  `--grad`/`--brand-soft`/`--brand-ring` (light: `#2563eb` + a sky→blue gradient
+  `#38bdf8→#2563eb`; dark: `#7cc0fb`/`#60a5fa`), plus the two hard-coded brand
+  shadows (search button, brand mark) and the shadow tint, and the `theme-color`
+  meta tags. Layout, spacing, typography, motion, and store colors are
+  unchanged — the clean design language is preserved.
+- **Verified live:** the wordmark, blue search button/chip, gradient brand mark,
+  and blue segmented toggle all render correctly in the preview; no console
+  errors.
+
+### 24.E Deployment
+
+- **Connector** (`shopping-connector`) redeployed (`npx wrangler deploy`) — the
+  Panda variety-id fix. Version `a8979b24`. Production verified (variety-id
+  links).
+- **Brochure Engine** (`brochure-engine`) redeployed — the mirrored
+  `productType`/`queryType` + the watch `typeMismatch` gate. Version `bde45555`.
+  Health verified (18 stores, 15,706 current offers, 5 active watches). No schema
+  migration (additive code only).
+- **Frontend** pushed to `main` → GitHub Pages (static; ranking toggle, product
+  types in the comparison, rebrand + theme).
+
+### 24.F Files touched
+
+- Frontend: `src/match.js` (productType/queryType + sameProduct form guard),
+  `src/compare.js` (type gate + `type` on listings + `typeExcluded`),
+  `src/summary.js` (type-excluded note), `src/marketplace.js` (ranking toggle +
+  value comparator), `src/app.js` (persisted rank pref + titles + event),
+  `src/brochures.js` (event rename), `index.html` (brand + theme-color),
+  `styles.css` (theme vars + `.sort-toggle`), `src/match.test.mjs`,
+  `src/compare.test.mjs`, `HANDOFF.md`.
+- Connector: `src/providers/panda.js` (variety-id fix + export),
+  `src/providers/panda.test.mjs` (new).
+- Engine: `src/matching.js` (productType/queryType mirror), `src/monitor.js`
+  (typeMismatch gate), `dev.mjs` (selftest asserts).
+
+### 24.G Remaining limitations
+
+- **`PRODUCT_TYPES` is deliberately narrow** (processed/prepared-protein forms,
+  where family is too coarse and the milestone's example lives). Other type
+  distinctions (e.g. juice *flavour*, yogurt *style*) are still handled only by
+  token coverage — extensible by adding to the dictionary in BOTH mirrors when a
+  real case appears. A name with no form keyword is intentionally un-gated.
+- **Best-value grid ranking is within the dominant unit family only.** Entries
+  in other unit families (or with no parseable size) fall back to price after the
+  unit-ranked block — there is no universal cross-unit "value", by design.
+- **Panda product watches** created before this fix (keyed on the old
+  `product.id`) won't re-find; re-create them. Grocery/other-store watches
+  unaffected.
+- **Amazon stays best-effort** (unchanged); PA-API remains the durable path.
 
 ---
 
