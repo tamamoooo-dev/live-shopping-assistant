@@ -36,6 +36,7 @@ import {
   relevance,
   tokenCoverage,
   tokens,
+  expandToken,
   productFamily,
   queryFamily,
   offerFamily,
@@ -56,6 +57,34 @@ function coversQuery(item, query) {
   if (n < 2) return true;
   const cov = tokenCoverage(item, query);
   return n === 2 ? cov >= 1 : cov >= (n - 1) / n;
+}
+
+// WHICH query tokens a listing actually matches (as a Set of token indices),
+// over its name AND brand, with the same primitives match.js uses (whole word,
+// long word-start prefix, long substring, bilingual synonyms). This is the
+// basis of the product-identity lock: two listings are the SAME product only
+// when they match the same discriminating query tokens (the brand "herfy", the
+// cut "breast"). Pure — it only reuses match.js's exported helpers.
+function coveredQueryTokens(name, brand, query) {
+  const qTokens = tokens(query);
+  const f = normalizeText(`${name || ''} ${brand || ''}`);
+  const words = f.split(' ').filter(Boolean);
+  const wordSet = new Set(words);
+  const covered = new Set();
+  qTokens.forEach((qt, i) => {
+    for (const v of expandToken(qt)) {
+      if (!v) continue;
+      if (
+        wordSet.has(v) ||
+        (v.length >= 4 && words.some((w) => w.startsWith(v))) ||
+        (v.length >= 5 && f.includes(v))
+      ) {
+        covered.add(i);
+        break;
+      }
+    }
+  });
+  return covered;
 }
 
 // --- listings: one normalized shape for both worlds ----------------------------
@@ -216,6 +245,42 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     }
   }
 
+  // PRODUCT-IDENTITY LOCK — the Shopping Summary must compare prices for the
+  // SAME product the Grid identifies, never re-pick a cheaper look-alike. The
+  // Grid ranks the intended product to the top by relevance, so we take the
+  // highest-relevance listing as the identity ANCHOR and keep only listings
+  // that match every query token the anchor matches (its brand + descriptors).
+  // A cheaper different-brand ("Sadia" under a "Herfy" query) or different-cut
+  // ("liver" under a "chicken breast" query) look-alike matches FEWER of the
+  // query's tokens, so it can no longer displace the headline — while a bare
+  // family query ("chicken"), whose anchor matches only the one shared token,
+  // still keeps every form (no over-gating).
+  let identityExcluded = 0;
+  if (listings.length > 1 && tokens(query).length) {
+    const anchor = listings.reduce((best, l) => {
+      if (!best) return l;
+      if ((l.rel || 0) !== (best.rel || 0)) return (l.rel || 0) > (best.rel || 0) ? l : best;
+      // Tie: prefer an online result (cleaner identity than flyer OCR), then
+      // the lower price — mirrors how the Grid orders the top band.
+      const bOnline = best.source === 'online';
+      const lOnline = l.source === 'online';
+      if (bOnline !== lOnline) return lOnline ? l : best;
+      return l.price < best.price ? l : best;
+    }, null);
+    const anchorSet = coveredQueryTokens(anchor.name, anchor.brand, query);
+    if (anchorSet.size) {
+      const locked = listings.filter((l) => {
+        const s = coveredQueryTokens(l.name, l.brand, query);
+        for (const t of anchorSet) if (!s.has(t)) return false; // must cover ≥ the anchor
+        return true;
+      });
+      if (locked.length) {
+        identityExcluded = listings.length - locked.length;
+        listings = locked;
+      }
+    }
+  }
+
   const storeIds = new Set(listings.map((l) => `${l.source}:${l.store.id}`));
   const min = Math.min(...listings.map((l) => l.price));
   const max = Math.max(...listings.map((l) => l.price));
@@ -299,20 +364,83 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
   if (equivalent && headIt && equivalent.sorted.some((i) => i.it === headIt)) confidence = 'high';
   else if (value) confidence = 'medium';
 
-  // Price History verdict (tracked products), vs today's best total price.
+  // Price History verdict (tracked products). Each SIZE/VARIANT keeps its own
+  // independent lowest-ever record (§ engine getPricesDoc.variants), so the
+  // verdict is always apples-to-apples: today's best price for ONE size vs that
+  // SAME size's own record low — a 30-egg tray is never measured against a
+  // 6-egg pack's low. We lock to a size we have BOTH a historical record AND a
+  // live price for today, preferring the recommended product's own size and
+  // otherwise the best-tracked size present in today's results. Only when no
+  // per-size record is comparable do we fall back to the product-wide low
+  // against today's cheapest (the original behaviour), so nothing regresses.
   let history = null;
-  if (prices && prices.lowest && prices.lowest.price != null) {
-    const low = prices.lowest;
-    const todaysBest = cheapest.price;
-    const delta = todaysBest - low.price;
-    let verdict;
-    if (todaysBest <= low.price + 1e-9) verdict = 'at-low';
-    else if (delta / low.price <= 0.1) verdict = 'near-low';
-    else verdict = 'above-low';
-    const latest = (prices.latest || [])
-      .filter((p) => p && p.price != null)
-      .sort((a, b) => a.price - b.price);
-    history = { low, todaysBest, delta, verdict, latest };
+  if (prices && (prices.lowest || (Array.isArray(prices.variants) && prices.variants.length))) {
+    const sizeMatch = (sz, v) =>
+      sz && sz.unit === v.sizeUnit && sz.total != null && v.sizeTotal != null &&
+      Math.abs(sz.total - v.sizeTotal) / Math.max(sz.total, v.sizeTotal) <= 0.03;
+    // Engine order is most-observed-first, unsized last; keep only real sizes
+    // with a record.
+    const variants = (Array.isArray(prices.variants) ? prices.variants : []).filter(
+      (v) => v.sizeUnit && v.sizeTotal != null && v.lowest && v.lowest.price != null,
+    );
+    const todaysBestFor = (v) => {
+      const same = listings.filter((l) => sizeMatch(l.size, v));
+      return same.length ? Math.min(...same.map((l) => l.price)) : null;
+    };
+    // The chosen variant: the headline's own size when today's results carry it,
+    // else the first tracked size (most observed) present in today's results.
+    const headSize = headline.listing.size;
+    let chosen = null;
+    let chosenToday = null;
+    const headVariant = headSize ? variants.find((v) => sizeMatch(headSize, v)) : null;
+    if (headVariant) {
+      const tb = todaysBestFor(headVariant);
+      if (tb != null) {
+        chosen = headVariant;
+        chosenToday = tb;
+      }
+    }
+    if (!chosen) {
+      for (const v of variants) {
+        const tb = todaysBestFor(v);
+        if (tb != null) {
+          chosen = v;
+          chosenToday = tb;
+          break;
+        }
+      }
+    }
+
+    let low = null;
+    let todaysBest = null;
+    let variantInfo = null;
+    let latestSource = [];
+    let otherVariants = [];
+    if (chosen && chosenToday != null) {
+      low = chosen.lowest;
+      todaysBest = chosenToday;
+      variantInfo = { label: chosen.label, sizeUnit: chosen.sizeUnit, sizeTotal: chosen.sizeTotal };
+      latestSource = chosen.latest || [];
+      // The OTHER tracked sizes' lows — context that makes the per-size record
+      // legible ("180g 13 · 500g 30", each its own independent history).
+      otherVariants = variants
+        .filter((v) => v.key !== chosen.key)
+        .map((v) => ({ label: v.label, low: v.lowest }));
+    } else if (prices.lowest && prices.lowest.price != null) {
+      low = prices.lowest;
+      todaysBest = cheapest.price;
+      latestSource = prices.latest || [];
+    }
+
+    if (low && low.price != null && todaysBest != null) {
+      const delta = todaysBest - low.price;
+      let verdict;
+      if (todaysBest <= low.price + 1e-9) verdict = 'at-low';
+      else if (delta / low.price <= 0.1) verdict = 'near-low';
+      else verdict = 'above-low';
+      const latest = latestSource.filter((p) => p && p.price != null).sort((a, b) => a.price - b.price);
+      history = { low, todaysBest, delta, verdict, latest, variant: variantInfo, otherVariants };
+    }
   }
 
   return {
@@ -324,6 +452,7 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     family: targetFamily,
     familyExcluded,
     typeExcluded,
+    identityExcluded,
     sharedWith,
     headline,
     secondary,

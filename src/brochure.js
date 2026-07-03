@@ -14,7 +14,7 @@
 //   GET /brochures/history?store=&region= -> all editions, newest first
 //   GET /asset/<key>                      -> stored bytes (page images, meta.json, PDFs)
 //   GET /lowest?product=<id>              -> { product, lowest: PricePoint|null }
-//   GET /prices?product=<id>              -> { product, lowest, latest: [PricePoint] }
+//   GET /prices?product=<id>              -> { product, lowest, latest: [PricePoint], variants: [VariantRecord] }
 
 const ENGINE_BASE = 'https://brochure-engine.tamamoooo.workers.dev';
 
@@ -362,7 +362,13 @@ export async function pricesForProduct(productId) {
     if (!r.ok) return null;
     const j = await r.json();
     if (!j || !j.lowest) return null;
-    return { lowest: j.lowest, latest: Array.isArray(j.latest) ? j.latest : [] };
+    // `variants` (per size/variant history) is optional — an older engine
+    // deployment omits it, so the summary falls back to the product-wide low.
+    return {
+      lowest: j.lowest,
+      latest: Array.isArray(j.latest) ? j.latest : [],
+      variants: Array.isArray(j.variants) ? j.variants : [],
+    };
   } catch {
     return null;
   }

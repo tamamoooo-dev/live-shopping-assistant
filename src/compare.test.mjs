@@ -236,6 +236,96 @@ const label = (id) => id;
   ok('type: bare "chicken" query gates nothing', c.typeExcluded === 0 && c.listings.length === 2);
 }
 
+// --- PRODUCT-IDENTITY LOCK: the Summary never swaps the Grid's product ----------------
+// Task 1, Example 1: a cheaper different CUT (chicken liver) must not become the
+// headline for a "chicken breast" query — the Summary locks onto the same
+// product the Grid identifies (its brand + descriptors).
+{
+  const tagged = [
+    T('panda', 'Sadia Chicken Breast 1 kg', 22, { brand: 'Sadia' }),
+    T('lulu', 'Sadia Chicken Breast 1 kg', 20, { brand: 'Sadia' }),
+    T('danube', 'Sadia Chicken Liver 450 g', 7, { brand: 'Sadia' }), // cheaper, different cut
+  ];
+  const c = computeComparison('sadia chicken breast', tagged, [], null, label);
+  ok('identity: cheaper chicken liver never becomes the headline', c.headline.listing.price !== 7);
+  ok('identity: headline stays a chicken breast', /breast/i.test(c.headline.listing.name));
+  ok('identity: the different-cut liver is excluded from the comparison', !c.listings.some((l) => /liver/i.test(l.name)));
+  ok('identity: exclusion is counted', c.identityExcluded === 1);
+  ok('identity: headline is the cheaper of the SAME product (breast)', c.headline.listing.price === 20);
+}
+
+// Task 1, Example 2: a cheaper different BRAND (Sadia) must not become the
+// headline / lowest for a "Herfy chicken nuggets" query.
+{
+  const tagged = [
+    T('panda', 'Herfy Chicken Nuggets 400 g', 14, { brand: 'Herfy' }),
+    T('lulu', 'Herfy Chicken Nuggets 400 g', 13.5, { brand: 'Herfy' }),
+    T('danube', 'Sadia Chicken Nuggets 400 g', 9, { brand: 'Sadia' }), // cheaper, different brand
+  ];
+  const c = computeComparison('herfy chicken nuggets', tagged, [], null, label);
+  ok('identity: cheaper different-brand nuggets never become the headline', c.headline.listing.price !== 9);
+  ok('identity: headline stays a Herfy product', /herfy/i.test(c.headline.listing.name));
+  ok('identity: the different-brand look-alike is excluded', !c.listings.some((l) => /sadia/i.test(l.name)));
+  ok('identity: no cheaper-brand secondary sneaks in', !c.secondary || !/sadia/i.test(c.secondary.listing.name));
+}
+
+// The lock never over-gates: a bare family query keeps every brand/variant of
+// that product (its anchor matches only the one shared token).
+{
+  const tagged = [
+    T('panda', 'Sadia Chicken Nuggets 400 g', 12),
+    T('lulu', 'Herfy Chicken Nuggets 400 g', 13.5),
+    T('danube', 'Americana Chicken Nuggets 400 g', 11),
+  ];
+  const c = computeComparison('chicken nuggets', tagged, [], null, label);
+  ok('identity: a generic query keeps every brand (no over-gating)', c.identityExcluded === 0 && c.listings.length === 3);
+  ok('identity: generic query is free to pick the cheapest', c.headline.listing.price === 11);
+}
+
+// --- PER-VARIANT PRICE HISTORY: each size keeps its own lowest-ever record -----------
+// Task 2: the verdict judges the recommended product against the record for ITS
+// OWN size — a 30-egg tray is never measured against a 6-egg pack's low.
+{
+  const tagged = [T('panda', 'White Eggs Tray 30 pcs', 20)];
+  const prices = {
+    lowest: { price: 5, store: 'lulu' }, // product-wide low is a 6-pack — NOT comparable
+    latest: [{ store: 'lulu', price: 5 }],
+    variants: [
+      { key: 'pcs:6', sizeUnit: 'pcs', sizeTotal: 6, label: '6 pcs', lowest: { price: 5, store: 'lulu', observedAt: '2026-01-10' }, latest: [{ store: 'lulu', price: 5 }] },
+      { key: 'pcs:30', sizeUnit: 'pcs', sizeTotal: 30, label: '30 pcs', lowest: { price: 14, store: 'danube', observedAt: '2026-02-10' }, latest: [{ store: 'danube', price: 16 }] },
+    ],
+  };
+  const c = computeComparison('eggs', tagged, [], prices, label);
+  ok('variant: history locks to the 30-pack record, not the 6-pack low', c.history && c.history.low.price === 14);
+  ok('variant: verdict compares today (20) vs the 30-pack low of 14 -> above-low', c.history.verdict === 'above-low');
+  ok('variant: the matched size is labelled', c.history.variant && c.history.variant.label === '30 pcs');
+  ok('variant: other sizes are surfaced as context', c.history.otherVariants.some((v) => v.label === '6 pcs' && v.low.price === 5));
+}
+
+// A matching variant at/under today's price gives an at-low verdict for THAT size.
+{
+  const tagged = [T('lulu', 'Almarai Milk 1 L', 7)];
+  const prices = {
+    lowest: { price: 7, store: 'lulu' },
+    latest: [{ store: 'lulu', price: 7 }],
+    variants: [
+      { key: 'ml:1000', sizeUnit: 'ml', sizeTotal: 1000, label: '1 L', lowest: { price: 7, store: 'lulu', observedAt: '2026-06-01' }, latest: [{ store: 'lulu', price: 7 }] },
+      { key: 'ml:2000', sizeUnit: 'ml', sizeTotal: 2000, label: '2 L', lowest: { price: 11, store: 'panda', observedAt: '2026-05-01' }, latest: [{ store: 'panda', price: 12 }] },
+    ],
+  };
+  const c = computeComparison('milk', tagged, [], prices, label);
+  ok('variant: 1 L headline matches the 1 L record (at-low)', c.history && c.history.low.price === 7 && c.history.verdict === 'at-low');
+  ok('variant: the 1 L size is the matched variant', c.history.variant.sizeTotal === 1000);
+}
+
+// Backward compatible: an engine without `variants` falls back to the product-wide low.
+{
+  const tagged = [T('panda', 'Milk 2 L', 12)];
+  const prices = { lowest: { price: 12, store: 'lulu' }, latest: [{ store: 'lulu', price: 13 }] };
+  const c = computeComparison('milk', tagged, [], prices, label);
+  ok('variant: falls back to the product-wide low when variants are absent', c.history && c.history.verdict === 'at-low' && !c.history.variant);
+}
+
 // --- SHARED BEST PRICE: same product, same price, several stores --------------------
 {
   const tagged = [

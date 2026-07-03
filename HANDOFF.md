@@ -2901,4 +2901,153 @@ variety id — the two strategies were inconsistent.)
 
 ---
 
+## 25. Shopping Summary — Product-Identity Lock & Per-Variant Price History
+
+**Status: DEPLOYED & VERIFIED IN PRODUCTION.** A focused, Summary-only milestone.
+Explicit scope guard from the brief: **do not touch the Grid ranking, matching
+logic, product discovery, or qualification rules** — only the Shopping Summary.
+Both changes are additive; every prior contract (Core, providers, 10-key result,
+connector/engine split, the comparison model shape, the Grid comparator) is
+untouched. The Grid (`marketplace.js`) was **not modified**.
+
+### 25.A The two problems
+
+**Task 1 — the Summary sometimes changed the product identity the Grid had
+already established.** The Grid ranks the intended product to the top by
+relevance, but `computeComparison` (the Summary's engine) only applied the
+family + type gates and then picked the cheapest / best-value survivor. Two
+real failure modes:
+- *"Sadia chicken breast"* → the Summary could pick **chicken liver** because it
+  was cheaper (liver carries no `PRODUCT_TYPES` keyword, so the type gate — which
+  only drops *known-different* forms — let it through; family is `chicken` for
+  both).
+- *"Herfy chicken nuggets"* → the Summary picked **Sadia** nuggets because they
+  were cheaper (same family `chicken`, same type `nuggets`; there was **no brand
+  gate**). Best Buy and Lowest Price both became Sadia.
+
+**Task 2 — the Lowest Price history stored one lowest for the whole product
+family.** `getLowest(product)` is `MIN(price)` over every edition-anchored point,
+mixing sizes and even mismatched products. Live `/prices?product=milk` returned a
+single "lowest" of 7 SAR (1 L Almarai) sitting in the same bucket as a 61.90 feta
+cheese and a 23.50 choco biscuit; `/prices?product=eggs` returned 13.95 (an
+18-pc quail pack) as *the* low — misleading for anyone buying a 30-pc tray.
+
+### 25.B Task 1 — the product-identity lock (`src/compare.js`)
+
+After the family + type gates produce the comparison pool, `computeComparison`
+now **locks onto the Grid's product identity** before choosing any headline:
+
+1. **Anchor** = the highest-relevance listing in the pool (ties → prefer an
+   online result over flyer OCR, then the lower price). This mirrors what the
+   Grid ranks to the top, so the anchor *is* the product the Grid identified.
+2. **`coveredQueryTokens(name, brand, query)`** (new pure helper) returns the set
+   of query tokens a listing matches over its name **and** brand, using the exact
+   primitives `match.js` already exposes (whole-word / long word-start prefix /
+   long substring, bilingual synonyms via `expandToken`). No change to `match.js`.
+3. **Keep only listings whose matched-token set is a superset of the anchor's.**
+   A cheaper different-cut ("liver" misses `breast`) or different-brand ("Sadia"
+   misses `herfy`) look-alike matches *fewer* of the query's tokens, so it can no
+   longer displace the headline. The excluded count is surfaced as
+   `identityExcluded` and rendered as an honest note in the Summary.
+
+**No over-gating.** A bare family query ("chicken", "chicken nuggets") has an
+anchor that matches only the shared token(s), so every brand/variant still
+qualifies — the lock is a no-op exactly when the user hasn't named a
+discriminator. Guarded by `listings.length > 1 && tokens(query).length` and by
+requiring a non-empty anchor set and non-empty locked result (the lock never
+empties the comparison).
+
+### 25.C Task 2 — per-size/variant Lowest Price history
+
+**Engine (`src/priceHistory.js`) — read-time variant grouping, no schema change,
+no migration, works on all existing data.** `getPricesDoc` now also returns a
+`variants[]` array: `groupVariants(history)` buckets the edition-anchored points
+by their **parsed size** (`parseSize` from `matching.js`), and for each size
+derives an *independent* lowest-ever (price / where / when) plus latest-per-store.
+Points whose name carries no parseable size fall into a separate `unsized`
+bucket (kept last, never merged with a real size) — this is what quarantines the
+feta/biscuit pollution out of every real size's record. `lowest` and `latest`
+(product-wide) are unchanged, so the endpoint stays backward-compatible.
+
+Live after deploy:
+- `milk` → `1 L → 7 @ lulu`, `18 × 150 ml → 15.99 @ hyperpanda`, `unsized → 23.50`.
+- `eggs` → `18 pcs → 13.95 @ lulu`, `30 pcs → 14.99 @ hyperpanda`, `unsized → 21.95`.
+
+**Frontend (`src/compare.js`, `src/brochure.js`, `src/summary.js`).**
+`pricesForProduct` passes `variants` through (optional — an older engine simply
+omits it and the Summary falls back). The history verdict is now **always
+apples-to-apples**: it locks to a size for which we have **both** a historical
+record **and** a live price today — the recommended product's own size when
+today's results carry it, otherwise the best-tracked size present in today's
+results — and compares that size's today's-best against *its own* record low.
+Only when no per-size record is comparable does it fall back to the product-wide
+low vs today's cheapest (legacy behaviour, so nothing regresses). The Summary
+renders the matched size in the "Lowest recorded (**1 L**): …" line and lists the
+other tracked sizes ("Other sizes: 18 × 150 ml 15.99 SAR"), each its own record.
+
+This also fixes a *pre-existing* latent bug: the old verdict compared
+`cheapest.price` — for "milk" that was a **125 ml strawberry milk at 1.25 SAR** —
+against the 1 L low of 7, falsely reporting "record low". The verdict now
+compares like sizes.
+
+### 25.D Validation
+
+- **Frontend** `node src/compare.test.mjs` → **63 passed, 0 failed**
+  (10 new: identity lock for the two brief examples + no-over-gating, and
+  per-variant history incl. the 30-pack-not-6-pack case, at-low for a matched
+  size, and backward-compat fallback). `node src/match.test.mjs` → **65/65**
+  (untouched — proves the matching layer was not modified).
+- **Engine** `node dev.mjs selftest` → **ALL VERIFIED** end-to-end (incl. live
+  D4D), with a new `groupVariants` assertion (Philadelphia 180g/280g/500g each
+  keeping their own low; 500g picks 30 @ lulu not the pricier 34; unsized bucket
+  last).
+
+### 25.E Deployment & production verification
+
+- **Engine** `wrangler deploy` → `brochure-engine` version
+  `b203fc4b-639b-4c91-a542-435cbb85fd8a`. Verified live: `/prices?product=milk`
+  and `?product=eggs` now return per-variant records (see 25.C).
+- **Connector** — **unchanged**, not redeployed.
+- **Frontend** — GitHub Pages (static ES modules; deploy = push to `main`).
+  Verified via the local static server against the **live** workers:
+  - *"milk"* → history box reads **"Today's best matches the lowest ever
+    recorded / Lowest recorded (1 L): 7.00 SAR at Lulu · Jul 2, 2026 / Other
+    sizes: 18 × 150 ml 15.99 SAR"** — no feta/biscuit pollution.
+  - *"sadia chicken breast"* → Best Buy = **Sadia Tender Chicken Breast 2Kg**,
+    "Same product elsewhere" lists Sadia breast at Tamimi/Amazon/Lulu, and
+    **"84 cheaper look-alikes from a different brand or variant excluded"** — no
+    liver, no other brand hijacking the recommendation. No console errors.
+
+### 25.F Files touched
+
+- Frontend: `src/compare.js` (identity-lock + `coveredQueryTokens` +
+  `identityExcluded`; per-variant history verdict), `src/summary.js`
+  (identity-excluded note, size label on the "Lowest recorded" line, "Other
+  sizes" row), `src/brochure.js` (`variants` pass-through), `styles.css`
+  (`.sh-variants`), `src/compare.test.mjs` (10 new tests), `HANDOFF.md`.
+- Engine: `src/priceHistory.js` (`groupVariants` + `variants` in `getPricesDoc`,
+  `parseSize` import), `dev.mjs` (import + `groupVariants` selftest assertions).
+
+### 25.G Remaining limitations & future considerations
+
+- **History capture quality is unchanged (out of scope).** `recordPrices` still
+  stores the connector's *best-ranked* result per store/edition with no family/
+  relevance gate, which is why a feta cheese / choco biscuit can enter the milk
+  series at all. Per-variant grouping *quarantines* those into the `unsized`
+  bucket so they never corrupt a sized headline's verdict, but the capture-side
+  cleanup (gating `pickPricedResult` by family/relevance, or recording several
+  distinct sizes per run) is a separate, future engine change — deliberately not
+  done here to honour the "don't touch matching/qualification" guard.
+- **Variant identity is keyed by total base quantity** (`${unit}:${round(total)}`),
+  so a `6 × 200 ml` and a single `1200 ml` share a bucket. Fine for the tracked
+  staples; refine to `each×pack` if a real case needs pack-level separation.
+- **Only `milk` and `eggs` are tracked** (`products.js`), so per-variant history
+  is exercised for those today; the mechanism is product-agnostic and needs no
+  code change to cover a new tracked product.
+- **The identity lock trusts the anchor.** If the Grid's top relevance pick were
+  itself wrong the lock would inherit that — but that is precisely the Grid's job
+  (unchanged by directive), and the anchor is chosen the same way the Grid ranks.
+
+---
+
 _End of handoff._

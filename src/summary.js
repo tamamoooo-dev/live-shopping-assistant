@@ -155,6 +155,15 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
       ),
     );
   }
+  if (s.identityExcluded > 0) {
+    hero.appendChild(
+      el(
+        'div',
+        'summary-family-note',
+        `${s.identityExcluded} cheaper look-alike${s.identityExcluded === 1 ? '' : 's'} from a different brand or variant excluded — prices are compared only for the product identified above.`,
+      ),
+    );
+  }
   wrap.appendChild(hero);
 
   // The lowest TOTAL price, when it is a different (smaller) item than the
@@ -199,11 +208,12 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
     title.appendChild(el('span', 'sh-verdict', vlabel));
     box.appendChild(title);
     const low = hh.low;
+    const sizeTag = hh.variant && hh.variant.label ? ` (${hh.variant.label})` : '';
     box.appendChild(
       el(
         'div',
         'sh-detail',
-        `Lowest recorded: ${money(low.price)} at ${storeLabelFn(low.store)}${
+        `Lowest recorded${sizeTag}: ${money(low.price)} at ${storeLabelFn(low.store)}${
           low.observedAt ? ` · ${fmtDate(low.observedAt)}` : low.edition ? ` · ${low.edition}` : ''
         }`,
       ),
@@ -226,6 +236,22 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
         list.appendChild(row);
       }
       box.appendChild(list);
+    }
+    // Other tracked sizes, each with its own independent lowest-ever record.
+    if (hh.otherVariants && hh.otherVariants.length) {
+      const ov = el('div', 'sh-variants');
+      ov.appendChild(el('span', 'sh-variants-label', 'Other sizes: '));
+      ov.appendChild(
+        el(
+          'span',
+          'sh-variants-list',
+          hh.otherVariants
+            .slice(0, 4)
+            .map((v) => `${v.label} ${money(v.low.price)}`)
+            .join(' · '),
+        ),
+      );
+      box.appendChild(ov);
     }
     wrap.appendChild(box);
   }
