@@ -18,10 +18,11 @@
 > (`#/alerts`). Offer search relevance was rebuilt on word boundaries + a
 > bilingual synonym bridge (the "eggs returns white-onion flyer offers" class
 > of bug is gone), shared by a new engine module (`src/matching.js`).
-> **⚠️ DEPLOYMENT STATUS: see §20.H — the code is complete and fully verified
-> locally; the production D1 migration + Worker deploy + git pushes were
-> blocked by the session's permission gate and need the user to run/allow
-> them.** **Before this**, the prior phase was **Brochure
+> **⚠️ DEPLOYMENT STATUS: see §20.H — both repos are pushed and the FRONTEND
+> IS LIVE on GitHub Pages (byte-verified, degrades gracefully). Only the two
+> engine steps remain — the D1 migration + `wrangler deploy` — blocked by the
+> session's permission gate; the user must run/allow them, then verify per
+> §20.H.** **Before this**, the prior phase was **Brochure
 > Intelligence — Structured Offers + Coverage Expansion + Retention — DEPLOYED &
 > VERIFIED IN PRODUCTION (see §19).** The Brochure Engine is now a source of
 > STRUCTURED shopping data: it extracts **per-product offers** (price, was-price,
@@ -428,15 +429,17 @@ wired into the UI (dropdown + checkbox chips).
 > Engine, Price History) are complete, and the **Unified Interface first pass**
 > (§14) is now integrated; the next milestone is **Personal Alerts**.
 
-1. **Finish the §20 production deployment (BLOCKED-ON-USER).** The Intelligent
-   Shopping milestone is code-complete and locally verified, but the four
-   production actions were denied by the session permission gate — run them in
-   this order (details §20.H): (a) D1 migration
+1. **Finish the §20 engine deployment (BLOCKED-ON-USER).** Both repos are
+   pushed and the new frontend is live on Pages; only the engine steps remain
+   (details §20.H): from `serverless-connector/brochure-engine/`, (a) D1
+   migration
    `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-watches.sql`,
-   (b) `npx wrangler deploy` (from `brochure-engine/`), (c) `git push` both
-   repos, (d) optionally `npx wrangler secret put NTFY_TOPIC` for phone push
-   (topic name = the shared secret; pick something unguessable and subscribe to
-   it in the ntfy app — no account needed). Then verify per §20.H's checklist.
+   (b) `npx wrangler deploy`, (c) optionally
+   `npx wrangler secret put NTFY_TOPIC` for phone push (topic name = the
+   shared secret; pick something unguessable and subscribe to it in the ntfy
+   app — no account needed). Then verify per §20.H's checklist. Until then the
+   live Alerts page shows an honest "service unreachable" note and everything
+   else works.
 2. **Usability gaps found integrating the Unified Interface (§14.D) — mostly
    closed by the §16 redesign.** Status:
    (a) **partially addressed** — the home state now advertises which products
@@ -2151,15 +2154,19 @@ live-shopping-assistant/
   unreachable note; Brochures page regression-checked (19 sections, 47
   covers); **zero console errors/warnings**.
 
-### 20.H Production deployment — REQUIRED NEXT (blocked-on-user)
-Run in this order (Node PATH note §8):
+### 20.H Production deployment — engine steps REQUIRED NEXT (blocked-on-user)
+**Already done:** both repos pushed (`shopping-connector` `a8b1707`,
+`live-shopping-assistant` `398b95b`); GitHub Pages serves the new frontend
+(all files byte-verified against source). Until the engine deploys, the live
+Alerts page shows its honest "unreachable" state and watch creation shows a
+clean error; search/summary/flyers are fully functional.
+
+**Remaining (run in this order; Node PATH note §8):**
 ```
 cd serverless-connector/brochure-engine
 npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-watches.sql
 npx wrangler deploy
 # optional phone push:  printf '%s' "<unguessable-topic>" | npx wrangler secret put NTFY_TOPIC
-cd ../.. && cd serverless-connector && git push origin main
-cd ../live-shopping-assistant && git push origin main   # deploys GitHub Pages
 ```
 **Then verify:** engine `GET /` health lists `watches:{active,unseenAlerts}`
 and both crons; `GET /offers?q=بيض` returns egg offers (no "white" noise);
