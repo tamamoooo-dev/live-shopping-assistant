@@ -1,7 +1,7 @@
 // brochure.js — the frontend's thin, read-only client for the Brochure Engine
 // (Pillar 2) and its Price History feature (Pillar 3). This is the ONE place the
-// frontend learns about the Brochure Engine: its URL, its store ids, and which
-// search queries correspond to a tracked price-history product.
+// frontend learns about the Brochure Engine: its URL and its store ids. Price
+// History is catalog-wide and QUERY-driven — any search query may have history.
 //
 // It mirrors the provider discipline (HANDOFF §7.2): all Brochure-Engine-specific
 // knowledge lives here, so the Core, the generic UI, and the search providers
@@ -13,8 +13,8 @@
 //   GET /brochures                        -> { count, brochures: [BrochureDoc] }
 //   GET /brochures/history?store=&region= -> all editions, newest first
 //   GET /asset/<key>                      -> stored bytes (page images, meta.json, PDFs)
-//   GET /lowest?product=<id>              -> { product, lowest: PricePoint|null }
-//   GET /prices?product=<id>              -> { product, lowest, latest: [PricePoint], variants: [VariantRecord] }
+//   GET /prices?q=<query>                 -> { lowest, latest[], variants[], observations,
+//                                             weeks, firstSeen, trend } (derived, stage-gated)
 
 const ENGINE_BASE = 'https://brochure-engine.tamamoooo.workers.dev';
 
@@ -66,26 +66,6 @@ export function storeLabel(id) {
 export function storeColor(id) {
   const s = ENGINE_STORE_BY_ID[id];
   return s ? s.color : '#64748b';
-}
-
-// Tracked price-history products (HANDOFF §13 watchlist). A search query maps to
-// a product id when it matches one of these patterns — that's when price
-// intelligence is available. Kept tiny, mirroring the engine's products.js.
-const PRODUCTS = [
-  { id: 'milk', label: 'Milk', match: /\bmilk\b|حليب|لبن/i },
-  { id: 'eggs', label: 'Eggs', match: /\beggs?\b|بيض/i },
-];
-
-export function trackedProducts() {
-  return PRODUCTS.map((p) => ({ id: p.id, label: p.label }));
-}
-
-// The tracked product id a query corresponds to, or null.
-export function productForQuery(query) {
-  const q = (query || '').trim();
-  if (!q) return null;
-  const hit = PRODUCTS.find((p) => p.match.test(q));
-  return hit ? hit.id : null;
 }
 
 // --- current brochures (the engine's is_current view) ------------------------
@@ -414,23 +394,35 @@ export async function markAlertsSeen() {
 }
 
 // --- price history (Pillar 3, read-only) -------------------------------------
-// The full price picture for a tracked product: the lowest-ever point plus the
-// latest captured point per store — what the search page's price-intelligence
-// panel renders ("is today a good deal?"). Returns { lowest, latest: [] }|null.
-export async function pricesForProduct(productId) {
-  try {
-    const r = await fetch(`${ENGINE_BASE}/prices?product=${encodeURIComponent(productId)}`);
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (!j || !j.lowest) return null;
-    // `variants` (per size/variant history) is optional — an older engine
-    // deployment omits it, so the summary falls back to the product-wide low.
-    return {
-      lowest: j.lowest,
-      latest: Array.isArray(j.latest) ? j.latest : [],
-      variants: Array.isArray(j.variants) ? j.variants : [],
-    };
-  } catch {
-    return null;
+// The full price picture for ANY query — the engine derives it from the
+// catalog-wide, offers-harvested history (stage-gated to the query's best
+// match band, grouped per size/variant). Null when nothing is recorded yet or
+// the engine is unreachable (missing history must never break the search).
+// Session-cached per query: the summary is the only consumer, one GET per
+// distinct search.
+const pricesCache = new Map();
+export async function pricesForQuery(query) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return null;
+  if (!pricesCache.has(q)) {
+    pricesCache.set(
+      q,
+      fetch(`${ENGINE_BASE}/prices?q=${encodeURIComponent(q)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!j || !(j.observations > 0)) return null;
+          return {
+            lowest: j.lowest || null,
+            latest: Array.isArray(j.latest) ? j.latest : [],
+            variants: Array.isArray(j.variants) ? j.variants : [],
+            observations: j.observations,
+            weeks: j.weeks || 0,
+            firstSeen: j.firstSeen || null,
+            trend: j.trend || null,
+          };
+        })
+        .catch(() => null),
+    );
   }
+  return pricesCache.get(q);
 }

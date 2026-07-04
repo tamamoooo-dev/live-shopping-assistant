@@ -218,22 +218,30 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
     const title = el('div', 'sh-title');
     title.appendChild(el('span', 'sh-badge', 'Price history'));
     const vlabel =
-      hh.verdict === 'at-low'
+      hh.verdict === 'building'
+        ? 'History is still building — not enough weeks recorded yet'
+        : hh.verdict === 'at-low'
         ? "Today's best matches the lowest ever recorded"
         : hh.verdict === 'near-low'
         ? `Close to the record low (+${hh.delta.toFixed(2)})`
         : `Above the record low (+${hh.delta.toFixed(2)})`;
     title.appendChild(el('span', 'sh-verdict', vlabel));
+    if (hh.trend && hh.verdict !== 'building') {
+      title.appendChild(
+        el('span', `sh-trend trend-${hh.trend}`, hh.trend === 'down' ? '↓ trending down' : hh.trend === 'up' ? '↑ trending up' : '→ steady'),
+      );
+    }
     box.appendChild(title);
     const low = hh.low;
     const sizeTag = hh.variant && hh.variant.label ? ` (${hh.variant.label})` : '';
+    const lowLabel = hh.verdict === 'building' ? 'Lowest so far' : 'Lowest recorded';
     box.appendChild(
       el(
         'div',
         'sh-detail',
-        `Lowest recorded${sizeTag}: ${money(low.price)} at ${storeLabelFn(low.store)}${
+        `${lowLabel}${sizeTag}: ${money(low.price)} at ${storeLabelFn(low.store)}${
           low.observedAt ? ` · ${fmtDate(low.observedAt)}` : low.edition ? ` · ${low.edition}` : ''
-        }`,
+        }${hh.verdict === 'building' && hh.firstSeen ? ` · recording since ${fmtDate(hh.firstSeen)}` : ''}`,
       ),
     );
     if (hh.latest && hh.latest.length) {
@@ -245,7 +253,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
         const d = el('span', 'sh-delta');
         if (p.price <= low.price + 1e-9) {
           d.classList.add('is-best');
-          d.textContent = 'record low';
+          d.textContent = hh.verdict === 'building' ? 'lowest so far' : 'record low';
         } else {
           d.classList.add('is-above');
           d.textContent = `+${(p.price - low.price).toFixed(2)}`;

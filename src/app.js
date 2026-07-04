@@ -23,9 +23,7 @@ import {
   brochureForStore,
   isExternalBrochure,
   isActiveBrochure,
-  productForQuery,
-  trackedProducts,
-  pricesForProduct,
+  pricesForQuery,
   searchOffers,
   storeLabel,
 } from './brochure.js';
@@ -244,26 +242,6 @@ function renderHomeChips() {
     });
     recentWrap.appendChild(b);
   }
-  // Tracked products (price history is available for these — the cue that was
-  // missing in the first integration pass, HANDOFF §14.D.a)
-  const trackedWrap = $('tracked-chips');
-  trackedWrap.innerHTML = '';
-  for (const p of trackedProducts()) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'quick-chip';
-    const label = document.createElement('span');
-    label.textContent = p.label;
-    const tag = document.createElement('span');
-    tag.className = 'qc-tag';
-    tag.textContent = 'history';
-    b.append(label, tag);
-    b.addEventListener('click', () => {
-      input.value = p.label.toLowerCase();
-      runSearch(p.label.toLowerCase());
-    });
-    trackedWrap.appendChild(b);
-  }
 }
 
 // --- dispatch ----------------------------------------------------------------
@@ -371,17 +349,13 @@ async function runSearch(query) {
 // Best-effort: flyer offers and Price History are each optional inputs; if
 // there's nothing to compare at all the slot is removed.
 async function fillSummary(slot, query, tagged, token) {
-  let prices = null;
-  const productId = productForQuery(query);
-  if (productId) {
-    try {
-      prices = await pricesForProduct(productId);
-    } catch {
-      prices = null;
-    }
-  }
-  // The same session-cached call the flyer panel makes — no extra request.
-  const offersData = await searchOffers(query, OFFERS_FETCH_LIMIT).catch(() => null);
+  // Price History is catalog-wide and query-driven: ask the engine for ANY
+  // query (session-cached, best-effort — null when nothing is recorded yet).
+  const [prices, offersData] = await Promise.all([
+    pricesForQuery(query).catch(() => null),
+    // The same session-cached call the flyer panel makes — no extra request.
+    searchOffers(query, OFFERS_FETCH_LIMIT).catch(() => null),
+  ]);
   if (inFlight !== token) return;
   const comparison = computeComparison(query, tagged, (offersData && offersData.offers) || [], prices, storeLabel);
   if (!comparison) {

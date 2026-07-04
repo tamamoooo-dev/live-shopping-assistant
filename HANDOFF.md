@@ -8,10 +8,12 @@
 >
 > **Last updated:** 2026-07-04 · All five roadmap pillars **plus tappable
 > brochures + cart** are **built, deployed and verified in production**.
-> Current work mode: polish & maintenance. Latest change: the **Search
-> Roadmap deterministic ranking** (rule 9, HISTORY §26–27). §26 (stages) is
-> deployed; §27 (head-first single-word ladder + Shopping Summary stage gate)
-> is **committed but NOT pushed/deployed — awaiting user approval**.
+> Current work mode: polish & maintenance. Latest change: **catalog-wide
+> Price History** (HISTORY §28) — ENGINE deployed & backfilled (⚠️ the wrangler
+> deploy also shipped §27's engine matching mirror from the local commits);
+> the FRONTEND half (§27 + §28) is **committed but NOT pushed — awaiting the
+> same user approval**, so production mirrors are temporarily drifted until
+> one `git push` in each repo aligns everything.
 
 ---
 
@@ -180,14 +182,31 @@ response joins ALL of that flyer's offers rows (`offerStore.byFlyer`). A D4D
 markup change breaks hotspots cleanly (no spots rendered); transient fetch
 failures are served empty but NOT cached. Test: `node src/hotspots.test.mjs`.
 
-**Price history** (`priceHistory.js` + `products.js` watchlist — currently
-`milk`, `eggs`): one price point per product×store×**brochure edition**
-(edition = *when*, store = *where*), price number sampled from the connector
-(swappable seam) after the weekly fan-out. Lowest-ever is derived on read;
-`/prices` also returns per-**size** `variants[]` (grouped by `parseSize`;
-unparseable sizes quarantined in an `unsized` bucket). To track a new product:
-add it to engine `products.js` AND the `PRODUCTS` mirror in frontend
-`src/brochure.js`.
+**Price history** (`priceHistory.js` + `storage/historyStore.js`) —
+**CATALOG-WIDE, harvested from the offers ingest** (redesigned 2026-07-04;
+the old milk/eggs watchlist + connector sampling is retired — `products.js` /
+`priceStore.js` deleted, the `price_points` table left in D1 unused). Every
+flyer offer is a price observation. Cross-week identity is DERIVED (D4D
+`offer_id` is per-flyer-extraction — verified: the same product in two
+concurrent flyers carries two different ids): `ph_` + fnv64 of store | region
+| normalized bilingual name | parsed-size key. Conservative by rule: nameless
+or single-token OCR names record nothing (never mix two products' histories);
+an identity split (OCR name drift) only shortens a series because the READ is
+query-driven and merges identities per size variant. Storage is incremental:
+one `price_identities` row per product (refreshed in place; `weeks_seen`
+depth counter) + a `price_history` point only on first sighting or a price
+CHANGE, keyed `(identity, valid_from)` so re-ingests converge. `GET
+/prices?q=` (legacy `product=` accepted as q) derives everything at read
+time: matching-mirror relevance, then the rule-9 gate (single word = the
+PRIMARY band, stages ≥4 — stage 5 vs 4 is only word position, famRank
+excludes the "كلوروكس ليمون" class; multi word = full-coverage band ≥2), then
+best famRank; grouped per size variant, each with lowest-ever
+(price/where/when), highest, latest-per-store, `weeks` depth, `firstSeen`,
+`trend`. Under 2 weeks of depth the frontend verdict says **"history is
+building"** instead of claiming a record. Guarded `POST
+/prices/backfill?store=` re-seeds from offers rows already in D1 (run once
+2026-07-04: ~13.6k identities+points from 15.8k offers). Retention:
+identities unseen >365 days are pruned with their points.
 
 **Price monitoring** (`monitor.js`): watches are `product` (provider + stable
 result id, re-found by id/link match) or `grocery` (sweeps all 7 connector
@@ -208,10 +227,10 @@ non-current AND expired >28 days (row marked `pruned_at`); ≤250 KV deletes +
 
 **API:** public reads `GET /` (health), `/brochures[?store=&region=]`,
 `/brochures/history`, `/brochures/hotspots?id=`, `/asset/<key>`,
-`/offers?q=`, `/lowest?product=`,
-`/prices?product=`, `/prices/history?product=`, `/watches`, `/alerts[?unseen=1]`;
+`/offers?q=`, `/lowest?q=`, `/prices?q=` (legacy `product=` maps to q),
+`/watches`, `/alerts[?unseen=1]`;
 open writes `POST /watches`, `DELETE /watches?id=`, `POST /alerts/seen`;
-guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/record`,
+guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`,
 `/watches/check`, `/prune`. CORS open (incl. DELETE).
 
 ## 6. Frontend map (no build step; `index.html` + `styles.css` + `src/`)
@@ -242,8 +261,8 @@ CSS-variable driven (`--brand` blue `#2563eb`, light+dark).
 - **`0 6 * * 2,3,5`** (Tue/Wed = Saudi drop days, Fri closes the weekend
   freshness hole): coordinator fans out **one child invocation per store**
   via the `SELF` service binding ("Architecture C") — each child gets its own
-  50-subrequest budget and runs brochures → that store's offers. Then the
-  coordinator runs the price-history capture (via `CONNECTOR`), then prune.
+  50-subrequest budget and runs brochures → that store's offers → that store's
+  price-history harvest (D1-only, no subrequests). Then the coordinator prunes.
 - **`45 5 * * *`**: watch check — SELF fan-out in batches of 3.
 - `scheduled()` branches on `event.cron`. On-demand equivalent:
   `POST /ingest?store=<id>` (same path the fan-out hits).
@@ -336,10 +355,11 @@ external product images — verify via `preview_eval` DOM inspection; preview
   offers come from D4D — no edition link possible); they open the external
   flyer page. iOS Safari renders embedded PDFs first-page-only ("Open PDF ↗"
   fallback exists).
-- **Price-history capture is ungated** (`recordPrices` takes the connector's
-  best-ranked result) — that's why junk can enter a product's series; the
-  per-size variant grouping quarantines it (`unsized` bucket). Capture-side
-  gating is a known, deliberate TODO.
+- **Price-history identity is name+size derived** (no stable upstream id
+  exists). OCR-name drift SPLITS a product's series — harmless, the query-
+  driven read merges per variant. The failure mode that must stay impossible
+  is MIXING two products' histories: never loosen the identity gates (≥2
+  name tokens, size in the key) to "fix" a short series.
 - **Panda product watches** created before the variety-id fix (2026-07-03)
   won't re-find their product; re-create them.
 - A first request to a **freshly created** workers.dev subdomain can return
@@ -352,13 +372,10 @@ external product images — verify via `preview_eval` DOM inspection; preview
    best-effort.
 3. **README.md / CHANGELOG.md are badly stale** (still "Panda Live Search
    v1.0.0") — refresh them; this file is the only current doc.
-4. **Grow the watchlist** beyond milk/eggs (engine `products.js` + frontend
-   `PRODUCTS` mirror); the UI picks new products up automatically.
-5. **Capture-side gating for price history** (family/relevance gate in
-   `pickPricedResult`, or record several sizes per run) — see §10.
-6. **`deriveNames` quality** (engine): some OCR-derived offer names are still
-   rough; improving the deriver self-heals on the next weekly upsert.
-7. **Best-effort store monitoring:** notice when Amazon/Noon silently stop
+4. **`deriveNames` quality** (engine): some OCR-derived offer names are still
+   rough; improving the deriver self-heals on the next weekly upsert AND
+   converges price-history identities (better names = fewer series splits).
+5. **Best-effort store monitoring:** notice when Amazon/Noon silently stop
    returning results (both are fragile to upstream markup changes).
 
 ---

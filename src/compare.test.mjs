@@ -114,9 +114,23 @@ const label = (id) => id;
 // --- history verdict is computed against today's best total price ---------------
 {
   const tagged = [T('panda', 'Milk 2 L', 12)];
-  const prices = { lowest: { price: 12, store: 'lulu' }, latest: [{ store: 'lulu', price: 13 }] };
+  const prices = { lowest: { price: 12, store: 'lulu' }, latest: [{ store: 'lulu', price: 13 }], weeks: 3 };
   const c = computeComparison('milk', tagged, [], prices, label);
   ok('history: at-low verdict when today matches the record', c.history && c.history.verdict === 'at-low');
+}
+
+// --- shallow history says so instead of claiming a record (rule 8) ---------------
+{
+  const tagged = [T('panda', 'Milk 2 L', 12)];
+  const prices = {
+    lowest: { price: 12, store: 'lulu' },
+    latest: [{ store: 'lulu', price: 13 }],
+    weeks: 1,
+    firstSeen: '2026-07-02',
+  };
+  const c = computeComparison('milk', tagged, [], prices, label);
+  ok('building: under two weeks of history never claims a record', c.history && c.history.verdict === 'building');
+  ok('building: carries firstSeen so the UI can say when recording began', c.history.firstSeen === '2026-07-02');
 }
 
 // --- listing helpers -------------------------------------------------------------
@@ -343,8 +357,8 @@ const label = (id) => id;
     lowest: { price: 5, store: 'lulu' }, // product-wide low is a 6-pack — NOT comparable
     latest: [{ store: 'lulu', price: 5 }],
     variants: [
-      { key: 'pcs:6', sizeUnit: 'pcs', sizeTotal: 6, label: '6 pcs', lowest: { price: 5, store: 'lulu', observedAt: '2026-01-10' }, latest: [{ store: 'lulu', price: 5 }] },
-      { key: 'pcs:30', sizeUnit: 'pcs', sizeTotal: 30, label: '30 pcs', lowest: { price: 14, store: 'danube', observedAt: '2026-02-10' }, latest: [{ store: 'danube', price: 16 }] },
+      { key: 'pcs:6', sizeUnit: 'pcs', sizeTotal: 6, label: '6 pcs', weeks: 4, lowest: { price: 5, store: 'lulu', observedAt: '2026-01-10' }, latest: [{ store: 'lulu', price: 5 }] },
+      { key: 'pcs:30', sizeUnit: 'pcs', sizeTotal: 30, label: '30 pcs', weeks: 4, lowest: { price: 14, store: 'danube', observedAt: '2026-02-10' }, latest: [{ store: 'danube', price: 16 }] },
     ],
   };
   const c = computeComparison('eggs', tagged, [], prices, label);
@@ -361,8 +375,8 @@ const label = (id) => id;
     lowest: { price: 7, store: 'lulu' },
     latest: [{ store: 'lulu', price: 7 }],
     variants: [
-      { key: 'ml:1000', sizeUnit: 'ml', sizeTotal: 1000, label: '1 L', lowest: { price: 7, store: 'lulu', observedAt: '2026-06-01' }, latest: [{ store: 'lulu', price: 7 }] },
-      { key: 'ml:2000', sizeUnit: 'ml', sizeTotal: 2000, label: '2 L', lowest: { price: 11, store: 'panda', observedAt: '2026-05-01' }, latest: [{ store: 'panda', price: 12 }] },
+      { key: 'ml:1000', sizeUnit: 'ml', sizeTotal: 1000, label: '1 L', weeks: 5, lowest: { price: 7, store: 'lulu', observedAt: '2026-06-01' }, latest: [{ store: 'lulu', price: 7 }] },
+      { key: 'ml:2000', sizeUnit: 'ml', sizeTotal: 2000, label: '2 L', weeks: 5, lowest: { price: 11, store: 'panda', observedAt: '2026-05-01' }, latest: [{ store: 'panda', price: 12 }] },
     ],
   };
   const c = computeComparison('milk', tagged, [], prices, label);
@@ -373,7 +387,7 @@ const label = (id) => id;
 // Backward compatible: an engine without `variants` falls back to the product-wide low.
 {
   const tagged = [T('panda', 'Milk 2 L', 12)];
-  const prices = { lowest: { price: 12, store: 'lulu' }, latest: [{ store: 'lulu', price: 13 }] };
+  const prices = { lowest: { price: 12, store: 'lulu' }, latest: [{ store: 'lulu', price: 13 }], weeks: 2 };
   const c = computeComparison('milk', tagged, [], prices, label);
   ok('variant: falls back to the product-wide low when variants are absent', c.history && c.history.verdict === 'at-low' && !c.history.variant);
 }

@@ -429,7 +429,8 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
   if (equivalent && headIt && equivalent.sorted.some((i) => i.it === headIt)) confidence = 'high';
   else if (value) confidence = 'medium';
 
-  // Price History verdict (tracked products). Each SIZE/VARIANT keeps its own
+  // Price History verdict (catalog-wide: the engine derives history for ANY
+  // query from the weekly flyer offers). Each SIZE/VARIANT keeps its own
   // independent lowest-ever record (§ engine getPricesDoc.variants), so the
   // verdict is always apples-to-apples: today's best price for ONE size vs that
   // SAME size's own record low — a 30-egg tray is never measured against a
@@ -499,12 +500,29 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
 
     if (low && low.price != null && todaysBest != null) {
       const delta = todaysBest - low.price;
+      // Observation depth in WEEKS (derived by the engine from the recorded
+      // series). With under two weeks of history "matches the lowest ever" is
+      // technically true but meaningless — say the history is still building
+      // instead of implying a record (missing history never breaks, it talks).
+      const weeks = (chosen ? chosen.weeks : prices.weeks) || 0;
       let verdict;
-      if (todaysBest <= low.price + 1e-9) verdict = 'at-low';
+      if (weeks < 2) verdict = 'building';
+      else if (todaysBest <= low.price + 1e-9) verdict = 'at-low';
       else if (delta / low.price <= 0.1) verdict = 'near-low';
       else verdict = 'above-low';
       const latest = latestSource.filter((p) => p && p.price != null).sort((a, b) => a.price - b.price);
-      history = { low, todaysBest, delta, verdict, latest, variant: variantInfo, otherVariants };
+      history = {
+        low,
+        todaysBest,
+        delta,
+        verdict,
+        latest,
+        variant: variantInfo,
+        otherVariants,
+        weeks,
+        firstSeen: prices.firstSeen || null,
+        trend: (chosen ? chosen.trend : prices.trend) || null,
+      };
     }
   }
 

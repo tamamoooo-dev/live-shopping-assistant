@@ -3348,6 +3348,80 @@ stage-5 products, price-ordered, summary best-buy a fresh lemon kilo.
 **Deploy status at time of writing:** committed to both repos, NOT pushed and
 NOT deployed — explicitly awaiting user approval.
 
+
+---
+
+## §28 · Catalog-wide Price History (2026-07-04)
+
+**The problem (Price History Roadmap).** Price History only existed for a
+hard-coded 2-product watchlist (engine `products.js`: milk, eggs — 16 total
+price points), and the frontend gated the verdict on a 2-entry regex
+(`PRODUCTS` in `brochure.js`). Every other product had none. The watchlist
+capture was also the known junk source: it sampled whichever result the
+connector ranked first, ungated. Meanwhile the offers table already held
+15,823 machine-extracted flyer prices across 18 stores, refreshed weekly —
+the catalog-wide price source, unused.
+
+**Key finding.** D4D's `offer_id` is a per-flyer-extraction id, NOT a stable
+product id — verified in production: the same product (same name+price) in
+two concurrent flyers of one store carries two different offer_ids. So (a)
+cross-week identity must be DERIVED, and (b) history must be captured at
+ingest time (offers rows can't be trusted to accumulate, and they're pruned
+at 180 days anyway).
+
+**The redesign (engine).** Price History is harvested from the offers ingest
+itself — no watchlist, no manual tagging, no extra subrequests:
+
+- **Identity:** `ph_` + fnv64(store|region|normalized bilingual name|parsed
+  size key). Conservative by rule 5: nameless / single-token OCR names are
+  skipped (never mix two products); an identity split (OCR drift) only
+  shortens a series because the read merges identities per size variant.
+- **Storage (incremental, rule 6):** `price_identities` (one row per product,
+  refreshed in place, `weeks_seen` depth counter) + `price_history` (a point
+  only on first sighting or a price CHANGE, keyed `(identity, valid_from)` —
+  idempotent re-ingests, same-window corrections replace in place).
+- **Read (`GET /prices?q=`, legacy `product=` maps to q):** all statistics
+  derived at read time (rule 7): banded LIKE prefilter over the normalized
+  names → matching-mirror relevance → the rule-9 gate (single word = the
+  PRIMARY band, stages ≥4, since stage 5 vs 4 is only word position and
+  famRank already excludes the "كلوروكس ليمون" class; multi word =
+  full-coverage ≥2) → best famRank → per-size-variant records: lowest ever
+  (price/where/when), highest, latest per store, weeks depth, firstSeen,
+  trend. First cut gated on the EXACT stage and kept only 17 milk
+  observations (most milk names are brand-led stage 4); the primary-band gate
+  fixed it: 184 observations, 1 L milk 6.99 across 4 stores, and `milk` ≡
+  `حليب` return identical docs.
+- **Backfill:** guarded `POST /prices/backfill?store=` re-seeds from offers
+  rows already in D1. Run once per store: 15,823 offers → 13,602 identities +
+  13,602 points, ~3% skipped as untrustworthy debris names. The concurrent-
+  flyer convergence is visible (nesto 1,451 offers → 984 identities).
+- **Retired:** `products.js`, `priceStore.js`, the connector price sampling
+  and `/prices/record` (the `price_points` table stays in D1, unused).
+  Search-client factories moved to `searchClient.js` (monitor still uses
+  them). Retention prunes identities unseen >365 days with their points.
+
+**Frontend.** `pricesForQuery(query)` (session-cached) replaces the regex
+mapping — every search asks for history. compare.js adds observation depth to
+the verdict: under 2 weeks it says **"History is still building"** with
+"lowest so far" + "recording since" instead of claiming a record (rule 8);
+`trend` renders on real verdicts. The home "tracked products" chips block is
+gone (history is universal now).
+
+**Verification.** Engine: pricetest (identity gates, change-only points, lows
+survive rises, band merge, routes, backfill), offerstest (ingest-hook
+harvest + idempotence), watchtest, hotspots — all green. Frontend:
+compare.test 73/73 (incl. new building-verdict cases), match.test 163/163.
+Production: migration applied, engine deployed, 17 stores backfilled, live
+`/prices?q=` verified for milk/حليب/بيض/مويه/فراولة. Browser preview against
+the live engine: a real "milk" search renders the building verdict
+("Lowest so far (370 g): 6.50 SAR at Lulu · recording since Jul 2, 2026"),
+zero console errors.
+
+**Deploy status at time of writing:** engine deployed + backfilled (the
+wrangler deploy necessarily also shipped §27's engine matching half from the
+local commits). Frontend committed, NOT pushed — awaiting the user approval
+already pending on §27; one push aligns the mirrors.
+
 ---
 
 _End of handoff._
