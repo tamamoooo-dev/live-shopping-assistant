@@ -202,7 +202,7 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/record`,
 | `core.js` | Store-agnostic Core; adaptive strategy memory (localStorage) |
 | `providers/*.js` | Thin per-store strategies calling the connector (`CONNECTOR_BASE`) |
 | `app.js` | Hash router (`#/search` `#/brochures` `#/alerts` `#/cart`), search orchestration, honest filtering (irrelevant dropped + counted), persisted prefs (`lsa.app.rank`, store scope, recents), `OFFERS_FETCH_LIMIT=120`, cart nav badge |
-| `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families, types, `parseSize`, relevance, `sameProduct` equivalence |
+| `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize`, relevance, `sameProduct` equivalence |
 | `compare.js` | Comparison engine: bilingual flyer listings, family/type/coverage gates, **product-identity lock** (anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
 | `summary.js` | Renders the comparison model (headline, confidence, excluded-counts, history verdict) |
 | `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family) |
@@ -291,6 +291,15 @@ external product images — verify via `preview_eval` DOM inspection; preview
   nothing; the OCR-name always beats the category. Grow them as real queries
   miss (the "مويه returns zero" class of bug is a one-line synonym fix — in
   BOTH mirrors).
+- **Produce is the LOWEST family tier** (derived > base > produce): produce
+  nouns are flavour/ingredient modifiers in both word orders, so any other
+  family keyword in the name wins regardless of position. When a query names a
+  family, the grid's TOP band is family-CONFIRMED entries (band 3), known-
+  different families sit at the bottom, family-less rank by lexical strength —
+  that's what keeps fresh طماطم above paste/ketchup without hiding anything.
+  Ambiguous English words ("orange", "cherry") stay Arabic-only in the produce
+  lexicon; a produce word next to a flavour marker (بنكهة/بطعم/برائحة/scented)
+  classifies as nothing.
 - **Flyer viewer deep-jumps** need `pageId`s in `meta.json` — they appear per
   edition on its next re-download (unchanged flyers dedupe and keep old
   metadata); missing id ⇒ graceful page-1 fallback. D4D ids sit on ~every

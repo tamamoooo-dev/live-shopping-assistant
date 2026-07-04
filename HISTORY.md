@@ -3149,4 +3149,65 @@ display-side mitigation, improving the deriver still self-heals weekly.
 
 ---
 
+## 27. Produce Intelligence — the third family tier (fresh vs derived/flavoured)
+
+**The problem (reported 2026-07-04):** ranking quality was inconsistent by
+query *specificity*. Specific queries ("صدور ساديا") were excellent, but bare
+produce queries degenerated: "طماطم" surfaced tomato paste/ketchup above fresh
+tomatoes; "فراولة" mixed fresh strawberries under strawberry-flavoured milk,
+jam and cakes.
+
+**Root cause (not a bug — a coverage gap):** relevance is *lexical*. For a
+one-word produce query, everything containing the word scores the identical
+whole-word 100, so the whole set lands in one relevance band and the grid's
+within-band **price-ascending** sort takes over — and processed derivatives
+(paste sachets, flavoured milk boxes) are systematically cheaper than fresh
+produce, so they float to the top. The intended countermeasure — the family
+system (marketplace band demotion, compare gates, engine famRank, watch
+gates) — had **zero produce coverage**: `queryFamily("طماطم")` was null, so
+every family gate was inert for exactly the query class that needed it.
+
+**The fix (both matching mirrors, rule 2):**
+- **A third, LOWEST family tier: PRODUCE** (derived > base > produce), ~39
+  bilingual produce families. The insight that makes it general: produce nouns
+  are the prototypical flavour/ingredient *modifiers* in both word orders —
+  "حليب فراولة" and "Strawberry Milk" are milk, "معجون طماطم" and "Tomato
+  Paste" are sauce — so any non-produce family keyword anywhere in the name
+  outranks a produce keyword regardless of position (no fragile head-noun
+  order heuristics). Only a name whose sole family signal is the produce noun
+  IS the produce. Ambiguous English colour/flavour words ("orange", "cherry")
+  are Arabic-only entries so "Tide Orange"/"Cherry Tomatoes" never classify
+  as fruit.
+- **The missing derived families** that turn produce into shelf products:
+  soup, jam, syrup-drinks, soda (incl. فانتا/ميرندا/غازي…), pickle, care
+  (soap/shampoo/dishwashing — scented look-alikes), plus paste/معجون/puree
+  into sauce and كيكه into cake; vinegar/خل as a new base family (apple-cider
+  vinegar is not apples).
+- **Flavour-marker guard:** a produce word adjacent to بنكهة/بطعم/برائحة/
+  flavored/scented names a flavour, not the product — debris names like
+  "بنكهة الفراولة" classify as nothing rather than as strawberries.
+- **Produce synonym bridges** (طماطم↔tomatoes etc.) so Arabic produce queries
+  reach English-named catalogue items and flyer OCR.
+- **Marketplace top band:** when the query names a family, entries CONFIRMED
+  to be that family now take a new band 3 above lexical band 2 (mirrors the
+  engine /offers famRank, which already tiered same-family > family-less >
+  different-family and got produce coverage for free). Different-family still
+  → band 0, family-less still ranks by lexical strength — "we refuse to guess"
+  is preserved, nothing is dropped, look-alikes are demoted not hidden.
+
+**Why the strong cases can't regress:** relevance/isRelevant are untouched;
+multi-token queries ("صدور ساديا") still gate on coverage and types; staple
+queries were already family-covered, so their band-3 set is the same set that
+was band-2 (within-band price order unchanged — verified in simulation);
+compare/monitor gates only get *more* signal, in the same "known-different
+only" posture.
+
+**Verified:** frontend match 87/87 + compare 65/65; engine watchtest (matching
++ monitoring gates) and offerstest green; before/after grid simulation over
+realistic fixtures — "طماطم" now ranks canned/fresh/cherry tomatoes 1-4 with
+paste/soup/ketchup/juice demoted below, "فراولة" ranks fresh strawberries 1-2
+above all flavoured products, "حليب" ordering byte-identical to before.
+
+---
+
 _End of handoff._

@@ -83,6 +83,30 @@ ok('no family keyword -> null', productFamily('كرسي مكتب دوار') === 
 ok('query family: حليب -> milk', queryFamily('حليب نادك') === 'milk');
 ok('query family: brand-only query -> null', queryFamily('كيري مربعات') === null);
 
+// --- produce tier (fresh produce must outrank its derived/flavoured look-alikes) ---
+ok('fresh tomatoes -> tomato family', productFamily('طماطم طازجه 1 كجم') === 'tomato');
+ok('EN fresh tomatoes -> tomato family', productFamily('Fresh Tomatoes 1kg') === 'tomato');
+ok('tomato paste -> sauce (derived beats produce)', productFamily('معجون طماطم 135 جم') === 'sauce');
+ok('EN tomato paste -> sauce', productFamily('Tomato Paste 400g') === 'sauce');
+ok('tomato ketchup -> sauce', productFamily('كاتشب طماطم هاينز') === 'sauce');
+ok('tomato soup -> soup', productFamily('شوربة طماطم') === 'soup');
+ok('fresh strawberry -> strawberry family', productFamily('فراولة طازجة 250 جم') === 'strawberry');
+ok('strawberry milk -> milk (base beats produce, AR order)', productFamily('حليب فراولة 200 مل') === 'milk');
+ok('strawberry milk -> milk (EN order too)', productFamily('Strawberry Milk 180ml') === 'milk');
+ok('strawberry jam -> jam', productFamily('مربى الفراولة 450 جم') === 'jam');
+ok('strawberry cake -> cake', productFamily('كيكة الفراولة') === 'cake');
+ok('flavour marker never classifies as produce', productFamily('بنكهة الفراولة') === null);
+ok('orange juice -> juice', productFamily('عصير برتقال 1 لتر') === 'juice');
+ok('apple vinegar -> vinegar', productFamily('خل التفاح العضوي') === 'vinegar');
+ok('strawberry soap -> care', productFamily('صابون فراولة') === 'care');
+ok('cherry tomatoes stay tomato (EN cherry unmapped)', productFamily('Cherry Tomatoes 250g') === 'tomato');
+ok('pickled cucumber -> pickle', productFamily('مخلل خيار') === 'pickle');
+ok('orange soda -> soda', productFamily('فانتا برتقال 330 مل') === 'soda');
+ok('query family: طماطم -> tomato', queryFamily('طماطم') === 'tomato');
+ok('query family: فراولة -> strawberry', queryFamily('فراولة') === 'strawberry');
+ok('produce synonym bridge: طماطم matches EN tomatoes', isRelevant({ name: 'Fresh Tomatoes 1kg' }, 'طماطم'));
+ok('produce synonym bridge: فراولة matches EN strawberries', isRelevant({ name: 'Strawberries Punnet 250g' }, 'فراولة'));
+
 // --- product types (the FORM attribute: brand+family shared, still different) ---
 ok('type: nuggets classified', productType('Herfy Chicken Nuggets 750g') === 'nuggets');
 ok('type: minced-roll classifies (earliest form wins)', productType('Herfy Minced Chicken Roll') === 'mince');

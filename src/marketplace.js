@@ -83,11 +83,17 @@ function entryFamily(e) {
 // Relevance bands keep ranking stable across sources with different name
 // quality (store catalogues vs flyer OCR): strong (whole-word tier) > good >
 // weak; price orders within a band, so the best deals surface naturally.
-// When the QUERY names a product family ("بيض" -> eggs), entries of a KNOWN
-// different family (an egg-pastry, a milk chocolate) drop to the bottom band —
-// a cheap look-alike must never sit above the real thing.
+// When the QUERY names a product family ("بيض" -> eggs, "طماطم" -> tomato),
+// entries CONFIRMED to be that family take the top band (fresh tomatoes above
+// every tomato-paste/ketchup look-alike, however cheap), entries of a KNOWN
+// different family drop to the bottom band, and family-less entries rank by
+// lexical strength in between — mirrors the engine /offers famRank tiering.
 function entryBand(e, qFam) {
-  if (qFam && entryFamily(e) && entryFamily(e) !== qFam) return 0;
+  if (qFam) {
+    const f = entryFamily(e);
+    if (f === qFam) return 3;
+    if (f) return 0;
+  }
   const r = entryRel(e);
   return r >= 75 ? 2 : r >= 45 ? 1 : 0;
 }
