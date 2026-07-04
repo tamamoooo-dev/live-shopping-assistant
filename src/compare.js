@@ -42,6 +42,9 @@ import {
   offerFamily,
   productType,
   queryType,
+  freshProduceIntent,
+  isProcessedProduce,
+  producePresence,
   normalizeText,
 } from './match.js';
 
@@ -256,6 +259,33 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     }
   }
 
+  // FRESH-PRODUCE GATE — a bare produce query ("فراولة") names the FRESH
+  // product, so the "lowest price" claim must be for fresh strawberries: a
+  // listing that carries a FORM word ("رول فراولة" is a cake roll the family
+  // lexicon can't see), a processing marker (frozen/canned/peeled), or that
+  // mentions the produce only as a FLAVOUR ("مصاصات بالفراولة" — the بال
+  // prefix means "with", i.e. flavoured by construction, even when the head
+  // noun escaped the lexicon) must not drive the comparison. Naming the
+  // form/processing in the query ("فراولة مجمدة") disables the gate; excluded
+  // listings still render in the grid — real matches, just not the fresh
+  // product. This also keeps the flavoured junk out of the per-unit value
+  // pool, where its high SAR/kg prices made the outlier guard reject genuine
+  // fresh-produce bargains as "implausible".
+  const freshFam = freshProduceIntent(query);
+  let freshExcluded = 0;
+  if (freshFam && (!targetFamily || targetFamily === freshFam)) {
+    const fresh = listings.filter((l) => {
+      const text = listingMatchText(l);
+      const t = l.type !== undefined ? l.type : productType(text);
+      if (t || isProcessedProduce(text)) return false;
+      return producePresence(text, freshFam) !== 'flavored';
+    });
+    if (fresh.length) {
+      freshExcluded = listings.length - fresh.length;
+      listings = fresh;
+    }
+  }
+
   // PRODUCT-IDENTITY LOCK — the Shopping Summary must compare prices for the
   // SAME product the Grid identifies, never re-pick a cheaper look-alike. The
   // Grid ranks the intended product to the top by relevance, so we take the
@@ -463,6 +493,7 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     family: targetFamily,
     familyExcluded,
     typeExcluded,
+    freshExcluded,
     identityExcluded,
     sharedWith,
     headline,

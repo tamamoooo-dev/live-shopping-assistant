@@ -300,6 +300,15 @@ external product images — verify via `preview_eval` DOM inspection; preview
   Ambiguous English words ("orange", "cherry") stay Arabic-only in the produce
   lexicon; a produce word next to a flavour marker (بنكهة/بطعم/برائحة/scented)
   classifies as nothing.
+- **A bare produce query means FRESH** (`freshProduceIntent`): same-family
+  entries with a FORM word ("رول فراولة") drop to the bottom, processed ones
+  (frozen/canned/peeled/coated/dried + a curated frozen-BRAND list: مونتانا،
+  سنبلة، الكبير…) drop to the middle, and family-less names where the produce
+  appears only بال-attached or flavour-marked ("مصاصات بالفراولة") drop to the
+  bottom (`producePresence` = 'flavored'). The same three signals gate the
+  Shopping Summary (freshExcluded count) and the engine /offers famRank, so
+  "lowest strawberry price" is always a FRESH strawberry claim. Naming the
+  form/processing in the query ("فراولة مجمدة") switches all of it off.
 - **Flyer viewer deep-jumps** need `pageId`s in `meta.json` — they appear per
   edition on its next re-download (unchanged flyers dedupe and keep old
   metadata); missing id ⇒ graceful page-1 fallback. D4D ids sit on ~every

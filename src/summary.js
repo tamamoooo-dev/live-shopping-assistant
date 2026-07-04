@@ -155,6 +155,15 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
       ),
     );
   }
+  if (s.freshExcluded > 0) {
+    hero.appendChild(
+      el(
+        'div',
+        'summary-family-note',
+        `${s.freshExcluded} frozen/processed or flavoured variant${s.freshExcluded === 1 ? '' : 's'} excluded — prices compare the fresh product (add e.g. "مجمد" to your search to compare those instead).`,
+      ),
+    );
+  }
   if (s.identityExcluded > 0) {
     hero.appendChild(
       el(

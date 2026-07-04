@@ -22,7 +22,7 @@
 
 import { openBrochureViewer } from './viewer.js';
 import { brochureForOffer, storeLabel, storeColor } from './brochure.js';
-import { unitPrice, productFamily, queryFamily, normalizeText } from './match.js';
+import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText } from './match.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.js';
 
@@ -80,6 +80,13 @@ function entryFamily(e) {
   }
   return e._family;
 }
+// The full text an entry is classified over (flyer OCR names are bilingual —
+// the form/processing word often lands in only one language).
+function entryText(e) {
+  if (e.kind === 'online') return e.it.name || '';
+  const o = e.listing.offer;
+  return o ? `${o.name || ''} ${o.nameAr || ''}` : e.listing.name || '';
+}
 // Relevance bands keep ranking stable across sources with different name
 // quality (store catalogues vs flyer OCR): strong (whole-word tier) > good >
 // weak; price orders within a band, so the best deals surface naturally.
@@ -88,11 +95,29 @@ function entryFamily(e) {
 // every tomato-paste/ketchup look-alike, however cheap), entries of a KNOWN
 // different family drop to the bottom band, and family-less entries rank by
 // lexical strength in between — mirrors the engine /offers famRank tiering.
-function entryBand(e, qFam) {
+// A bare produce query additionally means FRESH (freshFam): a same-family
+// entry with a FORM word ("رول فراولة" — a cake roll the lexicon can't see)
+// drops to the bottom, a processed one (frozen/canned/peeled) to the middle;
+// "فراولة مجمدة" as the query switches this off.
+function entryBand(e, qFam, freshFam) {
   if (qFam) {
     const f = entryFamily(e);
-    if (f === qFam) return 3;
+    if (f === qFam) {
+      if (freshFam === qFam) {
+        if (e._ptype === undefined) e._ptype = productType(entryText(e));
+        if (e._ptype) return 0;
+        if (e._proc === undefined) e._proc = isProcessedProduce(entryText(e));
+        if (e._proc) return 2;
+      }
+      return 3;
+    }
     if (f) return 0;
+    // family-less but the produce appears only as a FLAVOUR ("مصاصات
+    // بالفراولة" whose head noun escaped the lexicon) -> bottom band
+    if (freshFam) {
+      if (e._flav === undefined) e._flav = producePresence(entryText(e), freshFam) === 'flavored';
+      if (e._flav) return 0;
+    }
   }
   const r = entryRel(e);
   return r >= 75 ? 2 : r >= 45 ? 1 : 0;
@@ -124,9 +149,9 @@ function dominantUnit(pool) {
   for (const [unit, c] of counts) if (!top || c > top.c) top = { unit, c };
   return top ? top.unit : null;
 }
-function makeComparator(qFam, sort, domUnit) {
+function makeComparator(qFam, freshFam, sort, domUnit) {
   return (a, b) => {
-    const band = entryBand(b, qFam) - entryBand(a, qFam);
+    const band = entryBand(b, qFam, freshFam) - entryBand(a, qFam, freshFam);
     if (band) return band;
     if (sort === 'value' && domUnit) {
       const ua = entryUnit(a);
@@ -304,6 +329,7 @@ function flyerCard(listing) {
 // and returns handles the search flow feeds as sources answer.
 export function createMarketplace(root, stores, query = '', opts = {}) {
   const qFam = queryFamily(query);
+  const freshFam = freshProduceIntent(query);
   let sort = opts.sort === 'value' ? 'value' : 'price';
   const onSort = typeof opts.onSort === 'function' ? opts.onSort : () => {};
   // Sources strip: one status chip per selected store (+ its flyer chip slot),
@@ -388,7 +414,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   let finished = false;
 
   function render() {
-    pool.sort(makeComparator(qFam, sort, sort === 'value' ? dominantUnit(pool) : null));
+    pool.sort(makeComparator(qFam, freshFam, sort, sort === 'value' ? dominantUnit(pool) : null));
     count.textContent = String(pool.length);
     body.innerHTML = '';
     if (!pool.length) {

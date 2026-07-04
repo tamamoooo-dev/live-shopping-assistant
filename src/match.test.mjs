@@ -9,7 +9,7 @@
 import {
   parseSize, sizeLabel, unitPrice, isRelevant, relevance, groupEquivalents, normalizeText,
   productFamily, queryFamily, tokenCoverage, categoryFamily, offerFamily,
-  productType, queryType,
+  productType, queryType, freshProduceIntent, isProcessedProduce, isProduceFamily, producePresence,
 } from './match.js';
 
 let pass = 0, fail = 0;
@@ -106,6 +106,44 @@ ok('query family: طماطم -> tomato', queryFamily('طماطم') === 'tomato')
 ok('query family: فراولة -> strawberry', queryFamily('فراولة') === 'strawberry');
 ok('produce synonym bridge: طماطم matches EN tomatoes', isRelevant({ name: 'Fresh Tomatoes 1kg' }, 'طماطم'));
 ok('produce synonym bridge: فراولة matches EN strawberries', isRelevant({ name: 'Strawberries Punnet 250g' }, 'فراولة'));
+ok('galaxy strawberry -> chocolate (brand keyword)', productFamily('جالكسي الفراولة 30غ') === 'chocolate');
+ok('lollipop -> candy', productFamily('نونين لولي فراولة') === 'candy');
+ok('malt drink -> soda', productFamily('هولستن فراولة 330 مل') === 'soda');
+ok('strawberry-shaped toy -> toy', productFamily('لعبة اسفنجية على شكل فراولة') === 'toy');
+ok('sardines in tomato sauce -> fish (accompaniment وصلصة stays attached)', productFamily('سردين بالفلفل الحار وصلصة الطماطم') === 'fish');
+ok('tuna in tomato sauce stays fish', productFamily('تونة وصلصة طماطم') === 'fish');
+
+// --- fresh-produce intent (bare produce query = the FRESH product) ---
+ok('فراولة -> fresh strawberry intent', freshProduceIntent('فراولة') === 'strawberry');
+ok('طماطم -> fresh tomato intent', freshProduceIntent('طماطم') === 'tomato');
+ok('فراولة مجمدة -> intent OFF (processing named)', freshProduceIntent('فراولة مجمدة') === null);
+ok('طماطم مقشرة -> intent OFF', freshProduceIntent('طماطم مقشرة') === null);
+ok('حليب -> no produce intent (staple, not produce)', freshProduceIntent('حليب') === null);
+ok('دجاج -> no produce intent (frozen chicken is normal)', freshProduceIntent('دجاج') === null);
+ok('processed: فراولة مجمدة detected', isProcessedProduce('فراولة مجمدة 400 جم'));
+ok('processed: definite article المجمدة detected', isProcessedProduce('الفراولة المجمدة'));
+ok('processed: EN frozen detected', isProcessedProduce('Happy Farm Frozen Strawberry'));
+ok('processed: canned peeled detected', isProcessedProduce('طماطم مقشرة معلبة 400 جم'));
+ok('fresh punnet NOT processed', !isProcessedProduce('فراولة طازجة 250 جم'));
+ok('frozen brand bag detected (مونتانا)', isProcessedProduce('مونتانا فراولة 1 كجم'));
+ok('frozen brand bag detected (الكبير)', isProcessedProduce('الكبير فراوله 900 جم'));
+ok('frozen brand detected in flyer OCR (sunbulah)', isProcessedProduce('السنبله sunbulah فراوله strawberry'));
+ok('chocolate-coated strawberries are processed', isProcessedProduce('باسيتو فراولة مغطى بالشوكولاتة 80 جم'));
+ok('chupa chups lollipop -> candy', productFamily('شوبا شوبس فراولة 29 جم') === 'candy');
+ok('capri-sun مشروب -> syrup', productFamily('كابري صن مشروب الفراولة 200 مل') === 'syrup');
+ok('freeze-dried fruit is processed', isProcessedProduce('AYUM Strawberry Freeze Dried Fruit 20g'));
+ok('spelling شكولاته -> chocolate', productFamily('الفانيلا والشكولاته والفراوله ايس') === 'icecream' || productFamily('شكولاته بالفراوله') === 'chocolate');
+ok('fresh intent survives a frozen-brand QUERY guard: ساديا is not produce', freshProduceIntent('صدور ساديا') === null);
+ok('isProduceFamily: strawberry yes, milk no', isProduceFamily('strawberry') && !isProduceFamily('milk'));
+ok('form on produce: رول فراولة carries a type', productType('أمريكانا رول فراولة صغيرة') === 'roll');
+ok('lollipop plural مصاصات -> candy', productFamily('كيس مصاصات موو بالفراولة والشيكولاتة من لوليز') === 'candy');
+ok('spelling variant شيكولاتة -> chocolate', productFamily('شيكولاتة بالفراولة') === 'chocolate');
+ok('food colouring مسحوق -> powder', productFamily('مسحوق لون فراولة') === 'powder');
+ok('presence: بالفراولة is a flavour, not the product', producePresence('كيس حلا بالفراولة', 'strawberry') === 'flavored');
+ok('presence: بنكهة الفراولة is a flavour', producePresence('مشروب غريب بنكهة الفراولة', 'strawberry') === 'flavored');
+ok('presence: فراولة طازجة is the product', producePresence('فراولة طازجة 250 جم', 'strawberry') === 'product');
+ok('presence: standalone mention wins over flavoured', producePresence('فراولة مغطاة بالشوكولاتة الفراولة', 'strawberry') === 'product');
+ok('presence: no mention -> null', producePresence('حليب المراعي 2 لتر', 'strawberry') === null);
 
 // --- product types (the FORM attribute: brand+family shared, still different) ---
 ok('type: nuggets classified', productType('Herfy Chicken Nuggets 750g') === 'nuggets');

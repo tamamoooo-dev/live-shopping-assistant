@@ -3208,6 +3208,34 @@ realistic fixtures — "طماطم" now ranks canned/fresh/cherry tomatoes 1-4 w
 paste/soup/ketchup/juice demoted below, "فراولة" ranks fresh strawberries 1-2
 above all flavoured products, "حليب" ordering byte-identical to before.
 
+**Refinement (same day, user feedback + live-search iteration):** the first
+live run surfaced what fixtures couldn't. (1) "Frozen strawberries ranked
+first and the best-buy was a lollipop bag" → **a bare produce query means
+FRESH** (`freshProduceIntent`): same-family entries with a FORM word ("رول
+فراولة" — a cake roll the family lexicon can't see) drop to the bottom band,
+processed ones (frozen/canned/peeled/coated/dried) to the middle, and the
+Shopping Summary gets a FRESH-PRODUCE GATE (freshExcluded count + note) so
+"lowest price" is a fresh-produce claim; naming the processing in the query
+("فراولة مجمدة") disables all of it. (2) The lollipop bag ("مصاصات
+بالفراولة") was family-less because every one of its head words escaped the
+lexicon and its strawberry mention was بال-attached — that's now a
+first-class signal: `producePresence` reads a بال/لل-attached or
+flavour-marked produce word as 'flavored' (a flavoured product by
+construction), gating the comparison, the grid band, and the engine famRank.
+It also fixed the value pool: flavoured junk's high SAR/kg had made the
+median outlier guard reject genuine fresh bargains as "implausible".
+(3) Live-data lexicon growth: frozen-food BRANDS whose bags never say frozen
+(مونتانا/داري/الكبير/سنبلة/ساديا/سيارا — consulted only under fresh intent),
+confectionery brands that ARE the shelf name (جالكسي/كيندر/اوريو/شوبا شوبس…),
+spelling variants (شيكولاته/شكولاته/شوكلاته), مشروب → syrup family, مسحوق →
+powder, مصاصات/لولي → candy, سردين → fish, toy family for produce-shaped
+toys. A waw-strip in familyKey was tried and REVERTED: "سردين وصلصة الطماطم"
+is sardines WITH sauce — stripping و lets the derived keyword hijack the
+family (the بال lesson again). Verified live in the preview: "فراولة" top-8
+all fresh strawberries (best buy 12.99 مستوردة, high confidence), "طماطم"
+top-8 all fresh tomatoes (best buy 5.99/kg greenhouse kilo). Final suites:
+match 123/123, compare 65/65, engine watchtest green.
+
 ---
 
 _End of handoff._
