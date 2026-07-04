@@ -8,7 +8,9 @@
 >
 > **Last updated:** 2026-07-04 · All five roadmap pillars **plus tappable
 > brochures + cart** are **built, deployed and verified in production**.
-> Current work mode: polish & maintenance.
+> Current work mode: polish & maintenance. Latest change: the **Search
+> Roadmap deterministic ranking** (rule 9, HISTORY §26) — committed and
+> locally verified; engine deploy + git pushes pending user approval.
 
 ---
 
@@ -86,6 +88,15 @@ conflicts with this file, this file wins).
    engine reads are best-effort — engine down must never block live search.
 8. **Trunk-based:** commit to `main`, push = deploy. End commits with the
    `Co-Authored-By:` trailer naming the current Claude model.
+9. **The Search Roadmap is ranking law** (this is a price COMPARISON engine,
+   not a discovery engine — deterministic and predictable). The grid and
+   `/offers` sort by the match STAGE first (`matchStage`, in both matching
+   mirrors): single word — primary product-name matches before results where
+   the word is only a flavour/ingredient/scent; multi word — every query term
+   is mandatory (exact phrase > all whole-word > all matched) before gradually
+   relaxing to partial matches. No other signal (family band, price, relevance
+   score) may ever promote a result past a better stage, and the engine never
+   infers intent beyond the user's explicit words.
 
 ## 4. Online search stores (7 providers, both repos)
 
@@ -145,8 +156,8 @@ Offers upsert into D1 (unique `store:region:source:offer_id`); "current" is
 derived from `valid_to` at read time; bilingual names are OCR-derived
 (`offers/contract.js deriveNames`, debris-guarded) and refresh on each weekly
 upsert. `GET /offers?q=` search: word-boundary banded D1 prefilter (exact word
-> word-start > substring) + JS filtering via the matching mirror, family-tier
-ranking, name-matches before text-only, cheapest within tier.
+> word-start > substring) + JS filtering via the matching mirror, ranked by
+Search-Roadmap stage (rule 9) → family tier → match strength → cheapest.
 
 **Hotspots (tappable brochures):** D4D leaflet HTML embeds per-product tap
 polygons (`data-coords-json` on the carousel copy's `image-container`;
@@ -202,10 +213,10 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/record`,
 | `core.js` | Store-agnostic Core; adaptive strategy memory (localStorage) |
 | `providers/*.js` | Thin per-store strategies calling the connector (`CONNECTOR_BASE`) |
 | `app.js` | Hash router (`#/search` `#/brochures` `#/alerts` `#/cart`), search orchestration, honest filtering (irrelevant dropped + counted), persisted prefs (`lsa.app.rank`, store scope, recents), `OFFERS_FETCH_LIMIT=120`, cart nav badge |
-| `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize`, relevance, `sameProduct` equivalence |
+| `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize`, relevance, `sameProduct` equivalence, `matchStage`/`queryTokenPresence` (Search-Roadmap stages, rule 9 — directional flavour markers: Arabic بنكهة/بطعم/برائحة precede the flavour word, English flavoured/scented follow it) |
 | `compare.js` | Comparison engine: bilingual flyer listings, family/type/coverage gates, **product-identity lock** (anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
 | `summary.js` | Renders the comparison model (headline, confidence, excluded-counts, history verdict) |
-| `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family) |
+| `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family); sort order = Roadmap stage (rule 9) → family band → price/value |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
 | `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |

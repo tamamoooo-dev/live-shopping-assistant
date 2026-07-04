@@ -10,6 +10,7 @@ import {
   parseSize, sizeLabel, unitPrice, isRelevant, relevance, groupEquivalents, normalizeText,
   productFamily, queryFamily, tokenCoverage, categoryFamily, offerFamily,
   productType, queryType, freshProduceIntent, isProcessedProduce, isProduceFamily, producePresence,
+  matchStage, queryTokenPresence,
 } from './match.js';
 
 let pass = 0, fail = 0;
@@ -182,6 +183,36 @@ ok('offerFamily: ambiguous category not used', offerFamily({ name: 'weekly promo
 ok('full coverage on a real match', tokenCoverage({ name: 'جبنة كيري مربعات 8 قطع' }, 'كيري مربعات') === 1);
 ok('half coverage on the pastry look-alike', tokenCoverage({ name: 'عجينة بف باستري مربعات' }, 'كيري مربعات') === 0.5);
 ok('skimmed synonym bridges منزوع/خالي', tokenCoverage({ name: 'حليب نادك خالي الدسم' }, 'نادك منزوع الدسم') === 1);
+
+// --- Search Roadmap: deterministic match stages (mirrors the engine) ---
+// Rule 2 — single word: primary product-name matches come first; products where
+// the word is only a flavour/ingredient/scent rank after ALL primary matches.
+ok('stage: plain milk is primary (5)', matchStage({ name: 'Almarai Fresh Milk 1 L' }, 'milk') === 5);
+ok('stage: milk chocolate is secondary (1)', matchStage({ name: 'Milk Chocolate Bar 90g' }, 'milk') === 1);
+// بال-attached SHORT tokens (حليب, 4 chars) never lexically match at all —
+// stage 0 (dropped) is even stricter than the roadmap's "after all primary".
+ok('stage: شوكولاته بالحليب ranks after every primary milk', matchStage({ name: 'شوكولاته بالحليب 90 جم' }, 'حليب') <= 1);
+ok('stage: مصاصات بالفراولة is secondary (long token substring)', matchStage({ name: 'مصاصات بالفراولة' }, 'فراولة') === 1);
+ok('stage: flavoured milk stays primary for حليب (directional marker)', matchStage({ name: 'حليب بنكهة الفراولة 200 مل' }, 'حليب') === 5);
+ok('stage: same name is secondary for the flavour word فراولة', matchStage({ name: 'حليب بنكهة الفراولة 200 مل' }, 'فراولة') === 1);
+ok('stage: strawberry milk secondary for فراولة (known different family)', matchStage({ name: 'حليب فراولة 200 مل' }, 'فراولة') === 1);
+ok('stage: fresh strawberries primary for فراولة', matchStage({ name: 'فراولة طازجة 250 جم' }, 'فراولة') === 5);
+ok('stage: EN scent match is secondary', matchStage({ name: 'Fairy Lemon Scented Dish Soap 1L' }, 'lemon') === 1);
+ok('stage: substring-only single word is weak (2)', matchStage({ name: 'Kellogg Cornflakes 500g' }, 'flakes') === 2);
+ok('stage: no match is 0', matchStage({ name: 'عصير برتقال 1 لتر' }, 'حليب') === 0);
+ok('roadmap 2: every primary match outranks every flavour match', matchStage({ name: 'حليب نادك 1 لتر' }, 'حليب') > matchStage({ name: 'Milk Chocolate Bar 90g' }, 'milk'));
+// Rule 3 — multi word: exact phrase first, every term mandatory before relaxing.
+ok('stage: exact phrase is 5', matchStage({ name: 'حليب المراعي كامل الدسم 2 لتر' }, 'حليب المراعي') === 5);
+ok('stage: brand field completes coverage (4)', matchStage({ name: 'حليب كامل الدسم 2 لتر', brand: 'المراعي' }, 'حليب المراعي') === 4);
+ok('stage: EN phrase via synonym bridge', matchStage({ name: 'Almarai Fresh Milk 2L' }, 'fresh milk') === 5);
+ok('stage: one term missing relaxes to 1', matchStage({ name: 'حليب نادك كامل الدسم 2 لتر' }, 'حليب المراعي') === 1);
+ok('stage: unrelated product is 0', matchStage({ name: 'عصير برتقال 1 لتر' }, 'حليب المراعي') === 0);
+ok('roadmap 3: a full match always beats a same-family partial match', matchStage({ name: 'حليب كامل الدسم', brand: 'المراعي' }, 'حليب المراعي') > matchStage({ name: 'حليب نادك كامل الدسم' }, 'حليب المراعي'));
+// queryTokenPresence — the generalized primary/secondary role detector.
+ok('presence: standalone word is primary', queryTokenPresence('فراولة طازجة 250 جم', 'فراولة') === 'primary');
+ok('presence: بال-attached is secondary', queryTokenPresence('مصاصات بالفراولة', 'فراولة') === 'secondary');
+ok('presence: absent token is null', queryTokenPresence('حليب المراعي 2 لتر', 'فراولة') === null);
+ok('presence: primary mention anywhere beats a secondary one', queryTokenPresence('فراولة مع شوكولاتة بالفراولة', 'فراولة') === 'primary');
 
 console.log(`\nmatch.test: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

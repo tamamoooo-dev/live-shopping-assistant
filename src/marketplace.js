@@ -11,7 +11,8 @@
 //     unavailable / no matches) with each store's weekly-flyer chip, so
 //     store-level state stays honest without per-store result sections;
 //   • the OFFERS GRID — all relevant offers from every source, ranked by
-//     relevance band then price, top N with "Show all".
+//     Search-Roadmap stage, then relevance band, then price, top N with
+//     "Show all".
 //
 // Honesty rules carried over:
 //   • Flyer prices are machine-extracted — every flyer card carries the tag
@@ -22,7 +23,7 @@
 
 import { openBrochureViewer } from './viewer.js';
 import { brochureForOffer, storeLabel, storeColor } from './brochure.js';
-import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText } from './match.js';
+import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage } from './match.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.js';
 
@@ -87,6 +88,23 @@ function entryText(e) {
   const o = e.listing.offer;
   return o ? `${o.name || ''} ${o.nameAr || ''}` : e.listing.name || '';
 }
+// The Search Roadmap stage (match.js matchStage) — the FIRST ranking key.
+// Deterministic: respect the user's words before any other signal. Single word:
+// primary product-name matches before flavour/ingredient/scent look-alikes.
+// Multi word: every query term is mandatory (exact phrase > all whole-word >
+// all matched) before the engine gradually relaxes to partial matches — a
+// cheap same-family product missing a term ("حليب نادك" for "حليب المراعي")
+// can never outrank a full match, however good its family band or price.
+// Family bands and price order only WITHIN a stage.
+function entryStage(e, query) {
+  if (e._stage === undefined) {
+    e._stage =
+      e.kind === 'online'
+        ? matchStage(e.it, query)
+        : matchStage({ name: entryText(e), brand: '' }, query);
+  }
+  return e._stage;
+}
 // Relevance bands keep ranking stable across sources with different name
 // quality (store catalogues vs flyer OCR): strong (whole-word tier) > good >
 // weak; price orders within a band, so the best deals surface naturally.
@@ -149,8 +167,10 @@ function dominantUnit(pool) {
   for (const [unit, c] of counts) if (!top || c > top.c) top = { unit, c };
   return top ? top.unit : null;
 }
-function makeComparator(qFam, freshFam, sort, domUnit) {
+function makeComparator(query, qFam, freshFam, sort, domUnit) {
   return (a, b) => {
+    const stage = entryStage(b, query) - entryStage(a, query);
+    if (stage) return stage;
     const band = entryBand(b, qFam, freshFam) - entryBand(a, qFam, freshFam);
     if (band) return band;
     if (sort === 'value' && domUnit) {
@@ -414,7 +434,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   let finished = false;
 
   function render() {
-    pool.sort(makeComparator(qFam, freshFam, sort, sort === 'value' ? dominantUnit(pool) : null));
+    pool.sort(makeComparator(query, qFam, freshFam, sort, sort === 'value' ? dominantUnit(pool) : null));
     count.textContent = String(pool.length);
     body.innerHTML = '';
     if (!pool.length) {

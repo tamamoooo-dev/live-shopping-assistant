@@ -3238,4 +3238,61 @@ match 123/123, compare 65/65, engine watchtest green.
 
 ---
 
+## §26 — The Search Roadmap: deterministic match stages (2026-07-04)
+
+**What / why.** The user issued a Search Roadmap making the ranking philosophy
+explicit: this is a price COMPARISON engine, not a discovery engine — the
+first results must be the products the user most likely wants to compare
+prices for, deterministically. Five rules: (1) respect the query before any
+assumption; (2) single word → products whose PRIMARY name matches the word
+first (weight/size/origin/color variants are valid primary matches); products
+where the word is only a flavour/ingredient/scent/secondary descriptor rank
+after ALL primary matches; (3) multi word → exact multi-word matches always
+first, every term MANDATORY in the first stage, never ignore a term because
+other terms score highly; (4) relax gradually only after exact matches are
+exhausted; (5) never infer intent when the query is explicit.
+
+**The violation this fixed.** The grid sorted family band → price, with
+relevance only a tie-break: for "حليب المراعي", every milk-family item landed
+in the top band regardless of matching المراعي, so a cheap Nadec/Barista milk
+outranked actual Almarai milk — exactly rule 3's "term ignored because the
+other term scored highly".
+
+**Design.** A new deterministic STAGE became the primary sort key everywhere,
+implemented in both matching mirrors (`src/match.js` ↔ engine
+`src/matching.js`): `matchStage(item, query)` → multi word: 5 exact in-order
+phrase in the name (synonyms allowed, ال stripped) · 4 all terms whole-word
+(the brand field counts for coverage, the phrase lives in the name) · 3 all
+terms word-start tier · 2 all terms matched (substring tier) · 1 exactly one
+term missing · 0 more missing; single word: 5 primary name/brand match ·
+2 weak substring-only · 1 secondary — the word is a flavour/ingredient/scent
+(`queryTokenPresence`: بال/لل-attached, a directional flavour marker, or a
+compound shifter following) or modifies a KNOWN different family ("حليب
+فراولة" for فراولة) · 0 none. Flavour markers are DIRECTIONAL (unlike the
+produce-only symmetric FLAVOR_MARKERS): Arabic بنكهة/بطعم/برائحة precede the
+flavour word, English flavoured/scented follow it — a symmetric check would
+wrongly demote the head noun of "حليب بنكهة الفراولة" for حليب. Conservative
+per HANDOFF §10: unknown family / no marker never demotes.
+
+**Consumers.** Frontend grid: `marketplace.js` comparator = stage → family
+band → price/value (bands and the fresh-produce logic unchanged, now scoped
+WITHIN a stage). Engine `/offers`: sort = stage → famRank → score → price;
+the stage subsumes the old name-tier key (any stage ≥1 is a name match,
+OCR-text-only matches stay last). `isNameMatch` is no longer used by the read
+API (still exported for the offers contract tests).
+
+**Verification.** Frontend `match.test.mjs` 145/145 (new: primary-vs-flavour
+ordering, directional markers, phrase/coverage/relaxation ladder, brand-field
+coverage), `compare.test.mjs` 65/65; engine `dev.mjs watchtest` +
+`offerstest` green (selftestMatching gained the mirrored stage cases). Live
+preview ("حليب المراعي"): all 8 full matches ranked first (Almarai milk; the
+two milk-POWDER offers correctly last within the block via the family band),
+and the 5.75 SAR Barista milk — previously a top result — ranked below every
+full match at stage 1. No console errors.
+
+**Deploy status at time of writing:** engine `wrangler deploy` and the two
+`git push`es were pending user approval (production-deploy permission).
+
+---
+
 _End of handoff._
