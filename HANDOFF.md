@@ -9,8 +9,8 @@
 > **Last updated:** 2026-07-04 · All five roadmap pillars **plus tappable
 > brochures + cart** are **built, deployed and verified in production**.
 > Current work mode: polish & maintenance. Latest change: the **Search
-> Roadmap deterministic ranking** (rule 9, HISTORY §26) — committed and
-> locally verified; engine deploy + git pushes pending user approval.
+> Roadmap deterministic ranking** (rule 9, HISTORY §26) — deployed and
+> verified in production (engine `/offers` + frontend grid).
 
 ---
 
