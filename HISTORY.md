@@ -3062,4 +3062,91 @@ compares like sizes.
 
 ---
 
+## 26. Tappable Brochures (ClickFlyer-style) + Local Cart
+
+**Date:** 2026-07-04 · **Commits:** engine `b31f96e`, frontend `b01c2dd`
+
+**Goal (user directive):** make the Brochures section browse like ClickFlyer —
+tap any product inside a flyer page, see it zoomed with a clear "Add to Cart",
+similar products below, seamless return to the brochure — at $0, fully
+automatic (no manual tagging), scalable to thousands of brochures.
+
+**The discovery that made it free:** D4D's leaflet viewer HTML — the SAME page
+the brochure adapter already reads during ingest — embeds per-product tap
+polygons: `data-coords-json` on the carousel copy's
+`figure.image-container` (owning each spread's FIRST page) and
+`data-next-page-coords` on the plain copy's `picture` (owning the FOLLOWING
+page), in the page's `data-width`/`data-height` pixel frame. Crucially the
+polygons' `id_product` is the same id (`idoffer_special`) the structured-offers
+ingest already stores as `offers.offer_id` — so tap geometry joins the product
+data (price, was-price, bilingual OCR name, product crop image, validity) we
+already hold in D1, with zero OCR, zero LLM, zero manual mapping. Verified
+live: the current Lulu flyer parsed to 752 tap boxes across 76 pages against
+756 D1 offer rows, all bboxes in bounds.
+
+**Engine (`GET /brochures/hotspots?id=<brochureId>`):**
+- `src/hotspots.js`: pure `parseHotspots(html)` (both blob locations, malformed
+  blobs lose one page never the request, polygons → normalized bboxes rounded
+  to 4dp, sub-0.5% slivers dropped) + `getHotspotsDoc` orchestrator.
+- Served ON DEMAND with a **permanent KV cache** under the edition prefix
+  (`<storage_key>/hotspots.json`): geometry is edition-immutable, so the first
+  request per brochure costs 1 external subrequest + 1 KV write, every later
+  one is a KV read. Already-held brochures got hotspots immediately — no
+  re-ingest, no ingest-pipeline or budget changes. Retention prunes the blob
+  with the edition bytes automatically (same prefix). Transient D4D failures
+  return empty WITHOUT caching (heals on retry); an empty parse IS cached.
+- Join: `offerStore.byFlyer(store, region, flyer_ref)` (flyer id parsed from
+  the brochure's `source_url`) returns the whole flyer's offer rows keyed by
+  `offer_id` in the response — one call powers the whole experience.
+- Page alignment invariant: hotspot pages are keyed by the source
+  `data-index`, which is exactly the `index` the pipeline stores per page in
+  `meta.json` — the frontend joins on that, never ordinal position.
+- New `metadataStore.getById`; pure tests in `src/hotspots.test.mjs` (8 checks).
+
+**Frontend:**
+- `viewer.js`: the page `<img>` moved into a `.bv-imgwrap` sized in JS from
+  natural dimensions × (fit-to-stage × zoom) — deterministic, and the overlay's
+  percent-positioned tap boxes stay glued to products at any zoom (verified:
+  340px → 680px at 2×, spot styles unchanged). Each spot carries a small blue
+  "+" dot; first page with spots flashes the boxes once + shows a transient
+  "N products on this page" hint. Tap → product sheet (bottom sheet inside the
+  viewer overlay): flyer crop zoomed, bilingual names, price/was-price/−N%
+  chip, honest validity ("ended <date>" in red when an in-flyer promo expires
+  before the flyer — they exist, e.g. 3-day promos), Add to Cart with inline
+  "Added ✓" feedback, the machine-extraction disclaimer + flyer verify link,
+  and a similar-offers strip (existing `/offers?q=` search seeded from the
+  cleaned name; tapping a card re-renders the sheet for it, ‹ back retraces,
+  Esc peels sheet-then-viewer). Closing the sheet touches nothing — page,
+  zoom, scroll all preserved.
+- `brochure.js`: `loadHotspots` client (session-cached per brochure),
+  `indices` exposed from `loadBrochurePages` (the hotspot join key), and
+  `cleanOfferName` — OCR names sometimes lead with flyer banner debris
+  ("يوليو july ايام فقط days only برتقال…"); trimming leading
+  banner/month/number tokens (bilingual stoplist, trim-from-front ONLY, full
+  fallback if everything would go) fixed both display titles and the
+  similar-search seed.
+- Cart: `cart.js` (localStorage `lsa.cart.v1`, qty bump on re-add,
+  `CART_EVENT` CustomEvent — the app's one coupling pattern) + `cartPage.js`
+  (#/cart: per-store groups with subtotals, grand total, qty steppers,
+  remove/clear, "View flyer" re-opens the in-app viewer ON the item's own page
+  via the snapshotted `brochureId`+`pageIndex`, falling back to the offer's
+  flyer deep-link when the edition is gone). Nav + tabbar carry a live count
+  badge painted at boot.
+
+**Verified:** engine pure tests 8/8; frontend match/compare 65+65 unchanged;
+live endpoint 76 pages / 756 offers joined, second call KV-cached; full flow
+in the local preview (open brochure → spots render → tap → sheet → add →
+badge 1 → related tap-through + back → close lands on same page → cart page
+totals/qty/View flyer all working, zero console errors); production frontend
+verified with a cache-buster after Pages deploy.
+
+**Deliberately NOT done:** no hotspots for Othaim (official PDF — no D4D
+geometry, viewer just shows no spots, exactly the graceful degradation rule);
+no ingest-time hotspot extraction (would re-touch budgets for zero UX gain);
+no server-side cart (single-user tool, localStorage is the right cost);
+deriveNames quality is still the known engine TODO — `cleanOfferName` is a
+display-side mitigation, improving the deriver still self-heals weekly.
+
+---
+
 _End of handoff._

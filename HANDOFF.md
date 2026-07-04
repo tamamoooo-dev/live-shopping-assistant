@@ -6,8 +6,9 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-04 · All five roadmap pillars are **built, deployed
-> and verified in production**. Current work mode: polish & maintenance.
+> **Last updated:** 2026-07-04 · All five roadmap pillars **plus tappable
+> brochures + cart** are **built, deployed and verified in production**.
+> Current work mode: polish & maintenance.
 
 ---
 
@@ -21,7 +22,10 @@ commercial product. You type a product (Arabic or English) and get:
   offers** from ~18 physical stores, in one ranked marketplace grid.
 - A **comparison summary** (best buy by per-unit value, honest lowest-price
   claims, confidence ladder, price-history verdict).
-- **Weekly brochures** browsable in an in-app viewer (`#/brochures`).
+- **Weekly brochures** browsable in an in-app viewer (`#/brochures`) with
+  **tappable products** (ClickFlyer-style): tap a product on a flyer page →
+  detail sheet (crop image, price, discount, similar offers) → add to a
+  **local cart** (`#/cart`, localStorage, grouped by store with totals).
 - **Price watches** with a target price, checked daily, alerting in-app
   (`#/alerts`) and optionally via ntfy.sh push.
 
@@ -144,6 +148,19 @@ upsert. `GET /offers?q=` search: word-boundary banded D1 prefilter (exact word
 > word-start > substring) + JS filtering via the matching mirror, family-tier
 ranking, name-matches before text-only, cheapest within tier.
 
+**Hotspots (tappable brochures):** D4D leaflet HTML embeds per-product tap
+polygons (`data-coords-json` on the carousel copy's `image-container`;
+`data-next-page-coords` on the plain copy's `picture` = the FOLLOWING page)
+whose `id_product` == `offers.offer_id`, in the page's `data-width/height`
+pixel frame. `hotspots.js` parses them into per-page normalized bboxes keyed
+by the page's SOURCE `data-index` (== each page's `index` in `meta.json` — the
+join key, never ordinal position). Served by `GET /brochures/hotspots?id=` ON
+DEMAND with a permanent KV cache (`<prefix>/hotspots.json`, pruned with the
+edition): first call per brochure = 1 external subrequest, then KV only;
+response joins ALL of that flyer's offers rows (`offerStore.byFlyer`). A D4D
+markup change breaks hotspots cleanly (no spots rendered); transient fetch
+failures are served empty but NOT cached. Test: `node src/hotspots.test.mjs`.
+
 **Price history** (`priceHistory.js` + `products.js` watchlist — currently
 `milk`, `eggs`): one price point per product×store×**brochure edition**
 (edition = *when*, store = *where*), price number sampled from the connector
@@ -171,7 +188,8 @@ non-current AND expired >28 days (row marked `pruned_at`); ≤250 KV deletes +
 (canonical `schema.sql`; past deltas in `migrate-*.sql`, already applied).
 
 **API:** public reads `GET /` (health), `/brochures[?store=&region=]`,
-`/brochures/history`, `/asset/<key>`, `/offers?q=`, `/lowest?product=`,
+`/brochures/history`, `/brochures/hotspots?id=`, `/asset/<key>`,
+`/offers?q=`, `/lowest?product=`,
 `/prices?product=`, `/prices/history?product=`, `/watches`, `/alerts[?unseen=1]`;
 open writes `POST /watches`, `DELETE /watches?id=`, `POST /alerts/seen`;
 guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/record`,
@@ -183,14 +201,16 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/record`,
 |---|---|
 | `core.js` | Store-agnostic Core; adaptive strategy memory (localStorage) |
 | `providers/*.js` | Thin per-store strategies calling the connector (`CONNECTOR_BASE`) |
-| `app.js` | Hash router (`#/search` `#/brochures` `#/alerts`), search orchestration, honest filtering (irrelevant dropped + counted), persisted prefs (`lsa.app.rank`, store scope, recents), `OFFERS_FETCH_LIMIT=120` |
+| `app.js` | Hash router (`#/search` `#/brochures` `#/alerts` `#/cart`), search orchestration, honest filtering (irrelevant dropped + counted), persisted prefs (`lsa.app.rank`, store scope, recents), `OFFERS_FETCH_LIMIT=120`, cart nav badge |
 | `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families, types, `parseSize`, relevance, `sameProduct` equivalence |
 | `compare.js` | Comparison engine: bilingual flyer listings, family/type/coverage gates, **product-identity lock** (anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
 | `summary.js` | Renders the comparison model (headline, confidence, excluded-counts, history verdict) |
 | `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family) |
-| `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients; never throws |
+| `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
-| `viewer.js` | In-app viewer: swipe, zoom, preload, focus trap, PDF branch, `targetPageId` deep-jump |
+| `viewer.js` | In-app viewer: swipe, zoom, preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`) |
+| `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
+| `cartPage.js` | Cart page: per-store groups + subtotals, qty steppers, View flyer (re-opens viewer on the item's page) |
 | `alertsPage.js` | Alerts page + shared watch dialog + nav badge |
 | `server.js` (root) | Zero-dependency local static server → http://localhost:5173 |
 
