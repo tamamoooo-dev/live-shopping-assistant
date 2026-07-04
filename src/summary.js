@@ -137,6 +137,15 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   if (s.confidence === 'low') {
     hero.appendChild(el('div', 'summary-note', 'Results are different sizes or variants — compare carefully below.'));
   }
+  if (s.stageExcluded > 0) {
+    hero.appendChild(
+      el(
+        'div',
+        'summary-family-note',
+        `${s.stageExcluded} weaker match${s.stageExcluded === 1 ? '' : 'es'} excluded — the comparison only considers the results that match your search best.`,
+      ),
+    );
+  }
   if (s.familyExcluded > 0) {
     hero.appendChild(
       el(

@@ -3292,6 +3292,61 @@ full match at stage 1. No console errors.
 
 **Deploy status at time of writing:** engine `wrangler deploy` and the two
 `git push`es were pending user approval (production-deploy permission).
+(Later approved and deployed the same day; verified live — /offers "حليب
+المراعي" all-full-matches-first, Pages serving matchStage.)
+
+---
+
+## §27 — Search Roadmap follow-up: head-first single word + Summary stage gate (2026-07-04)
+
+**What / why.** Two user follow-ups to §26. (1) The Shopping Summary must obey
+the SAME match stages as the grid — it must never summarize or recommend a
+product that would rank below a better match stage. (2) Single-word queries
+must rank products whose primary product name STARTS with the query token
+("ليمون", "ليمون أصفر", "ليمون كيلو") before matches where the token trails a
+different head word ("كلوروكس ليمون") — a general positional rule, not a
+lexicon special case.
+
+**Single-word ladder (both matching mirrors).** matchStage single word became:
+5 primary match whose name is HEADED by the token — `headWord` takes the first
+name word after skipping pure numbers and a tiny HEAD_SKIP set of generic
+lead-ins (fresh/new/organic/طازج/جديد/عضوي), so "Fresh Lemon 1kg" is
+lemon-headed while "كلوروكس ليمون" is not · 4 other primary matches (trailing
+token, or brand-field-only hit — "Almarai Fresh Milk" is brand-led → 4) ·
+2 weak substring-only · 1 secondary (flavour/scent marker, compound shifter,
+بال/لل-attached, or KNOWN different family — "عصير ليمون" is juice) · 0 none.
+Two design notes, learned while building: (a) family agreement must NEVER
+promote to 5 — productFamily keys off the query token itself, so "كلوروكس
+ليمون" is circularly "lemon family"; only the head word is independent
+evidence the product IS the token. (b) a 'primary' queryTokenPresence role now
+counts as a word-level hit even when the raw tiers miss the ال-attached form
+("الليمون الاخضر" → stage 5; the tiers don't strip ال, the role detector
+does).
+
+**Summary stage gate (compare.js).** Listings now carry `stage`; a STAGE GATE
+runs BEFORE the family/type/fresh/identity gates and keeps only the best band
+present, with an honest `stageExcluded` count (rendered by summary.js).
+Banding, deliberately asymmetric: single word gates on the EXACT stage (a
+trailing-token "كلوروكس ليمون" must never sit in a ليمون comparison while
+real lemons exist); multi word treats all FULL-coverage stages (5..2) as ONE
+band — they are name-layout refinements of "every term matched", and strict
+max-stage gating demonstrably broke the summary (a "نادك منزوع الدسم" test:
+the scattered-word-order milk got stage-gated out, the family-dominance signal
+starved, and a yogurt became the headline). Relaxation stages (1, 0) never
+enter a comparison a full match exists for — which also means the old
+type/identity test look-alikes (roll, liver) are now caught by the stage gate
+first (their exclusion counters moved to stageExcluded).
+
+**Verification.** match.test 163/163 (head rule: the full ليمون example
+verbatim), compare.test 71/71 (stage-gate blocks: Clorox excluded + cheaper
+look-alike never headlines; brand-field full match still wins on price),
+engine watchtest + offerstest green (mirrored cases). Browser preview: unit
+check (stages 5/4/1/1 for the ليمون quartet; summary excludes Clorox,
+headline a real lemon) AND a live "ليمون" search — top 10 all ليمون-headed
+stage-5 products, price-ordered, summary best-buy a fresh lemon kilo.
+
+**Deploy status at time of writing:** committed to both repos, NOT pushed and
+NOT deployed — explicitly awaiting user approval.
 
 ---
 

@@ -222,7 +222,10 @@ const label = (id) => id;
   ok('type: the chicken roll is excluded from the comparison', !c.listings.some((l) => /roll/i.test(l.name)));
   ok('type: headline stays a nuggets product', /nuggets/i.test(c.headline.listing.name));
   ok('type: cheaper different-form roll never becomes the headline', c.headline.listing.price !== 8.0);
-  ok('type: exclusion is counted', c.typeExcluded === 1);
+  // The roll misses the "nuggets" query term, so the Search-Roadmap STAGE gate
+  // (a relaxation-stage listing never competes with full matches) catches it
+  // before the type gate even runs.
+  ok('type: exclusion is counted (by the stage gate)', c.stageExcluded === 1 && c.typeExcluded === 0);
   ok('type: nuggets are NOT falsely claimed as one high-confidence same product with the roll', c.confidence !== 'high' || !c.equivalent.sorted.some((i) => /roll/i.test(i.it.name)));
 }
 
@@ -234,6 +237,40 @@ const label = (id) => id;
   ];
   const c = computeComparison('chicken', tagged, [], null, label);
   ok('type: bare "chicken" query gates nothing', c.typeExcluded === 0 && c.listings.length === 2);
+}
+
+// --- SEARCH-ROADMAP STAGE GATE: the Summary reasons over the grid's best stage ------
+// Rule: the Summary must never summarize or recommend a product that would rank
+// below a better match stage in the grid.
+{
+  // Single word: a trailing-token look-alike (stage 4) never drives — or sits
+  // inside — a comparison while token-headed products (stage 5) exist.
+  const tagged = [
+    T('panda', 'ليمون اصفر 1 كجم', 6),
+    T('lulu', 'ليمون سعودي', 5),
+    T('danube', 'كلوروكس ليمون 950 مل', 4), // cheaper trailing-token look-alike
+  ];
+  const c = computeComparison('ليمون', tagged, [], null, label);
+  ok('stage gate: trailing-token cleaner excluded from a ليمون comparison', !c.listings.some((l) => l.name.includes('كلوروكس')));
+  ok('stage gate: cheaper look-alike never becomes the headline', c.headline.listing.price !== 4);
+  ok('stage gate: exclusion is counted', c.stageExcluded === 1);
+}
+{
+  // Multi word: FULL-coverage layout variants are one band — word order or a
+  // brand-field match never excludes a genuine product from the price
+  // comparison — while a partial match (missing a term) never enters it.
+  const tagged = [
+    T('panda', 'حليب المراعي كامل الدسم 2 لتر', 17),
+    T('lulu', 'حليب كامل الدسم 2 لتر', 15, { brand: 'المراعي' }),
+    T('danube', 'حليب نادك كامل الدسم 2 لتر', 6.5), // cheaper, misses المراعي
+  ];
+  const c = computeComparison('حليب المراعي', tagged, [], null, label);
+  ok('stage gate: partial match (نادك) excluded from a حليب المراعي comparison', !c.listings.some((l) => l.name.includes('نادك')));
+  // On a 2-token query the listing-level coverage gate refuses the partial
+  // match before it ever reaches the pool (stage-gate counting for tolerated
+  // partials is proven by the nuggets/liver 3-token cases above).
+  ok('stage gate: nothing left for the stage gate to count', c.stageExcluded === 0);
+  ok('stage gate: brand-field full match still competes and wins on price', c.headline.listing.price === 15);
 }
 
 // --- PRODUCT-IDENTITY LOCK: the Summary never swaps the Grid's product ----------------
@@ -250,7 +287,9 @@ const label = (id) => id;
   ok('identity: cheaper chicken liver never becomes the headline', c.headline.listing.price !== 7);
   ok('identity: headline stays a chicken breast', /breast/i.test(c.headline.listing.name));
   ok('identity: the different-cut liver is excluded from the comparison', !c.listings.some((l) => /liver/i.test(l.name)));
-  ok('identity: exclusion is counted', c.identityExcluded === 1);
+  // The liver misses the "breast" query term — the Search-Roadmap STAGE gate
+  // excludes it before the identity lock even runs.
+  ok('identity: exclusion is counted (by the stage gate)', c.stageExcluded === 1 && c.identityExcluded === 0);
   ok('identity: headline is the cheaper of the SAME product (breast)', c.headline.listing.price === 20);
 }
 

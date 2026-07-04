@@ -46,6 +46,7 @@ import {
   isProcessedProduce,
   producePresence,
   normalizeText,
+  matchStage,
 } from './match.js';
 
 const REL_FLOOR = 30; // ignore weak/look-alike matches when picking the best
@@ -124,6 +125,7 @@ export function onlineListing(t, query) {
     size: it._size,
     up: unitPrice(it),
     rel: it._rel,
+    stage: matchStage(it, query),
     family: productFamily(it.name),
     type: productType(it.name),
     it,
@@ -160,6 +162,8 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     size,
     up: unitPrice(item),
     rel,
+    // Stage over the SAME bilingual text that admitted the offer to the pool.
+    stage: matchStage(probe, query),
     // OCR names span both languages — classify over both so the family gate
     // sees whatever script the family keyword landed in; and when the name
     // yields nothing, fall back to the aggregator's own category (offerFamily).
@@ -215,6 +219,26 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
   }
   if (!all.length) return null;
 
+  // STAGE GATE (Search Roadmap, HANDOFF rule 9) — the summary must reason over
+  // the SAME products the grid ranks first: only listings in the BEST match
+  // band present may compete or be recommended. Single word: the exact stage —
+  // a trailing-token match ("كلوروكس ليمون") must never drive a ليمون
+  // comparison while true lemon products (stage 5) exist. Multi word: every
+  // FULL-coverage stage (5..2 — phrase/whole-word/strong/substring are layout
+  // refinements of "every term matched") is ONE band, so a genuine product
+  // whose name merely orders the words differently still competes on price;
+  // the relaxation stages (1, 0 — missing terms) stay below and never enter a
+  // comparison a full match exists for. Excluded listings still render in the
+  // grid; the count is surfaced, never silent.
+  const multiWord = tokens(query).length > 1;
+  const stageBand = (l) => {
+    const s = l.stage || 0;
+    return multiWord && s >= 2 ? 2 : s;
+  };
+  const maxBand = all.reduce((m, l) => Math.max(m, stageBand(l)), 0);
+  const staged = all.filter((l) => stageBand(l) === maxBand);
+  const stageExcluded = all.length - staged.length;
+
   // FAMILY GATE — products from different families must not compete, however
   // similar their names ("نادك منزوع الدسم" must never offer yogurt as the
   // cheaper alternative to milk). The target family is the one the query names
@@ -228,7 +252,7 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     if (qf) return qf;
     const counts = new Map();
     let familied = 0;
-    for (const l of all) {
+    for (const l of staged) {
       if (!l.family) continue;
       familied += 1;
       counts.set(l.family, (counts.get(l.family) || 0) + 1);
@@ -237,9 +261,9 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     for (const [f, c] of counts) if (!top || c > top.c) top = { f, c };
     return top && top.c >= 2 && top.c / familied > 0.5 ? top.f : null;
   })();
-  let listings = targetFamily ? all.filter((l) => !l.family || l.family === targetFamily) : all;
-  if (!listings.length) listings = all; // never let the gate empty the comparison
-  const familyExcluded = all.length - listings.length;
+  let listings = targetFamily ? staged.filter((l) => !l.family || l.family === targetFamily) : staged;
+  if (!listings.length) listings = staged; // never let the gate empty the comparison
+  const familyExcluded = staged.length - listings.length;
 
   // TYPE GATE — the second product attribute. When the query names a product
   // FORM ("chicken nuggets" -> nuggets), listings of a KNOWN different form
@@ -491,6 +515,7 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     flyerCount: listings.filter((l) => l.source === 'flyer').length,
     range: { min, max },
     family: targetFamily,
+    stageExcluded,
     familyExcluded,
     typeExcluded,
     freshExcluded,

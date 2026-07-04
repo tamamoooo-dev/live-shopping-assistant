@@ -9,8 +9,9 @@
 > **Last updated:** 2026-07-04 · All five roadmap pillars **plus tappable
 > brochures + cart** are **built, deployed and verified in production**.
 > Current work mode: polish & maintenance. Latest change: the **Search
-> Roadmap deterministic ranking** (rule 9, HISTORY §26) — deployed and
-> verified in production (engine `/offers` + frontend grid).
+> Roadmap deterministic ranking** (rule 9, HISTORY §26–27). §26 (stages) is
+> deployed; §27 (head-first single-word ladder + Shopping Summary stage gate)
+> is **committed but NOT pushed/deployed — awaiting user approval**.
 
 ---
 
@@ -91,12 +92,19 @@ conflicts with this file, this file wins).
 9. **The Search Roadmap is ranking law** (this is a price COMPARISON engine,
    not a discovery engine — deterministic and predictable). The grid and
    `/offers` sort by the match STAGE first (`matchStage`, in both matching
-   mirrors): single word — primary product-name matches before results where
-   the word is only a flavour/ingredient/scent; multi word — every query term
-   is mandatory (exact phrase > all whole-word > all matched) before gradually
-   relaxing to partial matches. No other signal (family band, price, relevance
-   score) may ever promote a result past a better stage, and the engine never
-   infers intent beyond the user's explicit words.
+   mirrors): single word — products whose name is HEADED by the token ("ليمون
+   أصفر"; generic lead-ins like fresh/طازج skipped) first, then other primary
+   matches ("كلوروكس ليمون"), and only then flavour/ingredient/scent or
+   different-family usages ("عصير ليمون", "حليب بنكهة الليمون"); multi word —
+   every query term is mandatory (exact phrase > all whole-word > all matched)
+   before gradually relaxing to partial matches. No other signal (family band,
+   price, relevance score) may ever promote a result past a better stage, and
+   the engine never infers intent beyond the user's explicit words. **The
+   Shopping Summary obeys the same stages** (compare.js STAGE GATE): it never
+   summarizes or recommends a listing below the pool's best band — single word
+   gates on the exact stage; multi word treats all full-coverage stages (5..2,
+   name-layout refinements) as one band so word order never hides a cheaper
+   genuine product from the comparison.
 
 ## 4. Online search stores (7 providers, both repos)
 
@@ -214,7 +222,7 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/record`,
 | `providers/*.js` | Thin per-store strategies calling the connector (`CONNECTOR_BASE`) |
 | `app.js` | Hash router (`#/search` `#/brochures` `#/alerts` `#/cart`), search orchestration, honest filtering (irrelevant dropped + counted), persisted prefs (`lsa.app.rank`, store scope, recents), `OFFERS_FETCH_LIMIT=120`, cart nav badge |
 | `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize`, relevance, `sameProduct` equivalence, `matchStage`/`queryTokenPresence` (Search-Roadmap stages, rule 9 — directional flavour markers: Arabic بنكهة/بطعم/برائحة precede the flavour word, English flavoured/scented follow it) |
-| `compare.js` | Comparison engine: bilingual flyer listings, family/type/coverage gates, **product-identity lock** (anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
+| `compare.js` | Comparison engine: bilingual flyer listings, **Search-Roadmap STAGE GATE first** (rule 9 — the summary only reasons over the grid's best match band), then family/type/coverage gates, **product-identity lock** (anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
 | `summary.js` | Renders the comparison model (headline, confidence, excluded-counts, history verdict) |
 | `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family); sort order = Roadmap stage (rule 9) → family band → price/value |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `cleanOfferName` (leading OCR-banner trim); never throws |
