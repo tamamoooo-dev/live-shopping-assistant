@@ -36,6 +36,8 @@ import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
 import { createMarketplace } from './marketplace.js';
 import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.js';
+import { initCartPage } from './cartPage.js';
+import { cartCount, CART_EVENT } from './cart.js';
 
 const memory = createMemory('app');
 
@@ -85,6 +87,7 @@ const chipAll = $('chip-all');
 const pageSearch = $('page-search');
 const pageBrochures = $('page-brochures');
 const pageAlerts = $('page-alerts');
+const pageCart = $('page-cart');
 
 let inFlight = null; // token so a newer search cancels an older one's rendering
 
@@ -94,15 +97,24 @@ let inFlight = null; // token so a newer search cancels an older one's rendering
 // plain links; this just toggles pages and active states.
 function route() {
   const hash = location.hash || '';
-  const name = hash.startsWith('#/brochures') ? 'brochures' : hash.startsWith('#/alerts') ? 'alerts' : 'search';
+  const name = hash.startsWith('#/brochures')
+    ? 'brochures'
+    : hash.startsWith('#/alerts')
+    ? 'alerts'
+    : hash.startsWith('#/cart')
+    ? 'cart'
+    : 'search';
   pageSearch.hidden = name !== 'search';
   pageBrochures.hidden = name !== 'brochures';
   pageAlerts.hidden = name !== 'alerts';
+  pageCart.hidden = name !== 'cart';
   document.title =
     name === 'brochures'
       ? 'Super Search — Weekly brochures'
       : name === 'alerts'
       ? 'Super Search — Price alerts'
+      : name === 'cart'
+      ? 'Super Search — Cart'
       : 'Super Search — Live shopping search';
   for (const link of document.querySelectorAll('[data-nav]')) {
     const active = link.dataset.nav === name;
@@ -113,8 +125,21 @@ function route() {
   window.scrollTo(0, 0);
   if (name === 'brochures') initBrochuresPage(); // idempotent, lazy first render
   if (name === 'alerts') initAlertsPage(true); // fresh state on every visit
+  if (name === 'cart') initCartPage(); // local data, re-rendered per visit
 }
 window.addEventListener('hashchange', route);
+
+// --- cart badge (topbar + tabbar) -------------------------------------------
+// Kept live by the cart module's CustomEvent; painted once at boot so a
+// returning user sees their saved cart count immediately.
+function paintCartBadge(count) {
+  for (const badge of document.querySelectorAll('[data-cart-badge]')) {
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.hidden = count === 0;
+  }
+}
+window.addEventListener(CART_EVENT, (e) => paintCartBadge(e.detail.count));
+paintCartBadge(cartCount());
 
 // --- store chips (the single scope control) --------------------------------
 // Selection is remembered across visits — this is a daily-use tool.

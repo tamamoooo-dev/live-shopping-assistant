@@ -31,6 +31,11 @@
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></svg>
           <span>Alerts</span>
         </a>
+        <a class="nav-link" href="#/cart" data-nav="cart">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.2l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h7.9a1.6 1.6 0 0 0 1.6-1.3L20.5 8H6"/></svg>
+          <span>Cart</span>
+          <span class="cart-badge" data-cart-badge hidden>0</span>
+        </a>
       </nav>
     </div>
   </header>
@@ -104,6 +109,17 @@
       </div>
     </section>
 
+    <!-- ============ Cart (local shopping list) ============ -->
+    <section id="page-cart" class="page" aria-label="Cart" hidden>
+      <header class="page-head">
+        <h1>Cart</h1>
+        <p>Products you picked from this week's brochures — grouped by store, totalled for the till.</p>
+      </header>
+      <div id="cart-root" class="cart-root" aria-live="polite">
+        <!-- rendered by cartPage.js -->
+      </div>
+    </section>
+
   </main>
 
   <nav class="tabbar" aria-label="Primary">
@@ -118,6 +134,11 @@
     <a class="tab" href="#/alerts" data-nav="alerts">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></svg>
       <span>Alerts</span>
+    </a>
+    <a class="tab" href="#/cart" data-nav="cart">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.2l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h7.9a1.6 1.6 0 0 0 1.6-1.3L20.5 8H6"/></svg>
+      <span>Cart</span>
+      <span class="cart-badge" data-cart-badge hidden>0</span>
     </a>
   </nav>
 

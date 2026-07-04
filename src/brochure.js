@@ -238,12 +238,73 @@ export function loadBrochurePages(b) {
           // (null when the edition predates page-id capture), so the viewer can
           // open on the offer's own page. See openBrochureViewer.
           const pageIds = ordered.map((p) => (p.pageId != null ? String(p.pageId) : null));
-          return { pages, pageIds, title: meta.title, validFrom: meta.validFrom, validTo: meta.validTo };
+          // Also aligned with pages[]: each page's ORIGINAL source index — the
+          // key hotspot pages join on (ordinal position shifts when a source
+          // page had no image, the index never does).
+          const indices = ordered.map((p) => p.index);
+          return { pages, pageIds, indices, title: meta.title, validFrom: meta.validFrom, validTo: meta.validTo };
         })
         .catch(() => null),
     );
   }
   return pagesCache.get(b.storageKey);
+}
+
+// --- offer display-name cleanup -----------------------------------------------
+// Engine offer names are OCR-derived and sometimes lead with flyer banner
+// debris ("يوليو july ايام فقط days only برتقال…"). For DISPLAY (and for
+// seeding the similar-products search) we trim leading banner/month/number
+// tokens until a product-like token appears. Trim-from-the-front only — never
+// drop words from inside a name — and fall back to the original when the trim
+// would consume everything.
+const NAME_DEBRIS = new Set([
+  'offer', 'offers', 'deal', 'deals', 'only', 'day', 'days', 'till', 'until', 'weekly',
+  'special', 'promo', 'promotion', 'price', 'prices', 'amazing', 'exciting', 'super',
+  'mega', 'best', 'buy', 'save', 'free', 'now', 'new', 'sale', 'to', 'from', 'valid',
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+  'september', 'october', 'november', 'december',
+  'عرض', 'عروض', 'فقط', 'ايام', 'أيام', 'يوم', 'حتى', 'حتي', 'خصم', 'وفر', 'توفير',
+  'مجانا', 'سعر', 'اسعار', 'أسعار', 'جديد', 'الان', 'الآن', 'تخفيضات',
+  'يناير', 'فبراير', 'مارس', 'ابريل', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'اغسطس',
+  'أغسطس', 'سبتمبر', 'اكتوبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+]);
+export function cleanOfferName(name) {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+  let start = 0;
+  while (start < words.length) {
+    const w = words[start].toLowerCase();
+    if (NAME_DEBRIS.has(w) || /^\d/.test(w)) start += 1;
+    else break;
+  }
+  const cleaned = words.slice(start).join(' ');
+  return cleaned || words.join(' ');
+}
+
+// --- per-product tap targets (the ClickFlyer-style brochure experience) ------
+// GET /brochures/hotspots?id= — for a held aggregator brochure, the engine
+// serves each page's product tap-boxes (fractions of the page image) plus ALL
+// of that flyer's structured offers keyed by offerId, in one response. The
+// viewer overlays the boxes on its pages; tapping one opens the product sheet.
+// Geometry is edition-immutable, so a per-brochure session cache is safe.
+// Best-effort like every engine read: null just means "not tappable".
+const hotspotsCache = new Map();
+export function loadHotspots(b) {
+  if (!b || !b.id || b.sourceType !== 'images') return Promise.resolve(null);
+  if (!hotspotsCache.has(b.id)) {
+    hotspotsCache.set(
+      b.id,
+      fetch(`${ENGINE_BASE}/brochures/hotspots?id=${encodeURIComponent(b.id)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!j || !Array.isArray(j.pages) || !j.pages.length) return null;
+          // index -> spots[], plus the offers join the product sheet renders.
+          const spotsByIndex = new Map(j.pages.map((p) => [p.index, p.spots || []]));
+          return { spotsByIndex, offers: j.offers || {}, note: j.note || '' };
+        })
+        .catch(() => null),
+    );
+  }
+  return hotspotsCache.get(b.id);
 }
 
 // The first page image (the brochure "cover") for card thumbnails, or null
