@@ -208,7 +208,7 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/record`,
 | `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family) |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
-| `viewer.js` | In-app viewer: swipe, zoom, preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`) |
+| `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
 | `cartPage.js` | Cart page: per-store groups + subtotals, qty steppers, View flyer (re-opens viewer on the item's page) |
 | `alertsPage.js` | Alerts page + shared watch dialog + nav badge |

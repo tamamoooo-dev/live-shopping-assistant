@@ -1446,8 +1446,11 @@ a.watch-name:hover { color: var(--brand); }
 /* --- product sheet (tap a hotspot) ---------------------------------------- */
 .ps-sheet {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  /* centered with auto margins, NOT translateX — the fade-up animation's
+     'both' fill would permanently overwrite a transform-based centering */
+  left: 0;
+  right: 0;
+  margin: 0 auto;
   bottom: 0;
   width: min(560px, 100%);
   max-height: min(78%, 640px);
@@ -1766,3 +1769,33 @@ a.watch-name:hover { color: var(--brand); }
 .cart-qty span { font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .cart-note { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0; }
 .ps-until.is-ended { color: var(--bad, #dc2626); font-weight: 700; }
+
+/* --- mobile polish: gestures, scrim, small screens ------------------------- */
+/* pan stays native; pinch + double-tap are handled by viewer.js (zoomAt) */
+.bv-stage { touch-action: pan-x pan-y; }
+.bv-img { -webkit-user-drag: none; user-select: none; }
+.bv-spot { -webkit-tap-highlight-color: transparent; user-select: none; }
+
+.ps-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: rgba(10, 9, 22, 0.35);
+  animation: fade-up 0.2s ease both;
+}
+.ps-sheet { transition: transform 0.22s ease; will-change: transform; }
+.ps-grab { width: 56px; height: 5px; } /* a real thumb target */
+.ps-head { touch-action: none; } /* header drags dismiss, never scroll */
+
+/* short phones: keep price + Add to Cart above the fold */
+@media (max-height: 740px) {
+  .ps-imgbox { min-height: 110px; max-height: 160px; }
+  .ps-img { max-height: 158px; }
+  .ps-sheet { max-height: 86%; }
+}
+/* narrow phones: tighter sheet padding, larger tap targets */
+@media (max-width: 420px) {
+  .ps-body { padding: 4px 12px calc(12px + env(safe-area-inset-bottom)); }
+  .ps-back, .ps-close { width: 38px; height: 38px; }
+  .cart-qty button { width: 34px; height: 34px; }
+}

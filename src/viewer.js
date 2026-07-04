@@ -290,24 +290,67 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     if (push) sheetStack.push(offer);
     let sheet = overlay.querySelector('.ps-sheet');
     if (!sheet) {
+      // Scrim under the sheet: dims the flyer, absorbs stray taps (no
+      // accidental hotspot hits behind the sheet), and tap-to-close.
+      const scrim = document.createElement('div');
+      scrim.className = 'ps-scrim';
+      scrim.addEventListener('click', closeSheet);
+      overlay.appendChild(scrim);
       sheet = document.createElement('div');
       sheet.className = 'ps-sheet';
       sheet.setAttribute('role', 'dialog');
       sheet.setAttribute('aria-label', 'Product details');
       overlay.appendChild(sheet);
+      wireSheetDrag(sheet);
       sheetCloser = closeSheet;
     }
     renderSheet(sheet, offer);
     const closeBtnEl = sheet.querySelector('.ps-close');
-    if (closeBtnEl) closeBtnEl.focus();
+    if (closeBtnEl) closeBtnEl.focus({ preventScroll: true });
   }
 
   function closeSheet() {
     const sheet = overlay.querySelector('.ps-sheet');
     if (sheet) sheet.remove();
+    const scrim = overlay.querySelector('.ps-scrim');
+    if (scrim) scrim.remove();
     sheetStack.length = 0;
     sheetCloser = null;
     stage.focus({ preventScroll: true });
+  }
+
+  // Swipe-down-to-dismiss, phone bottom-sheet style. The drag lives on the
+  // sheet but only ARMS when it starts on the grab handle / header, or when
+  // the body is scrolled to the top — so it never fights the body's scroll.
+  function wireSheetDrag(sheet) {
+    let startY = null;
+    let dragging = false;
+    sheet.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      const body = sheet.querySelector('.ps-body');
+      const onHandle = e.target.closest('.ps-grab, .ps-head');
+      if (!onHandle && !(body && body.scrollTop <= 0)) return;
+      startY = e.touches[0].clientY;
+      dragging = false;
+    }, { passive: true });
+    sheet.addEventListener('touchmove', (e) => {
+      if (startY == null) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy <= 0 && !dragging) { startY = null; return; } // scrolling up: not a dismiss
+      dragging = true;
+      sheet.style.transition = 'none';
+      sheet.style.transform = `translateY(${Math.max(0, dy)}px)`;
+      if (dy > 0) e.preventDefault();
+    }, { passive: false });
+    sheet.addEventListener('touchend', (e) => {
+      if (startY == null) return;
+      const dy = e.changedTouches[0].clientY - startY;
+      startY = null;
+      if (!dragging) return;
+      sheet.style.transition = '';
+      if (dy > 90) closeSheet();
+      else sheet.style.transform = ''; // snap back
+    }, { passive: true });
   }
 
   const esc = (s) =>
@@ -464,19 +507,77 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     applyZoom();
   });
 
-  // Swipe to page on touch (only when not zoomed — zoomed drags pan the stage).
+  // --- touch gestures ---------------------------------------------------------
+  // Swipe pages when not zoomed; PINCH to zoom continuously; DOUBLE-TAP to
+  // toggle 1×↔2× at the tap point. Zoom re-sizes the wrapper (layout()), so
+  // after each zoom step the stage scroll is adjusted to keep the gesture's
+  // focal point stationary — the phone-native brochure feel. The stage's CSS
+  // touch-action (pan-x pan-y) leaves pinch + double-tap to us while native
+  // panning keeps working.
   let touchX = null;
   let touchY = null;
+  let pinchDist = 0; // >0 while a pinch is in progress
+  let pinchZoom = 1;
+  let pinched = false; // suppress the page-swipe after a pinch ends
+  let lastTap = { t: 0, x: 0, y: 0 };
+
+  // Zoom to `z` keeping the stage point under (cx, cy) — client coords — fixed.
+  const zoomAt = (z, cx, cy) => {
+    const rect = stage.getBoundingClientRect();
+    const px = (stage.scrollLeft + (cx - rect.left)) / Math.max(1, wrap.offsetWidth);
+    const py = (stage.scrollTop + (cy - rect.top)) / Math.max(1, wrap.offsetHeight);
+    zoom = Math.min(MAX_ZOOM, Math.max(1, z));
+    applyZoom();
+    stage.scrollLeft = px * wrap.offsetWidth - (cx - rect.left);
+    stage.scrollTop = py * wrap.offsetHeight - (cy - rect.top);
+  };
+
   stage.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      const [a, b2] = e.touches;
+      pinchDist = Math.hypot(a.clientX - b2.clientX, a.clientY - b2.clientY);
+      pinchZoom = zoom;
+      pinched = true;
+      touchX = touchY = null;
+      return;
+    }
     if (e.touches.length !== 1) return;
+    pinched = false;
     touchX = e.touches[0].clientX;
     touchY = e.touches[0].clientY;
   }, { passive: true });
+
+  stage.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2 || !pinchDist) return;
+    e.preventDefault(); // keep the browser from zooming the whole page
+    const [a, b2] = e.touches;
+    const dist = Math.hypot(a.clientX - b2.clientX, a.clientY - b2.clientY);
+    zoomAt(
+      pinchZoom * (dist / pinchDist),
+      (a.clientX + b2.clientX) / 2,
+      (a.clientY + b2.clientY) / 2,
+    );
+  }, { passive: false });
+
   stage.addEventListener('touchend', (e) => {
-    if (touchX == null || zoom > 1) return;
-    const dx = e.changedTouches[0].clientX - touchX;
-    const dy = e.changedTouches[0].clientY - touchY;
-    if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) go(idx + (dx < 0 ? 1 : -1));
+    if (e.touches.length < 2) pinchDist = 0;
+    if (pinched || touchX == null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchX;
+    const dy = t.clientY - touchY;
+    const moved = Math.hypot(dx, dy);
+    // Double-tap: two quick, close, movement-free taps toggle the zoom.
+    if (moved < 12) {
+      const now = Date.now();
+      if (now - lastTap.t < 320 && Math.hypot(t.clientX - lastTap.x, t.clientY - lastTap.y) < 40) {
+        zoomAt(zoom > 1 ? 1 : 2, t.clientX, t.clientY);
+        lastTap.t = 0;
+      } else {
+        lastTap = { t: now, x: t.clientX, y: t.clientY };
+      }
+    } else if (zoom <= 1 && Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      go(idx + (dx < 0 ? 1 : -1));
+    }
     touchX = touchY = null;
   }, { passive: true });
 
