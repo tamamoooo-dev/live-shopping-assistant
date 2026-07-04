@@ -27,6 +27,8 @@ ok('pack 12x1l -> 12000', (() => { const s = parseSize('Nadec Multi Pack 12x1l',
 ok('arabic 2 لتر -> 2000', parseSize('المراعي حليب 2 لتر').total === 2000);
 ok('arabic كجم', parseSize('رز بسمتي 5 كجم').total === 5000);
 ok('arabic-indic digits', parseSize('حليب ٢ لتر').total === 2000);
+ok('OCR Farsi kaf in unit: 5 کجم', parseSize('رز بسمتي 5 کجم').total === 5000);
+ok('OCR Farsi yeh in unit: 2 لیتر', parseSize('حليب 2 لیتر').total === 2000);
 ok('count 30 pcs', (() => { const s = parseSize('Eggs 30 pcs'); return s.unit === 'pcs' && s.total === 30; })());
 ok('arabic count-word pack: 24 قطعة × 125مل', (() => { const s = parseSize('حليب كامل الدسم، 24 قطعة × 125مل'); return s.pack === 24 && s.each === 125 && s.total === 3000; })());
 ok('size × digits never doubles as multiplier', (() => { const s = parseSize('حليب × 125مل'); return s.pack === 1 && s.total === 125; })());
@@ -70,6 +72,10 @@ ok('different brand NOT merged', !groups.some((g) => g.items.some((i) => i.it.br
 
 // --- normalization ---
 ok('normalize folds alef/diacritics', normalizeText('أَلبان') === normalizeText('البان'));
+// D4D flyer OCR emits Farsi glyphs inside Arabic names — they must fold to the
+// Arabic codepoints or lexicon keywords silently miss ("مربی" jam, "داری" brand).
+ok('normalize folds Farsi yeh U+06CC', normalizeText('مربی') === normalizeText('مربي'));
+ok('normalize folds Farsi kaf U+06A9', normalizeText('کیک') === normalizeText('كيك'));
 
 // --- product families ---
 ok('milk name -> milk family', productFamily('حليب نادك منزوع الدسم 1 لتر') === 'milk');
@@ -95,6 +101,9 @@ ok('fresh strawberry -> strawberry family', productFamily('فراولة طازج
 ok('strawberry milk -> milk (base beats produce, AR order)', productFamily('حليب فراولة 200 مل') === 'milk');
 ok('strawberry milk -> milk (EN order too)', productFamily('Strawberry Milk 180ml') === 'milk');
 ok('strawberry jam -> jam', productFamily('مربى الفراولة 450 جم') === 'jam');
+ok('OCR Farsi yeh: مربی فراولة -> jam', productFamily('مربی بوني ماما فراولة 450 جم') === 'jam');
+ok('OCR Farsi kaf+yeh: کیکة -> cake', productFamily('کیکة الفراولة') === 'cake');
+ok('OCR Farsi yeh: داری is a frozen brand', isProcessedProduce('داری فراولة 1 كجم'));
 ok('strawberry cake -> cake', productFamily('كيكة الفراولة') === 'cake');
 ok('flavour marker never classifies as produce', productFamily('بنكهة الفراولة') === null);
 ok('orange juice -> juice', productFamily('عصير برتقال 1 لتر') === 'juice');
