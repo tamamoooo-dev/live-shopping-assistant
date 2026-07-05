@@ -148,11 +148,13 @@ button { font-family: inherit; }
   text-decoration: none;
 }
 .brand-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: var(--grad);
-  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.35);
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  /* The official app icon — one brand identity across header, PWA, favicon and
+     home-screen. Path is relative to this stylesheet (served from the subpath). */
+  background: url('./icons/icon-192.png') center / cover no-repeat;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
 }
 .brand-name {
   font-size: 21px;
