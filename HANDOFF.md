@@ -6,14 +6,17 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-04 · All five roadmap pillars **plus tappable
+> **Last updated:** 2026-07-05 · All five roadmap pillars **plus tappable
 > brochures + cart** are **built, deployed and verified in production**.
-> Current work mode: polish & maintenance. Latest change: **catalog-wide
-> Price History** (HISTORY §28) — ENGINE deployed & backfilled (⚠️ the wrangler
-> deploy also shipped §27's engine matching mirror from the local commits);
-> the FRONTEND half (§27 + §28) is **committed but NOT pushed — awaiting the
-> same user approval**, so production mirrors are temporarily drifted until
-> one `git push` in each repo aligns everything.
+> Current work mode: polish & maintenance. Latest change: **regression
+> root-cause + re-render healing** (HISTORY §29) — the 2026-07-04 redesign
+> left production a mix of three generations (old frontend, new engine, a
+> Jul-2 data snapshot D4D re-rendered out from under us). ENGINE fixes are
+> **deployed** (same-URL re-render detection + hotspot-cache invalidation);
+> the stale data converges on the next ingest (Tue Jul 7 cron, or a manual
+> re-ingest sooner). The FRONTEND half (§27 + §28) is **committed but NOT
+> pushed — pending user approval**, so symptoms 1–2 of §29 persist in
+> production until one `git push` in each repo aligns everything.
 
 ---
 
@@ -154,7 +157,12 @@ edition; concurrent siblings append the D4D offer id (`2026-W27-738849`).
 `rankCurrent` ranks valid-now → most pages → latest validTo → newest id, and
 dedupes same-campaign variants. Dedupe is sha256 checksum (`ux_checksum`);
 already-held flyers are matched by `source_url` (`findHeld`) and cost zero
-downloads, so runs converge. Bytes live in KV under the edition prefix
+downloads, so runs converge. **Re-render detection** (§29): D4D can re-render
+a flyer under the SAME URL (page set re-paginated, or deep-link page ids newly
+exposed), which `findHeld` alone can't see — the collector compares the held
+`meta.json` page set with what the leaflet advertises now (`readHeldPages`,
+KV-only) and re-downloads on drift; byte-identical re-downloads that gained
+page ids refresh `meta.json` only. Tests: `node src/reingest.test.mjs`. Bytes live in KV under the edition prefix
 (`pageNN.webp` / `original.pdf` / `meta.json`); `GET /brochures` rows carry
 `pages:[]` — the real page list (with `pageId`s for viewer deep-jumps) is in
 `meta.json`.
@@ -180,7 +188,9 @@ DEMAND with a permanent KV cache (`<prefix>/hotspots.json`, pruned with the
 edition): first call per brochure = 1 external subrequest, then KV only;
 response joins ALL of that flyer's offers rows (`offerStore.byFlyer`). A D4D
 markup change breaks hotspots cleanly (no spots rendered); transient fetch
-failures are served empty but NOT cached. Test: `node src/hotspots.test.mjs`.
+failures are served empty but NOT cached. Geometry is immutable per RENDERING,
+not per edition: the pipeline drops `hotspots.json` whenever an edition's
+bytes are re-stored (§29). Test: `node src/hotspots.test.mjs`.
 
 **Price history** (`priceHistory.js` + `storage/historyStore.js`) —
 **CATALOG-WIDE, harvested from the offers ingest** (redesigned 2026-07-04;
@@ -348,9 +358,14 @@ external product images — verify via `preview_eval` DOM inspection; preview
   "lowest strawberry price" is always a FRESH strawberry claim. Naming the
   form/processing in the query ("فراولة مجمدة") switches all of it off.
 - **Flyer viewer deep-jumps** need `pageId`s in `meta.json` — they appear per
-  edition on its next re-download (unchanged flyers dedupe and keep old
-  metadata); missing id ⇒ graceful page-1 fallback. D4D ids sit on ~every
-  other page (2-page spreads share one id).
+  edition on its next re-download; missing id ⇒ graceful page-1 fallback. D4D
+  ids sit on ~every other page (2-page spreads share one id).
+- **D4D re-renders flyers under the SAME leaflet URL mid-week** (seen
+  2026-07-05: lulu W27 went 40 → 80 pages days after capture). Consequences of
+  a missed re-render: stored pages/`pageId`s go stale, offers' `?page=` refs
+  die on D4D (blank external pages), cached hotspot geometry misaligns with
+  stored page images. The re-render detection + hotspot invalidation (§5, §29)
+  handle this — never assume "same URL ⇒ same flyer".
 - **Othaim flyer offers never open in-app** (brochure is the official PDF,
   offers come from D4D — no edition link possible); they open the external
   flyer page. iOS Safari renders embedded PDFs first-page-only ("Open PDF ↗"

@@ -3422,6 +3422,77 @@ wrangler deploy necessarily also shipped §27's engine matching half from the
 local commits). Frontend committed, NOT pushed — awaiting the user approval
 already pending on §27; one push aligns the mirrors.
 
+## §29 · Regression root-cause: the half-rolled-out redesign + D4D's mid-week re-render (2026-07-05)
+
+**The report.** Five production regressions after the §26–§28 redesign: Price
+History only for milk/eggs; the home page still advertising only milk/eggs;
+flyer thumbnails often missing from search results; flyer clicks sometimes
+opening a blank D4D page; other times opening the in-app viewer on the wrong
+page. Instruction: find the common root cause, don't patch symptoms.
+
+**Root cause — one state, not five bugs.** Production was a mix of THREE
+generations, frozen mid-transition:
+
+1. **Frontend = pre-redesign** (§27+§28 commits unpushed): the `PRODUCTS`
+   milk/eggs regex still gated Price History and the home page still rendered
+   the tracked-chips block → symptoms 1+2 exactly (the new engine's legacy
+   `product=` → `q` compat is why milk/eggs kept working).
+2. **Engine = redesigned** (deployed Jul 3–4, repeatedly).
+3. **Data = a Jul 1–2 snapshot ingested by PRE-§23 code** — and no ingest ever
+   ran on newer code: every cron fire (Tue/Wed/Fri 06:00 UTC) predated the
+   deploys; the next was Tue Jul 7. Verified: all 48 held brochures' meta.json
+   carry ZERO `pageId`s → every flyer deep-jump took the page-1 fallback
+   (symptom 5). Offers referenced flyer VARIANTS the brochure side didn't keep
+   (e.g. grandhyper offers from flyer 739128, brochure held 739137) →
+   `edition: null` on 15–55% of offers → external D4D opens instead of in-app.
+4. **D4D re-rendered its flyers mid-week under the SAME URLs** (lulu W27:
+   40 → 80 pages between our Jul-2 capture and Jul-5). Old `?page=` refs died
+   (verified: page id 9397395 no longer in flyer 739128's markup) → blank D4D
+   pages (symptom 4); crop-image churn during the re-render window is the best
+   explanation for the transient missing thumbnails (symptom 3 — all sampled
+   crop URLs resolved again by Jul 5); and the permanently-cached
+   `hotspots.json` for lulu W27 indexes pages 0–79 against 40 stored page
+   images — parsed from the NEW rendering, joined to the OLD one.
+
+**The structural defect** exposed by (4): `findHeld` matches held flyers by
+`source_url` alone and skips downloading, and the §23 "lazy pageId backfill"
+assumed unchanged URL ⇒ unchanged flyer. A same-URL re-render was therefore
+INVISIBLE — the held edition could never heal within its own week.
+
+**Fixes (engine, deployed 2026-07-05):**
+
+- `pipeline.js` — drop `brochures/<key>/hotspots.json` whenever an edition's
+  bytes are re-stored (geometry is immutable per rendering, not per edition).
+- `engine.js` + `collectors/aggregator.js` — re-render detection: a
+  `readHeldPages` hook exposes the held meta.json page set (KV-only, zero
+  external subrequests); the collector re-downloads a held flyer when the
+  source's page count drifts from the stored one OR the source now exposes
+  deep-link page ids the held copy lacks. Unreadable meta stays conservative
+  (zero-download convergence preserved).
+- `pipeline.js` — byte-identical dedupe now refreshes `meta.json` (no byte
+  writes) when the candidate carries page ids, so the staleness trigger goes
+  quiet instead of re-downloading every run.
+- `src/reingest.test.mjs` — offline coverage: unchanged→existing,
+  re-paginated→re-download, ids-newly-exposed→re-download (and quiet after),
+  unreadable-meta→conservative, hotspots dropped on re-store, dedupe
+  meta-refresh without byte writes.
+
+**Verification.** Frontend match 163/163 + compare 73/73; engine reingest
+11/11 + hotspots + offerstest + pricetest all green. Deployed engine verified
+live: `/prices?q=juice` → 75 observations / 20 size variants;
+`/prices?product=milk` legacy compat → 184 observations. Local frontend (the
+unpushed commits) against the live engine: home page shows the generic Price
+History copy (no tracked chips); searching "juice" renders the full history
+verdict ("history is still building", lowest-so-far per store/size) and all
+flyer thumbnails loaded, zero console errors.
+
+**Rollout state at close.** Engine fixes deployed; data converges on the next
+ingest (Tue Jul 7 cron — also when W27 expires — or a manual re-ingest with a
+rotated `INGEST_SECRET` sooner). The frontend push and the secret rotation
+were blocked by the session's permission mode, so symptoms 1+2 persist in
+production until the pending `git push` in each repo (which also publishes
+the engine commits GitHub never saw).
+
 ---
 
 _End of handoff._
