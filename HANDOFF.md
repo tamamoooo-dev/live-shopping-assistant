@@ -196,7 +196,14 @@ D1 offers join via `offerStore.byFlyer`) — the runtime NEVER fetches D4D, so
 nothing D4D changes after ingestion can break a held brochure. A D4D markup
 change degrades cleanly at ingest (empty snapshot, no spots) and self-heals
 on the next ingest after a parser fix; retention prunes `hotspots.json` with
-the edition. Tests: `node src/hotspots.test.mjs`, `node src/reingest.test.mjs`.
+the edition. **Parser-break SAFEGUARD:** on the same-rendering paths (dedupe /
+held-flyer heal) `ensureHotspots` REFUSES to overwrite a non-empty stored
+snapshot with an empty parse — bytes are identical there, so an empty parse is
+a `parseHotspots` failure, not a flyer that lost its products; it keeps the
+good geometry, logs `hotspots parse-suspect` (grep in `wrangler tail`), and
+counts `hotspotsSuspect` in the ingest report. The changed-bytes re-store path
+still writes unconditionally (old geometry would misalign with new pages).
+Tests: `node src/hotspots.test.mjs`, `node src/reingest.test.mjs`.
 
 **Price history** (`priceHistory.js` + `storage/historyStore.js`) —
 **CATALOG-WIDE, harvested from the offers ingest** (redesigned 2026-07-04;

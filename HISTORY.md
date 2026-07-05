@@ -3571,6 +3571,26 @@ engine deploys, the old on-demand path keeps serving. The pipeline change is
 backward-compatible with existing cached `hotspots.json` blobs (same
 `{pages}` shape, same read key).
 
+**Follow-up — parser-break safeguard (2026-07-05).** A review flagged that
+snapshot-at-ingest, while robust to D4D *content* changes, was newly sensitive
+to D4D *markup* changes AND failed destructively: because every cron re-parses
+the leaflet and `ensureHotspots` writes on any difference, a broken
+`parseHotspots` (returning `[]`) would OVERWRITE every current edition's good
+snapshot with empty on the very next fire. Fixed in `pipeline.js`: on the
+same-rendering paths (dedupe + held-flyer heal — bytes identical, so the
+stored geometry is still correct) `ensureHotspots` now REFUSES an empty parse
+over a non-empty stored snapshot, returning `'refused-empty'`, keeping the
+good geometry, and logging `brochure-engine hotspots parse-suspect` (with the
+stored spot count) as the early parser-failure signal; `engine.js` counts it
+as `hotspotsSuspect` in the ingest report. The changed-bytes re-store path is
+deliberately left unconditional — there the old geometry would misalign with
+the new pages, so writing the fresh parse (even empty) stays correct. A
+genuinely coord-less flyer (empty stored, empty parse) writes normally, no
+false alarm. Tests: reingest.test.mjs gains empty-over-non-empty refusal (both
+the `ensureHotspots` and dedupe paths) + the no-false-alarm case. Remaining
+review items (orphan-spot metric, `/asset` CORS guard test, health coverage,
+markup canary) deferred to a future task.
+
 ---
 
 _End of handoff._
