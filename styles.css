@@ -24,6 +24,8 @@
   --accent-soft: rgba(225, 29, 72, 0.1);
   --good: #16a34a;
   --good-soft: rgba(22, 163, 74, 0.12);
+  --bad: #dc2626;
+  --bad-soft: rgba(220, 38, 38, 0.1);
   --warn: #b45309;
   --warn-soft: rgba(217, 119, 6, 0.14);
   --radius: 18px;
@@ -55,6 +57,8 @@
     --accent-soft: rgba(251, 113, 133, 0.14);
     --good: #4ade80;
     --good-soft: rgba(74, 222, 128, 0.14);
+    --bad: #f87171;
+    --bad-soft: rgba(248, 113, 113, 0.16);
     --warn: #fbbf24;
     --warn-soft: rgba(251, 191, 36, 0.14);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -1356,29 +1360,71 @@ a.summary-name:hover { text-decoration: underline; }
   gap: 12px;
   background: var(--surface);
   border-radius: var(--radius-sm);
-  padding: 12px 14px;
+  padding: 13px 15px;
   box-shadow: var(--shadow-sm);
+  border-inline-start: 4px solid transparent;
+  transition: box-shadow 0.15s ease, background 0.15s ease;
 }
+/* The state lives in the PRODUCT TITLE colour so the list scans at a glance:
+   🟩 green title = deal found, 🟥 red title = still watching. A matching rail
+   reinforces it; the card stays otherwise neutral so the title leads. */
+.watch-row.is-deal { border-inline-start-color: var(--good); }
+.watch-row.is-watching { border-inline-start-color: var(--bad); }
 .watch-row.is-deleting { opacity: 0.5; pointer-events: none; }
+/* Product thumbnail — the watch at a glance; neutral tile when absent/broken. */
+.watch-thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.watch-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.watch-thumb.is-empty::after { content: '🛒'; font-size: 20px; opacity: 0.55; }
 .watch-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+/* Primary: the product name — bold and state-coloured, catches the eye first. */
 .watch-name {
-  font-weight: 700;
-  font-size: 13.5px;
+  font-weight: 800;
+  font-size: 16px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--text);
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-a.watch-name:hover { color: var(--brand); }
-.watch-kind { font-size: 11.5px; color: var(--muted); }
-.watch-state { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
-.watch-target { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.watch-last { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.watch-last.is-hit { color: var(--good); }
-.watch-last.is-above { color: var(--text); }
-.watch-last.is-waiting { color: var(--muted); font-weight: 500; }
-.watch-checked { font-size: 10.5px; color: var(--muted); }
+.watch-row.is-deal .watch-name { color: var(--good); }
+.watch-row.is-watching .watch-name { color: var(--bad); }
+a.watch-name:hover { text-decoration: underline; }
+/* Secondary: the living status line — neutral, the colour is on the title. */
+.watch-status { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The current best price — the number that matters; greens up on a deal. */
+.watch-price {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-price.is-deal { color: var(--good); }
+.watch-price.is-pending { color: var(--muted); font-weight: 500; }
+/* Tertiary: quiet supporting details. */
+.watch-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .watch-delete {
   border: none;
   background: var(--surface-2);
@@ -1411,8 +1457,7 @@ a.watch-name:hover { color: var(--brand); }
 .alert-link:hover { text-decoration: underline; }
 
 @media (max-width: 560px) {
-  .watch-row { flex-wrap: wrap; }
-  .watch-state { align-items: flex-start; }
+  .watch-name { white-space: normal; }
 }
 
 /* ==========================================================================

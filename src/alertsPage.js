@@ -164,10 +164,37 @@ function invalidate() {
   rendered = false;
 }
 
+// A watch renders in one of two living states, read straight from its latest
+// check: 🟢 a deal (current best is at/below target) or 🔴 still watching.
+// Visual hierarchy — the product (thumb + name) is primary and state-coloured,
+// then the friendly status, the current best price, and the quiet
+// scope/target/checked line last.
 function watchRow(w, onDelete) {
-  const row = el('div', 'watch-row');
+  const hasDeal = w.lastPrice != null && w.lastPrice <= w.targetPrice + 1e-9;
+  const row = el('div', `watch-row ${hasDeal ? 'is-deal' : 'is-watching'}`);
+
+  // Thumbnail — the product at a glance. Falls back to a neutral tile when
+  // there's no image or it fails to load (a watch must never show a broken img).
+  const thumb = el('div', 'watch-thumb');
+  if (w.image) {
+    const img = document.createElement('img');
+    img.src = w.image;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.addEventListener('error', () => {
+      img.remove();
+      thumb.classList.add('is-empty');
+    });
+    thumb.appendChild(img);
+  } else {
+    thumb.classList.add('is-empty');
+  }
+  row.appendChild(thumb);
 
   const main = el('div', 'watch-main');
+
+  // Primary — the product name, the thing the eye should land on; its colour
+  // carries the state (green = deal, red = watching).
   const name = el(w.lastLink || w.link ? 'a' : 'span', 'watch-name');
   name.dir = 'auto';
   name.textContent = w.label || w.query;
@@ -178,29 +205,40 @@ function watchRow(w, onDelete) {
     name.rel = 'noopener';
   }
   main.appendChild(name);
-  const kind = el(
-    'span',
-    'watch-kind',
-    w.kind === 'product' ? `${storeLabel(w.provider) || w.provider} · this product` : 'all stores + flyers',
-  );
-  main.appendChild(kind);
-  row.appendChild(main);
 
-  const state = el('div', 'watch-state');
-  const target = el('span', 'watch-target', `target ${money(w.targetPrice)}`);
-  state.appendChild(target);
+  // Secondary — the living status. Friendly and active, never technical. The
+  // colour cue lives on the title above; this line stays neutral.
+  const status = el('div', 'watch-status', hasDeal ? '✓ Deal found!' : '● Still watching…');
+  main.appendChild(status);
+
+  // Current best price — the number the user actually cares about. Shown for
+  // both states when a price is known; a gentle note while we're still looking.
+  const price = el('div', 'watch-price');
   if (w.lastPrice != null) {
-    const below = w.lastPrice <= w.targetPrice + 1e-9;
-    const last = el('span', `watch-last ${below ? 'is-hit' : 'is-above'}`);
-    last.textContent = `${below ? '✓ ' : ''}${money(w.lastPrice)} at ${storeLabel(w.lastStore) || w.lastStore || '—'}${
-      w.lastSource === 'flyer' ? ' (flyer)' : ''
-    }`;
-    state.appendChild(last);
+    const store = storeLabel(w.lastStore) || w.lastStore || '';
+    price.textContent =
+      money(w.lastPrice) +
+      (store ? ` at ${store}` : '') +
+      (w.lastSource === 'flyer' ? ' (flyer)' : '');
+    if (hasDeal) price.classList.add('is-deal');
   } else {
-    state.appendChild(el('span', 'watch-last is-waiting', w.checkedAt ? 'no trustworthy match yet' : 'first check tonight'));
+    price.textContent = 'Checking every store daily…';
+    price.classList.add('is-pending');
   }
-  if (w.checkedAt) state.appendChild(el('span', 'watch-checked', `checked ${fmtDate(w.checkedAt)}`));
-  row.appendChild(state);
+  main.appendChild(price);
+
+  // Tertiary — quiet supporting details.
+  const scope =
+    w.kind === 'product'
+      ? `${storeLabel(w.provider) || w.provider} · this product`
+      : 'All stores + flyers';
+  const bits = [scope, `target ${money(w.targetPrice)}`];
+  bits.push(w.checkedAt ? `checked ${fmtDate(w.checkedAt)}` : 'first check tonight');
+  const meta = el('div', 'watch-meta', bits.join(' · '));
+  meta.dir = 'auto';
+  main.appendChild(meta);
+
+  row.appendChild(main);
 
   const del = el('button', 'watch-delete', '✕');
   del.type = 'button';

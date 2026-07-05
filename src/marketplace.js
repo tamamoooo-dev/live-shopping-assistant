@@ -332,27 +332,49 @@ function onlineCard(store, item, badge) {
     a.rel = 'noopener';
   }
 
-  // Watch bell: one tap sets a target-price watch on THIS product (the engine
-  // re-finds it daily by its stable result id — Keepa-style monitoring).
+  // Watch bell: one tap sets a target-price watch on THIS product.
+  //   • Amazon — an exact-product watch: the engine re-finds THAT listing daily
+  //     by its stable id (Keepa-style). Marketplace SKUs have no cross-store
+  //     equivalent, so this behaviour is preserved exactly.
+  //   • every other store — a cross-store watch: we keep the product identity
+  //     (query + name + size) but let the engine super-search ALL stores and
+  //     this week's flyers daily and take the lowest trustworthy price, exactly
+  //     like the summary's "Watch price". One bell, best price everywhere.
   if (item.id != null && item.price != null) {
     const bell = el('button', 'card-watch', '🔔');
     bell.type = 'button';
-    bell.title = 'Watch this product’s price';
+    const exact = store.id === 'amazon';
+    bell.title = exact ? 'Watch this product’s price' : 'Watch this — across every store';
     bell.setAttribute('aria-label', `Watch the price of ${item.name}`);
     bell.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      openWatchDialog({
-        kind: 'product',
-        provider: store.id,
-        productId: String(item.id),
-        query: watchQueryFor(item),
-        label: item.name,
-        suggestedPrice: item.price,
-        currentPrice: item.price,
-        link: item.link,
-        image: item.image,
-      });
+      openWatchDialog(
+        exact
+          ? {
+              kind: 'product',
+              provider: store.id,
+              productId: String(item.id),
+              query: watchQueryFor(item),
+              label: item.name,
+              suggestedPrice: item.price,
+              currentPrice: item.price,
+              link: item.link,
+              image: item.image,
+            }
+          : {
+              kind: 'grocery',
+              query: watchQueryFor(item),
+              label: item.name,
+              // Reference size for the engine's size gate — name usually carries
+              // it (e.g. "…1kg"); fold in the explicit size field when present.
+              sizeText: [item.name, item.size].filter(Boolean).join(' '),
+              suggestedPrice: item.price,
+              currentPrice: item.price,
+              link: item.link,
+              image: item.image,
+            },
+      );
     });
     a.appendChild(bell);
   }
