@@ -7,16 +7,16 @@
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
 > **Last updated:** 2026-07-05 · All five roadmap pillars **plus tappable
-> brochures + cart** are **built, deployed and verified in production**.
-> Current work mode: polish & maintenance. Latest change: **regression
-> root-cause + re-render healing** (HISTORY §29) — the 2026-07-04 redesign
-> left production a mix of three generations (old frontend, new engine, a
-> Jul-2 data snapshot D4D re-rendered out from under us). ENGINE fixes are
-> **deployed** (same-URL re-render detection + hotspot-cache invalidation);
-> the stale data converges on the next ingest (Tue Jul 7 cron, or a manual
-> re-ingest sooner). The FRONTEND half (§27 + §28) is **committed but NOT
-> pushed — pending user approval**, so symptoms 1–2 of §29 persist in
-> production until one `git push` in each repo aligns everything.
+> brochures + cart** are built and verified. Latest change: the
+> **snapshot-at-ingest redesign** (HISTORY §30) — the runtime no longer
+> depends on D4D staying unchanged after ingestion: hotspot geometry is
+> captured AT INGEST from the same leaflet HTML as the pages (atomically
+> consistent by construction), `/brochures/hotspots` serves storage-only, and
+> the product sheet + cart crop products from the STORED page images. Both
+> halves are **committed but NOT shipped** (`npx wrangler deploy` and pushes
+> were permission-gated this session): ship with one `npx wrangler deploy` in
+> `brochure-engine/` + one `git push` per repo. Until the engine deploys,
+> hotspots keep using the old on-demand fetch path.
 
 ---
 
@@ -177,20 +177,26 @@ upsert. `GET /offers?q=` search: word-boundary banded D1 prefilter (exact word
 > word-start > substring) + JS filtering via the matching mirror, ranked by
 Search-Roadmap stage (rule 9) → family tier → match strength → cheapest.
 
-**Hotspots (tappable brochures):** D4D leaflet HTML embeds per-product tap
-polygons (`data-coords-json` on the carousel copy's `image-container`;
-`data-next-page-coords` on the plain copy's `picture` = the FOLLOWING page)
-whose `id_product` == `offers.offer_id`, in the page's `data-width/height`
-pixel frame. `hotspots.js` parses them into per-page normalized bboxes keyed
-by the page's SOURCE `data-index` (== each page's `index` in `meta.json` — the
-join key, never ordinal position). Served by `GET /brochures/hotspots?id=` ON
-DEMAND with a permanent KV cache (`<prefix>/hotspots.json`, pruned with the
-edition): first call per brochure = 1 external subrequest, then KV only;
-response joins ALL of that flyer's offers rows (`offerStore.byFlyer`). A D4D
-markup change breaks hotspots cleanly (no spots rendered); transient fetch
-failures are served empty but NOT cached. Geometry is immutable per RENDERING,
-not per edition: the pipeline drops `hotspots.json` whenever an edition's
-bytes are re-stored (§29). Test: `node src/hotspots.test.mjs`.
+**Hotspots (tappable brochures) — SNAPSHOT-AT-INGEST:** D4D leaflet HTML
+embeds per-product tap polygons (`data-coords-json` on the carousel copy's
+`image-container`; `data-next-page-coords` on the plain copy's `picture` =
+the FOLLOWING page) whose `id_product` == `offers.offer_id`, in the page's
+`data-width/height` pixel frame. `hotspots.js parseHotspots` reduces them to
+normalized bboxes; capture happens AT INGEST: the d4d adapter parses geometry
+from the SAME leaflet HTML fetch that lists the page images and remaps source
+`data-index` → stored ordinal page index (`remapHotspotPages` — the join with
+`meta.json` is identity by construction), the collector carries it on every
+candidate, and the pipeline writes `<prefix>/hotspots.json` WITH the page
+bytes (before `meta.json`, the commit point) — pages and geometry are two
+views of ONE rendering and can never misalign. Held flyers heal a
+missing/legacy/differing snapshot every run at zero extra subrequests (the
+leaflet HTML is fetched each run anyway; `pipeline.ensureHotspots` writes
+only on change). `GET /brochures/hotspots?id=` is STORAGE-ONLY (KV snapshot +
+D1 offers join via `offerStore.byFlyer`) — the runtime NEVER fetches D4D, so
+nothing D4D changes after ingestion can break a held brochure. A D4D markup
+change degrades cleanly at ingest (empty snapshot, no spots) and self-heals
+on the next ingest after a parser fix; retention prunes `hotspots.json` with
+the edition. Tests: `node src/hotspots.test.mjs`, `node src/reingest.test.mjs`.
 
 **Price history** (`priceHistory.js` + `storage/historyStore.js`) —
 **CATALOG-WIDE, harvested from the offers ingest** (redesigned 2026-07-04;
@@ -256,7 +262,7 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`
 | `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family); sort order = Roadmap stage (rule 9) → family band → price/value |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
-| `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
+| `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). Sheet hero + cart thumbnail are **SELF-HOSTED crops** from the STORED page image via the tapped spot's bbox (`cropFromPage`: canvas + `crossOrigin` on the CORS-open /asset → data-URL); D4D's CDN crop (`offer.imageUrl`) is only a fallback when no geometry is at hand (similar-strip, marketplace). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
 | `cartPage.js` | Cart page: per-store groups + subtotals, qty steppers, View flyer (re-opens viewer on the item's page) |
 | `alertsPage.js` | Alerts page + shared watch dialog + nav badge |
@@ -361,11 +367,14 @@ external product images — verify via `preview_eval` DOM inspection; preview
   edition on its next re-download; missing id ⇒ graceful page-1 fallback. D4D
   ids sit on ~every other page (2-page spreads share one id).
 - **D4D re-renders flyers under the SAME leaflet URL mid-week** (seen
-  2026-07-05: lulu W27 went 40 → 80 pages days after capture). Consequences of
-  a missed re-render: stored pages/`pageId`s go stale, offers' `?page=` refs
-  die on D4D (blank external pages), cached hotspot geometry misaligns with
-  stored page images. The re-render detection + hotspot invalidation (§5, §29)
-  handle this — never assume "same URL ⇒ same flyer".
+  2026-07-05: lulu W27 went 40 → 80 pages days after capture). The re-render
+  detection (§5, §29) re-downloads on drift, and since snapshot-at-ingest
+  (§30) pages + `hotspots.json` always come from the same rendering — a
+  missed re-render can no longer misalign geometry with stored pages or break
+  a served brochure. The residual cost is only STALENESS until the next
+  ingest, plus offers' `?page=` refs dying on D4D (cosmetic: the in-app
+  viewer is primary, external links are best-effort "Verify"). Never assume
+  "same URL ⇒ same flyer".
 - **Othaim flyer offers never open in-app** (brochure is the official PDF,
   offers come from D4D — no edition link possible); they open the external
   flyer page. iOS Safari renders embedded PDFs first-page-only ("Open PDF ↗"

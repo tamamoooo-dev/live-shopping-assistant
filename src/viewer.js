@@ -12,10 +12,11 @@
 // TAPPABLE PRODUCTS (the ClickFlyer-style experience): for aggregator
 // brochures the engine serves per-product tap boxes (loadHotspots) aligned to
 // each page by its source index. The viewer overlays them on the page image;
-// tapping one opens a PRODUCT SHEET — the product's own flyer crop zoomed in,
-// bilingual name, price/was-price, validity, Add to Cart, and a strip of
-// similar current flyer offers (reusing the /offers search). Closing the sheet
-// lands back on the exact page & zoom the user left — the viewer never resets.
+// tapping one opens a PRODUCT SHEET — the product cropped out of the STORED
+// page image (self-hosted; see cropFromPage), bilingual name, price/was-price,
+// validity, Add to Cart, and a strip of similar current flyer offers (reusing
+// the /offers search). Closing the sheet lands back on the exact page & zoom
+// the user left — the viewer never resets.
 
 import {
   loadBrochurePages,
@@ -30,6 +31,54 @@ import {
 import { addToCart, inCart } from './cart.js';
 
 let viewerOpen = false;
+
+// --- self-hosted product crop -------------------------------------------------
+// The product sheet's hero image and the cart thumbnail are CROPPED FROM THE
+// STORED PAGE IMAGE (engine /asset, CORS-open) using the tapped hotspot's
+// bbox — what the user sees is exactly what the stored flyer shows, and
+// neither the sheet nor the cart depends on the aggregator's CDN crop staying
+// alive after ingestion. The aggregator crop (offer.imageUrl) remains only as
+// a best-effort fallback when no geometry is at hand (similar-offers strip,
+// marketplace cards). Resolves a data-URL or null — never throws.
+function cropFromPage(pageSrc, spot, maxPx) {
+  return new Promise((resolve) => {
+    if (!pageSrc || !spot || !spot.w || !spot.h) return resolve(null);
+    let settled = false;
+    const done = (v) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(v);
+      }
+    };
+    // The page is already on screen, so this decode is warm; the timeout only
+    // guards a cold/failed asset fetch from stalling the Add-to-Cart tap.
+    const timer = setTimeout(() => done(null), 2500);
+    const src = new Image();
+    src.crossOrigin = 'anonymous'; // /asset sends CORS *, keeps the canvas clean
+    src.onerror = () => done(null);
+    src.onload = () => {
+      try {
+        const W = src.naturalWidth;
+        const H = src.naturalHeight;
+        const pad = 0.02; // a sliver of flyer context around the product
+        const x0 = Math.max(0, spot.x - pad);
+        const y0 = Math.max(0, spot.y - pad);
+        const w = Math.min(1 - x0, spot.w + 2 * pad) * W;
+        const h = Math.min(1 - y0, spot.h + 2 * pad) * H;
+        const scale = Math.min(1, maxPx / Math.max(w, h));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        canvas.getContext('2d').drawImage(src, x0 * W, y0 * H, w, h, 0, 0, canvas.width, canvas.height);
+        done(canvas.toDataURL('image/jpeg', 0.82));
+      } catch {
+        done(null); // tainted canvas / decode failure -> fallback image
+      }
+    };
+    src.src = pageSrc;
+  });
+}
 
 function fmtDate(iso) {
   if (!iso) return '';
@@ -237,7 +286,9 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       btn.style.height = `${s.h * 100}%`;
       const label = cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || 'flyer product';
       btn.setAttribute('aria-label', `${label} — ${offer.price} ${offer.currency || 'SAR'}`);
-      btn.addEventListener('click', () => openProductSheet(offer));
+      // The spot + the stored page image travel with the offer so the sheet
+      // and the cart can crop the product SELF-HOSTED (see cropFromPage).
+      btn.addEventListener('click', () => openProductSheet({ offer, spot: s, pageSrc: pages[idx] }));
       spotLayer.appendChild(btn);
     }
     // A first-page flash so the tappability is discoverable without cluttering
@@ -285,9 +336,12 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   // A layer INSIDE the viewer overlay: closing it restores the flyer exactly
   // as left (page, zoom, scroll — none of them are touched). Tapping a similar
   // product re-renders the sheet for THAT offer, with ‹ back retracing steps.
+  // Entries are { offer, spot?, pageSrc? }: hotspot taps carry the geometry
+  // for the self-hosted crop; similar-strip taps carry only the offer.
   const sheetStack = [];
-  function openProductSheet(offer, { push = true } = {}) {
-    if (push) sheetStack.push(offer);
+  function openProductSheet(entry, { push = true } = {}) {
+    if (entry && !entry.offer) entry = { offer: entry };
+    if (push) sheetStack.push(entry);
     let sheet = overlay.querySelector('.ps-sheet');
     if (!sheet) {
       // Scrim under the sheet: dims the flyer, absorbs stray taps (no
@@ -304,7 +358,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       wireSheetDrag(sheet);
       sheetCloser = closeSheet;
     }
-    renderSheet(sheet, offer);
+    renderSheet(sheet, entry);
     const closeBtnEl = sheet.querySelector('.ps-close');
     if (closeBtnEl) closeBtnEl.focus({ preventScroll: true });
   }
@@ -358,7 +412,8 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
     );
 
-  function renderSheet(sheet, offer) {
+  function renderSheet(sheet, entry) {
+    const offer = entry.offer;
     const discount =
       offer.oldPrice && offer.oldPrice > offer.price
         ? Math.round(((offer.oldPrice - offer.price) / offer.oldPrice) * 100)
@@ -404,6 +459,22 @@ export function openBrochureViewer(b, storeName, opts = {}) {
         </div>
       </div>`;
 
+    // Self-hosted hero: crop the tapped product out of the STORED page image
+    // (the sheet renders instantly with the fallback and swaps when the warm
+    // decode resolves — typically the same frame). Cached per sheet entry so
+    // back-navigation re-renders cost nothing.
+    if (entry.spot && entry.pageSrc) {
+      const box = sheet.querySelector('.ps-imgbox');
+      (entry.cropUrl
+        ? Promise.resolve(entry.cropUrl)
+        : cropFromPage(entry.pageSrc, entry.spot, 640)
+      ).then((url) => {
+        if (!url || !box || !box.isConnected) return;
+        entry.cropUrl = url;
+        box.innerHTML = `<img class="ps-img" src="${url}" alt="${esc(title)}">`;
+      });
+    }
+
     sheet.querySelector('.ps-close').addEventListener('click', closeSheet);
     const backBtn = sheet.querySelector('.ps-back');
     if (backBtn && !backBtn.hidden) {
@@ -416,7 +487,15 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     }
 
     const addBtn = sheet.querySelector('.ps-add');
-    addBtn.addEventListener('click', () => {
+    addBtn.addEventListener('click', async () => {
+      // The cart snapshots a small SELF-HOSTED crop too (data-URL in
+      // localStorage), so cart items render offline and survive both
+      // aggregator asset churn and the engine's byte retention window.
+      let thumb = entry.cartThumb || null;
+      if (!thumb && entry.spot && entry.pageSrc) {
+        thumb = await cropFromPage(entry.pageSrc, entry.spot, 220);
+        if (thumb) entry.cartThumb = thumb;
+      }
       addToCart({
         id: offer.id,
         store: offer.store,
@@ -425,7 +504,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
         price: offer.price,
         oldPrice: offer.oldPrice,
         currency: offer.currency || 'SAR',
-        image: offer.imageUrl,
+        image: thumb || offer.imageUrl,
         sourceUrl: offer.sourceUrl,
         brochureId: b.id,
         pageIndex: pageIndices[idx],
@@ -467,7 +546,9 @@ export function openBrochureViewer(b, storeName, opts = {}) {
           <span class="ps-rel-price">${o.price} <small>${esc(o.currency || 'SAR')}</small></span>
           <span class="ps-rel-store" style="--chip:${storeColor(o.store)}">${esc(storeLabel(o.store))}</span>
           <span class="ps-rel-name" dir="auto">${esc(cleanOfferName(o.name) || cleanOfferName(o.nameAr) || '')}</span>`;
-        card.addEventListener('click', () => openProductSheet(o));
+        // No geometry for a strip offer (it may sit on another store's flyer),
+        // so its sheet falls back to the aggregator crop, best-effort.
+        card.addEventListener('click', () => openProductSheet({ offer: o }));
         return card;
       }),
     );

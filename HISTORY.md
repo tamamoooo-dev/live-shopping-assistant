@@ -3493,6 +3493,84 @@ were blocked by the session's permission mode, so symptoms 1+2 persist in
 production until the pending `git push` in each repo (which also publishes
 the engine commits GitHub never saw).
 
+## §30 · Snapshot-at-ingest: runtime independence from D4D (2026-07-05)
+
+**Why.** The §29 regression exposed a structural weakness, not just a bug:
+the app still depended on D4D AFTER ingestion. Hotspot geometry was fetched
+from D4D's leaflet page on the first `/brochures/hotspots` call (a different
+fetch, at a different time, of a mutable resource than the one that stored
+the pages), and the product sheet / cart rendered D4D-CDN crop images at
+browse time. Any post-ingestion D4D change — re-rendered flyers under the same
+URL, changed page counts/pageIds, changed markup, dead crop assets — could
+invalidate previously working brochure data. §29's drift detection healed the
+symptom reactively; this milestone removes the dependency by construction.
+
+**The principle.** Everything the runtime needs is captured at ingest, from
+ONE fetch of the D4D rendering, into our own storage (KV + D1). After ingest,
+D4D URLs remain only as best-effort "Verify ↗" enhancements whose failure is
+cosmetic, never functional.
+
+**Engine (snapshot capture + storage-only serving).**
+- `collectors/adapters/d4d.js` — `parseLeaflet` now also runs
+  `parseHotspots` on the SAME leaflet HTML that lists the page images, and
+  remaps source `data-index` → stored ordinal page index
+  (`hotspots.js remapHotspotPages`), fixing the latent join skew when a
+  source page has no image. Zero extra subrequests — that HTML was already
+  fetched every run.
+- `collectors/aggregator.js` — every candidate carries the geometry:
+  re-downloads carry it alongside the page bytes; `existing` (held) flyers
+  carry it only when the held meta was readable and confirmed to match the
+  source (never resurrects pruned keys).
+- `pipeline.js` — image-set ingest WRITES `hotspots.json` with the pages
+  (before `meta.json`, the commit point) instead of deleting it; an empty
+  parse still writes `{pages: []}` so stale geometry can never outlive its
+  pages. Byte-identical dedupe and a new `ensureHotspots` reconcile held
+  editions: write only when missing/unreadable/different — legacy on-demand
+  caches converge to ingest-derived truth, steady state costs no KV writes.
+- `engine.js` — the `existing` ingest branch heals held editions via
+  `pipeline.ensureHotspots` (heal failure logs into the report line, never
+  blocks supersede).
+- `hotspots.js` — `getHotspotsDoc` is STORAGE-ONLY: KV snapshot + D1 offers
+  join; the on-demand D4D fetch, its UA, and its "cache empty parses" logic
+  are gone. Missing snapshot ⇒ no spots until the next ingest heals it.
+- `retention.js` — prunes `hotspots.json` with the edition (was a KV leak:
+  the old on-demand cache key was never in the prune list).
+
+**Frontend (self-hosted product imagery).**
+- `viewer.js` — sheet entries are `{ offer, spot, pageSrc }`. The product
+  sheet hero is cropped out of the STORED page image via the tapped spot's
+  bbox (`cropFromPage`: canvas + `crossOrigin` — /asset already sends CORS
+  `*` — 2% context padding, 640px cap, data-URL; renders instantly with the
+  fallback and swaps on the warm decode). Add-to-Cart snapshots a 220px crop
+  data-URL into the cart item, so the cart renders offline and survives both
+  D4D asset churn and the engine's 28-day byte retention. `offer.imageUrl`
+  (D4D CDN) remains only as fallback where no geometry exists (similar-offers
+  strip, marketplace cards) — cosmetic degradation only.
+
+**Budgets.** Subrequests: −0 at ingest (HTML already fetched), −1 per
+brochure at runtime (the on-demand fetch is gone). KV: +1 write per stored
+flyer (~20–40/week) + one-time heal writes on the first post-deploy ingest;
+steady-state heals are compare-only reads. Well inside 1,000 writes/day.
+
+**Verification.** Offline: hotspots 13/13 (parser + remap + storage-only doc
+builder) and reingest 21/21 (geometry rides new/existing candidates, written
+with pages, overwritten on re-render, healed on dedupe, ensureHotspots
+missing/kept/differing). Live: `node dev.mjs selftest farm` end-to-end green,
+and the local farm ingest captured 434 spots across 36 pages into
+`hotspots.json` from the real leaflet. Frontend verified in the local preview
+against the production engine: tap → sheet hero = `data:image/jpeg` crop of
+the stored page (ICEE float, 24.99 SAR, −17%), Add to Cart stored a ~19.7 KB
+data-URL thumb, zero console errors.
+
+**Rollout state at close.** Both repos committed; `npx wrangler deploy` and
+`git push` were permission-gated in this session — ship with one deploy (in
+`serverless-connector/brochure-engine/`) + one push per repo. Convergence:
+current editions gain their ingest-written snapshot on the next ingest (Tue
+Jul 7 cron, or a paced manual per-store `POST /ingest` sooner); until the
+engine deploys, the old on-demand path keeps serving. The pipeline change is
+backward-compatible with existing cached `hotspots.json` blobs (same
+`{pages}` shape, same read key).
+
 ---
 
 _End of handoff._
