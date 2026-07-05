@@ -1062,6 +1062,37 @@ a.summary-name:hover { text-decoration: underline; }
 .src-chip.is-failed .src-state { color: var(--warn); font-weight: 600; }
 .src-chip.is-empty .src-state { opacity: 0.7; }
 .src-chip .store-flyer { padding: 2px 8px; font-size: 11px; }
+/* Interactive retailer filter (Feature 1): filterable chips read as buttons;
+   the active one is highlighted like the store-scope chips. Counts stay put. */
+.src-chip.is-filterable { cursor: pointer; }
+.src-chip.is-filterable:hover { border-color: var(--brand-2); }
+.src-chip.is-active {
+  background: var(--brand-soft);
+  border-color: transparent;
+  color: var(--brand);
+}
+.src-chip.is-active .src-state { color: var(--brand); }
+/* Ranking explainer caption (A): grid is grouped by match quality, then priced. */
+.market-subnote {
+  margin: -2px 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* Per-card match-tier badge (B): explains an individual card's placement. */
+.card-match {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: var(--pill);
+  letter-spacing: 0.01em;
+}
+.card-match.best { background: var(--brand-soft); color: var(--brand); }
+.card-match.close { background: var(--surface-2); color: var(--muted); }
+.card-match.related { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
 
 .market { margin-top: 4px; }
 .market-head {
