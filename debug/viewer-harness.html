@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>hotspot DOM harness</title>
+<!-- Loads the REAL shipped viewer.js against the LIVE production engine so a
+     Playwright driver can count actual .bv-spot DOM elements on a given page.
+     NOT part of the app. -->
+<div id="status">idle</div>
+<script type="module">
+  import { openBrochureViewer } from '../src/viewer.js';
+
+  const ENGINE_BASE = 'https://brochure-engine.tamamoooo.workers.dev';
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Open Al Madina's held images brochure, walk to `pageNum` (1-based), and
+  // return the real DOM hotspot counts the shipped viewer produced.
+  window.__probeHotspots = async (store, region, pageNum) => {
+    const list = await (await fetch(`${ENGINE_BASE}/brochures?store=${store}&region=${region}`)).json();
+    const brochures = (list.brochures || []).filter((b) => b.sourceType === 'images');
+    const out = [];
+    for (const b of brochures) {
+      // fresh viewer per brochure
+      document.querySelector('.bv-overlay')?.remove();
+      openBrochureViewer(b, 'Al Madina', {});
+      // wait for pages + hotspots to load and the first render
+      for (let i = 0; i < 60 && !document.querySelector('.bv-img')?.src; i++) await sleep(250);
+      // walk to the requested page via the Next button (deterministic)
+      const nextBtn = document.querySelector('.bv-next');
+      for (let p = 1; p < pageNum && nextBtn && !nextBtn.disabled; p++) {
+        nextBtn.click();
+        await sleep(120);
+      }
+      await sleep(400); // let renderSpots settle for this page
+      const counter = document.querySelector('.bv-counter')?.textContent || '';
+      const spotEls = [...document.querySelectorAll('.bv-spot')];
+      out.push({
+        id: b.id,
+        title: b.title,
+        onPage: counter,
+        domSpotCount: spotEls.length,
+        // interactive == has a click handler; every .bv-spot is a <button> with
+        // one attached in renderSpots (viewer.js:291). Verify it's a button.
+        interactiveCount: spotEls.filter((el) => el.tagName === 'BUTTON' && el.type === 'button').length,
+      });
+      document.querySelector('.bv-overlay')?.remove();
+    }
+    return out;
+  };
+  document.getElementById('status').textContent = 'ready';
+</script>

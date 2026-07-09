@@ -1,0 +1,36 @@
+# hotspot-stage-census — traces the hotspot runtime path against the LIVE
+# production engine (D1/KV -> GET /brochures/hotspots -> viewer.js -> DOM) and
+# reports the exact count at each stage for Al Madina page 6. Read-only; a few
+# GETs to the public engine + a headless render of the shipped viewer.js.
+name: hotspot-stage-census
+
+on:
+  push:
+    branches: [claude/hotspot-count-instrumentation-kgph3s]
+  workflow_dispatch:
+    inputs:
+      store: { description: 'engine store id', default: 'almadina', required: true }
+      region: { description: 'region', default: 'central', required: true }
+      page: { description: '1-based page', default: '6', required: true }
+
+permissions: {}
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      STORE: ${{ inputs.store || 'almadina' }}
+      REGION: ${{ inputs.region || 'central' }}
+      PAGE: ${{ inputs.page || '6' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Stage census (API -> viewer.js transforms, from the live payload)
+        run: node debug/hotspot-stage-census.mjs --store "$STORE" --region "$REGION" --page "$PAGE"
+      - name: Install Playwright (browser is preinstalled on the runner image)
+        run: npm i -D playwright && npx playwright install chromium
+      - name: Literal-DOM census (real viewer.js in Chromium)
+        run: node debug/hotspot-dom-census.mjs --store "$STORE" --region "$REGION" --page "$PAGE"
