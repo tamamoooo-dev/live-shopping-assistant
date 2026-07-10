@@ -419,9 +419,14 @@ function flyerCard(listing, badge) {
     // stored PDFs); otherwise the offer's flyer page.
     const b = await brochureForOffer(offer).catch(() => null);
     if (b && (b.sourceType === 'images' || b.sourceType === 'pdf')) {
-      // Open the in-app viewer ON this offer's own flyer page (pageRef is the
-      // aggregator page id); the viewer falls back to page 1 if it's unknown.
-      openBrochureViewer(b, storeLabel(offer.store), { targetPageId: offer.pageRef });
+      // Open the in-app viewer ON this offer's own product: the viewer lands
+      // on the page (pageRef), flies to the hotspot carrying this offerId,
+      // pulses it and opens the product sheet — degrading level by level
+      // (page-only -> page 1) when an older edition lacks the data.
+      openBrochureViewer(b, storeLabel(offer.store), {
+        targetPageId: offer.pageRef,
+        targetOfferId: offer.offerId,
+      });
     } else if (offer.sourceUrl) {
       window.open(offer.sourceUrl, '_blank', 'noopener,noreferrer');
     }

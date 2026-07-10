@@ -169,7 +169,12 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     }
   }
   function onKey(e) {
-    if (e.key === 'Escape') hist.back(); // peel the top layer, like system back
+    if (e.key === 'Escape') {
+      // A native <dialog> (e.g. the watch-price dialog) owns Escape — it
+      // closes itself; peeling a viewer layer too would double-close.
+      if (document.querySelector('dialog[open]')) return;
+      hist.back(); // peel the top layer, like system back
+    }
     else if (e.key === 'Tab') trapTab(e);
     else if (!canvas) return;
     else if (e.key === 'ArrowLeft') canvas.goTo(canvas.index() - 1);
@@ -232,15 +237,18 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     layer.flash();
     const hint = document.createElement('div');
     hint.className = 'vv-hint';
-    hint.textContent = `${layer.spots.length} products on this page — tap one for price & cart`;
+    const n = layer.spots.length;
+    hint.textContent = n === 1
+      ? '1 product on this page — tap it for price & cart'
+      : `${n} products on this page — tap one for price & cart`;
     stage.appendChild(hint);
     setTimeout(() => hint.remove(), 3500);
   }
 
-  function openSheet(entry) {
+  function openSheet(entry, opts = {}) {
     if (!sheet) return;
     const wasOpen = sheet.isOpen();
-    sheet.open(entry);
+    sheet.open(entry, { detent: opts.detent || 'half' });
     if (!wasOpen) hist.push(() => sheet.close());
   }
 
@@ -350,29 +358,42 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     if (pendingOffer) landOnOffer(pendingOffer);
   });
 
-  /* --- deep-linked product landing (completed in Phase 3) ------------------------- */
+  /* --- deep-linked product landing (the search hand-off) --------------------------- */
+  // A search result taps straight through to ITS product: land on the page,
+  // fly the view to the hotspot (biased above the incoming sheet), pulse it,
+  // then open the product sheet at peek — the user never hunts the flyer.
+  // Every step degrades gracefully: unknown offer -> stay on the page the
+  // page-level deep-link chose; missing geometry -> no fly-to, no pulse.
+  const SHEET_PEEK = 330; // keep in sync with sheet.js PEEK_PX
   let pendingOffer = null;
   function landOnOffer(offerId) {
-    if (!canvas) {
-      pendingOffer = offerId;
-      return;
-    }
-    if (!hotspots) {
-      pendingOffer = offerId;
+    if (!canvas || !hotspots) {
+      pendingOffer = offerId; // runs when the missing half arrives
       return;
     }
     pendingOffer = null;
     const found = spotForOffer(hotspots, offerId);
-    if (!found) return; // graceful: stay where the page deep-link landed
+    if (!found) return;
     const rendered = pageIndices.indexOf(found.pageIndex);
     if (rendered < 0) return;
     canvas.goTo(rendered, { animate: false });
     nav.setPage(rendered);
-    setTimeout(() => {
-      if (!viewerOpen) return;
-      canvas.centerOn(found.spot, { ms: 460 });
+    // The spot layer appears when the page image decodes — wait briefly for it
+    // (bounded; the sequence still runs without the pulse if decoding stalls).
+    let tries = 0;
+    const tick = setInterval(() => {
       const layer = spotLayers.get(rendered);
+      tries += 1;
+      if (!viewerOpen) return clearInterval(tick);
+      if (!layer && tries < 25) return;
+      clearInterval(tick);
+      canvas.centerOn(found.spot, { ms: 460, insetBottom: SHEET_PEEK });
       layer && layer.pulse(found.spot.offerId);
-    }, 260);
+      const offer = hotspots.offers[found.spot.offerId];
+      setTimeout(() => {
+        if (!viewerOpen || !offer) return;
+        openSheet({ offer, spot: found.spot, pageSrc: pageSrcs[rendered] }, { detent: 'peek' });
+      }, 620);
+    }, 90);
   }
 }

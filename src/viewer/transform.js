@@ -81,14 +81,17 @@ export function pointToFraction(t, fitW, fitH, sx, sy) {
 
 // The transform that centers a fractional page rect (a hotspot) in the stage
 // at a zoom that shows it comfortably — the search-landing "fly to product".
-export function centerOnRect(rect, fitW, fitH, stageW, stageH, { maxZ = 2.2 } = {}) {
-  const pad = 2.6; // show the product plus surrounding flyer context
-  const zFit = Math.min(stageW / Math.max(1e-6, rect.w * fitW * pad), stageH / Math.max(1e-6, rect.h * fitH * pad));
+// `insetBottom` centers within the region ABOVE an overlay (the peeking
+// product sheet), so the highlighted product is never hidden behind it.
+export function centerOnRect(rect, fitW, fitH, stageW, stageH, { maxZ = 2.2, insetBottom = 0 } = {}) {
+  const viewH = Math.max(120, stageH - insetBottom);
+  const pad = 2.0; // frame the product with surrounding flyer context
+  const zFit = Math.min(stageW / Math.max(1e-6, rect.w * fitW * pad), viewH / Math.max(1e-6, rect.h * fitH * pad));
   const z = Math.max(MIN_ZOOM, Math.min(maxZ, zFit));
   const cx = (rect.x + rect.w / 2) * fitW;
   const cy = (rect.y + rect.h / 2) * fitH;
   return clamp(
-    { z, tx: stageW / 2 - cx * z, ty: stageH / 2 - cy * z },
+    { z, tx: stageW / 2 - cx * z, ty: viewH / 2 - cy * z },
     fitW, fitH, stageW, stageH,
   );
 }

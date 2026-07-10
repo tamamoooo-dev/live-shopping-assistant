@@ -1,19 +1,25 @@
-// viewer/sheet.js — the product bottom sheet (tap a hotspot -> product panel).
+// viewer/sheet.js — the product bottom sheet: the viewer's central shopping
+// panel. Opens on a hotspot tap at HALF height, drags between three detents
+// (peek / half / full) with velocity snapping, hands scrolling to the body at
+// full height, and dismisses on a downward fling — the native bottom-sheet
+// contract.
 //
-// Phase 1: a faithful port of the previous viewer's sheet (self-hosted crop
-// hero, bilingual name, price/was/discount, Add to Cart, similar-offers strip,
-// swipe-down dismiss, back-stack for strip navigation) behind a controller
-// API, so the new canvas ships without changing the shopping behaviour.
-// Phase 2 rebuilds the content and adds detents on this same controller.
+// Content (all from existing systems — the sheet is presentation only):
+//   hero crop (self-hosted, cropFromPage) · bilingual name · price/was/−%
+//   package size + per-unit price (match.js) · validity · intelligence lines +
+//   price-history block (insights.js over /prices) · Add to Cart · Watch
+//   (alertsPage dialog → engine watches) · similar-offers strip (/offers).
+//   "Available elsewhere" comparison lands in Phase 4 via renderCompare.
 
-import { searchOffers, storeLabel, storeColor, cleanOfferName } from '../brochure.js';
+import { searchOffers, storeLabel, storeColor, cleanOfferName, pricesForQuery } from '../brochure.js';
 import { addToCart, inCart } from '../cart.js';
+import { openWatchDialog } from '../alertsPage.js';
+import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 
-// --- self-hosted product crop ---------------------------------------------------
+/* --- self-hosted product crop --------------------------------------------------- */
 // Hero + cart thumbnails are cropped FROM THE STORED PAGE IMAGE (engine /asset,
-// CORS-open) using the tapped hotspot's bbox — what the user sees is exactly
-// what the stored flyer shows, independent of the aggregator's CDN. Resolves a
-// data-URL or null; never throws.
+// CORS-open) using the tapped hotspot's bbox — exactly what the stored flyer
+// shows, independent of the aggregator's CDN. Resolves a data-URL or null.
 export function cropFromPage(pageSrc, spot, maxPx) {
   return new Promise((resolve) => {
     if (!pageSrc || !spot || !spot.w || !spot.h) return resolve(null);
@@ -64,19 +70,38 @@ function fmtDate(iso) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+const PEEK_PX = 330; // enough for hero + price + actions, one-handed
+const DISMISS_V = 0.55; // px/ms downward fling that closes from any detent
+
 // createSheet(host, ctx) — ctx: { brochure, currentSourceIndex(), onOpen(),
-// onClose() } (the host is the viewer overlay; onOpen/onClose drive the
-// history layer + focus hand-off in index.js).
+// onClose() }. host is the viewer overlay.
 export function createSheet(host, ctx) {
   let sheet = null;
   let scrim = null;
+  let body = null;
+  let detent = 'half'; // 'peek' | 'half' | 'full'
   const stack = []; // { offer, spot?, pageSrc?, cropUrl?, cartThumb? }
+
+  const H = () => sheet ? sheet.getBoundingClientRect().height : 0;
+  const visibleFor = (d) =>
+    d === 'full' ? H() : d === 'half' ? Math.min(H(), Math.max(PEEK_PX + 60, H() * 0.58)) : Math.min(H(), PEEK_PX);
+  const offsetFor = (d) => H() - visibleFor(d);
+
+  function setDetent(d, { animate = true } = {}) {
+    detent = d;
+    if (!sheet) return;
+    sheet.style.transition = animate ? 'transform 0.26s cubic-bezier(0.2, 0.9, 0.25, 1)' : 'none';
+    sheet.style.transform = `translateY(${offsetFor(d)}px)`;
+    sheet.dataset.detent = d;
+    if (body) body.style.overflowY = d === 'full' ? 'auto' : 'hidden';
+    scrim && scrim.classList.toggle('is-deep', d === 'full');
+  }
 
   function isOpen() {
     return !!sheet;
   }
 
-  function open(entry, { push = true } = {}) {
+  function open(entry, { push = true, detent: startDetent = 'half' } = {}) {
     if (entry && !entry.offer) entry = { offer: entry };
     if (push) stack.push(entry);
     const first = !sheet;
@@ -86,62 +111,152 @@ export function createSheet(host, ctx) {
       scrim.addEventListener('click', close);
       host.appendChild(scrim);
       sheet = document.createElement('div');
-      sheet.className = 'ps-sheet';
+      sheet.className = 'ps-sheet ps-sheet-v2';
       sheet.setAttribute('role', 'dialog');
       sheet.setAttribute('aria-label', 'Product details');
       host.appendChild(sheet);
       wireDrag(sheet);
     }
     render(entry);
-    if (first) ctx.onOpen && ctx.onOpen();
+    if (first) {
+      // Enter from off-screen to the requested detent.
+      sheet.style.transition = 'none';
+      sheet.style.transform = `translateY(${H()}px)`;
+      requestAnimationFrame(() => sheet && setDetent(startDetent));
+      ctx.onOpen && ctx.onOpen();
+    }
     const closeBtn = sheet.querySelector('.ps-close');
     if (closeBtn) closeBtn.focus({ preventScroll: true });
   }
 
   function close() {
     if (!sheet) return;
-    sheet.remove();
-    scrim && scrim.remove();
+    const el = sheet;
+    const sc = scrim;
     sheet = null;
     scrim = null;
+    body = null;
     stack.length = 0;
+    el.style.transition = 'transform 0.2s ease-in';
+    el.style.transform = `translateY(${el.getBoundingClientRect().height + 24}px)`;
+    sc && sc.classList.add('is-closing');
+    setTimeout(() => {
+      el.remove();
+      sc && sc.remove();
+    }, 200);
     ctx.onClose && ctx.onClose();
   }
 
+  /* --- detent dragging (pointer events, arms on handle / collapsed / top) ------- */
   function wireDrag(el) {
     let startY = null;
+    let startOffset = 0;
+    let armed = false;
     let dragging = false;
-    el.addEventListener('touchstart', (e) => {
-      if (e.touches.length !== 1) return;
-      const body = el.querySelector('.ps-body');
-      const onHandle = e.target.closest('.ps-grab, .ps-head');
-      if (!onHandle && !(body && body.scrollTop <= 0)) return;
-      startY = e.touches[0].clientY;
-      dragging = false;
-    }, { passive: true });
-    el.addEventListener('touchmove', (e) => {
-      if (startY == null) return;
-      const dy = e.touches[0].clientY - startY;
-      if (dy <= 0 && !dragging) {
-        startY = null;
-        return;
+    let lastY = 0;
+    let lastT = 0;
+    let vy = 0;
+    const release = (e) => {
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
       }
-      dragging = true;
+    };
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const onHandle = e.target.closest('.ps-grab, .ps-head');
+      const bodyEl = el.querySelector('.ps-body');
+      // Arm when: on the handle/header, or the sheet isn't full (body doesn't
+      // scroll), or the body is scrolled to its very top (pull-down begins).
+      armed = !!onHandle || detent !== 'full' || (bodyEl && bodyEl.scrollTop <= 0);
+      if (!armed) return;
+      // Capture NOW (the pattern the stage proves out): once the sheet starts
+      // following the finger, hit-testing must never steal the stream.
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* capture is an optimization, not a requirement */
+      }
+      startY = e.clientY;
+      lastY = e.clientY;
+      lastT = e.timeStamp;
+      startOffset = offsetFor(detent);
+      dragging = false;
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (startY == null || !armed) return;
+      const dy = e.clientY - startY;
+      if (!dragging) {
+        if (Math.abs(dy) < 8) return;
+        // Upward drag while full belongs to the body's scroll, not the sheet.
+        if (dy < 0 && detent === 'full') {
+          startY = null;
+          release(e);
+          return;
+        }
+        dragging = true;
+      }
+      const dt = Math.max(1, e.timeStamp - lastT);
+      vy = (e.clientY - lastY) / dt;
+      lastY = e.clientY;
+      lastT = e.timeStamp;
+      const next = Math.max(0, startOffset + dy);
       el.style.transition = 'none';
-      el.style.transform = `translateY(${Math.max(0, dy)}px)`;
-      if (dy > 0) e.preventDefault();
-    }, { passive: false });
-    el.addEventListener('touchend', (e) => {
+      el.style.transform = `translateY(${next}px)`;
+      if (dy > 0) e.preventDefault && e.preventDefault();
+    });
+    const settle = (e) => {
       if (startY == null) return;
-      const dy = e.changedTouches[0].clientY - startY;
+      const wasDragging = dragging;
       startY = null;
-      if (!dragging) return;
-      el.style.transition = '';
-      if (dy > 90) close();
-      else el.style.transform = '';
-    }, { passive: true });
+      dragging = false;
+      release(e);
+      if (!wasDragging) return;
+      justDragged = true; // the trailing click of a drag must not press a button
+      setTimeout(() => {
+        justDragged = false;
+      }, 0);
+      // Project the release with a dash of velocity, then snap.
+      const projected = currentOffset(el) + vy * 160;
+      const h = H();
+      if (vy > DISMISS_V || h - projected < PEEK_PX * 0.55) return close();
+      let best = 'half';
+      let bestDist = Infinity;
+      for (const d of ['full', 'half', 'peek']) {
+        const dist = Math.abs(offsetFor(d) - projected);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = d;
+        }
+      }
+      setDetent(best);
+    };
+    el.addEventListener('pointerup', settle);
+    el.addEventListener('pointercancel', () => {
+      if (dragging) setDetent(detent);
+      startY = null;
+      dragging = false;
+    });
+    // Pointer capture retargets the synthesized `click` to the CAPTURE element
+    // (this sheet), so taps on the sheet's buttons never reach them. Forward a
+    // non-drag click to the real control under the release point. Browsers
+    // that don't retarget still hit `e.target !== el` and pass through — no
+    // double activation either way.
+    el.addEventListener('click', (e) => {
+      if (e.target !== el || justDragged) return;
+      const real = document.elementFromPoint(e.clientX, e.clientY);
+      const control = real && real.closest('button, a');
+      if (control && control !== el && el.contains(control)) control.click();
+    });
   }
+  let justDragged = false;
+  const currentOffset = (el) => {
+    const m = /translateY\((-?[\d.]+)px\)/.exec(el.style.transform || '');
+    return m ? parseFloat(m[1]) : 0;
+  };
 
+  /* --- rendering -------------------------------------------------------------------- */
   function render(entry) {
     const offer = entry.offer;
     const discount =
@@ -155,6 +270,12 @@ export function createSheet(host, ctx) {
     const name = cleanOfferName(offer.name);
     const nameAr = cleanOfferName(offer.nameAr);
     const title = name || nameAr || 'Flyer product';
+    const { label: sizeText, unit } = offerSize(offer);
+    const meta = [
+      sizeText,
+      unit ? `${fmt(Math.round(unit.value * 100) / 100)} SAR/${unit.unit}` : '',
+    ].filter(Boolean).join(' · ');
+
     sheet.innerHTML = `
       <div class="ps-grab" aria-hidden="true"></div>
       <header class="ps-head">
@@ -164,22 +285,46 @@ export function createSheet(host, ctx) {
         <button type="button" class="ps-close" aria-label="Back to brochure">✕</button>
       </header>
       <div class="ps-body">
-        <div class="ps-imgbox">${
-          offer.imageUrl
-            ? `<img class="ps-img" src="${esc(offer.imageUrl)}" alt="${esc(title)}">`
-            : '<div class="ps-noimg" aria-hidden="true">🛒</div>'
-        }</div>
-        <h3 class="ps-name" dir="auto">${esc(title)}</h3>
-        ${name && nameAr ? `<p class="ps-name-ar" dir="rtl">${esc(nameAr)}</p>` : ''}
-        <div class="ps-pricerow">
-          <span class="ps-price">${fmt(offer.price)} <small>${esc(offer.currency || 'SAR')}</small></span>
-          ${offer.oldPrice ? `<span class="ps-old">${fmt(offer.oldPrice)}</span>` : ''}
-          ${discount ? `<span class="ps-off">−${discount}%</span>` : ''}
+        <div class="ps-hero">
+          <div class="ps-imgbox">${
+            offer.imageUrl
+              ? `<img class="ps-img" src="${esc(offer.imageUrl)}" alt="${esc(title)}">`
+              : '<div class="ps-noimg" aria-hidden="true">🛒</div>'
+          }</div>
+          <div class="ps-headline">
+            <h3 class="ps-name" dir="auto">${esc(title)}</h3>
+            ${name && nameAr ? `<p class="ps-name-ar" dir="rtl">${esc(nameAr)}</p>` : ''}
+            ${meta ? `<p class="ps-meta">${esc(meta)}</p>` : ''}
+            <div class="ps-pricerow">
+              <span class="ps-price">${fmt(offer.price)} <small>${esc(offer.currency || 'SAR')}</small></span>
+              ${offer.oldPrice ? `<span class="ps-old">${fmt(offer.oldPrice)}</span>` : ''}
+              ${discount ? `<span class="ps-off">−${discount}%</span>` : ''}
+            </div>
+          </div>
         </div>
-        <button type="button" class="ps-add">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.2l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h7.9a1.6 1.6 0 0 0 1.6-1.3L20.5 8H6"/></svg>
-          <span>${inCart(offer.id) ? 'Add again' : 'Add to Cart'}</span>
-        </button>
+        <div class="ps-actions">
+          <button type="button" class="ps-add">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.2l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h7.9a1.6 1.6 0 0 0 1.6-1.3L20.5 8H6"/></svg>
+            <span>${inCart(offer.id) ? 'Add again' : 'Add to list'}</span>
+          </button>
+          <button type="button" class="ps-watch" aria-label="Watch this price">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>
+            <span>Watch</span>
+          </button>
+          <button type="button" class="ps-similar-btn" aria-label="Similar products">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <span>Similar</span>
+          </button>
+        </div>
+        <div class="ps-insights" hidden></div>
+        <div class="ps-history" hidden>
+          <h4>Price history</h4>
+          <div class="ps-history-body"></div>
+        </div>
+        <div class="ps-compare" hidden>
+          <h4>Available elsewhere</h4>
+          <div class="ps-compare-body"></div>
+        </div>
         <p class="ps-note">Flyer price, machine-extracted — the printed flyer prevails.
           ${offer.sourceUrl ? `<a href="${esc(offer.sourceUrl)}" target="_blank" rel="noopener">Verify ↗</a>` : ''}</p>
         <div class="ps-related" hidden>
@@ -187,7 +332,10 @@ export function createSheet(host, ctx) {
           <div class="ps-rel-strip"></div>
         </div>
       </div>`;
+    body = sheet.querySelector('.ps-body');
+    setDetent(detent, { animate: false });
 
+    // Self-hosted hero swap (cached per entry).
     if (entry.spot && entry.pageSrc) {
       const box = sheet.querySelector('.ps-imgbox');
       (entry.cropUrl ? Promise.resolve(entry.cropUrl) : cropFromPage(entry.pageSrc, entry.spot, 640)).then(
@@ -210,6 +358,7 @@ export function createSheet(host, ctx) {
       });
     }
 
+    /* Add to list */
     const addBtn = sheet.querySelector('.ps-add');
     addBtn.addEventListener('click', async () => {
       let thumb = entry.cartThumb || null;
@@ -232,7 +381,7 @@ export function createSheet(host, ctx) {
         validTo: offer.validTo,
       });
       addBtn.classList.add('is-added');
-      addBtn.querySelector('span').textContent = 'Added to cart ✓';
+      addBtn.querySelector('span').textContent = 'Added ✓';
       setTimeout(() => {
         if (!addBtn.isConnected) return;
         addBtn.classList.remove('is-added');
@@ -241,13 +390,71 @@ export function createSheet(host, ctx) {
       }, 1300);
     });
 
+    /* Watch — the engine's Price Monitoring, via the existing dialog. */
+    const seed = historyQuery(offer);
+    sheet.querySelector('.ps-watch').addEventListener('click', () => {
+      openWatchDialog({
+        kind: 'grocery',
+        query: seed || title,
+        label: title,
+        sizeText: `${offer.name || ''} ${offer.nameAr || ''}`,
+        suggestedPrice: offer.price,
+        currentPrice: offer.price,
+        link: offer.sourceUrl || null,
+      });
+    });
+
+    /* Similar — scroll to the strip (opens full height so it's visible). */
+    sheet.querySelector('.ps-similar-btn').addEventListener('click', () => {
+      setDetent('full');
+      const rel = sheet.querySelector('.ps-related');
+      setTimeout(() => rel && !rel.hidden && rel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 280);
+    });
+
+    loadIntelligence(offer, seed);
     loadRelated(offer);
   }
 
-  // Similar products via the engine's own offers search, seeded with the most
-  // name-like tokens. Best-effort; the strip stays hidden without results.
+  /* --- intelligence + history (insights.js over /prices) ---------------------------- */
+  async function loadIntelligence(offer, seed) {
+    if (!seed || !sheet) return;
+    const prices = await pricesForQuery(seed).catch(() => null);
+    if (!sheet) return;
+    const { lines, history } = buildInsights({ offer, prices, storeLabel });
+    const box = sheet.querySelector('.ps-insights');
+    if (box && lines.length) {
+      box.replaceChildren(
+        ...lines.map((l) => {
+          const row = document.createElement('div');
+          row.className = `ps-insight is-${l.tone}`;
+          row.innerHTML = `<span class="ps-insight-ic" aria-hidden="true">${l.icon}</span><span dir="auto">${esc(l.text)}</span>`;
+          return row;
+        }),
+      );
+      box.hidden = false;
+    }
+    const hist = sheet.querySelector('.ps-history');
+    const histBody = sheet.querySelector('.ps-history-body');
+    if (hist && histBody && history && prices) {
+      const trendGlyph = history.trend === 'down' ? '↘' : history.trend === 'up' ? '↗' : '→';
+      const vs = history.atLowest
+        ? '<span class="ps-h-badge is-good">at the historical low</span>'
+        : `<span class="ps-h-badge">${history.pct > 0 ? `+${history.pct}%` : `${history.pct}%`} vs low</span>`;
+      histBody.innerHTML = `
+        <div class="ps-h-row"><span>Lowest recorded</span><b>${esc(fmtMoney(history.lowest.price))}${
+          history.lowest.store ? ` <small>at ${esc(storeLabel(history.lowest.store))}</small>` : ''
+        }</b></div>
+        <div class="ps-h-row"><span>This offer</span><b>${esc(fmtMoney(offer.price))} ${vs}</b></div>
+        <div class="ps-h-row"><span>Recorded over</span><b>${history.weeks || prices.weeks || 0} week${
+          (history.weeks || prices.weeks) === 1 ? '' : 's'
+        } <small class="ps-h-trend">${trendGlyph} ${esc(history.trend || 'steady')}</small></b></div>`;
+      hist.hidden = false;
+    }
+  }
+
+  /* --- similar offers strip ------------------------------------------------------------ */
   async function loadRelated(offer) {
-    const seed = relatedQuery(offer);
+    const seed = historyQuery(offer);
     if (!seed || !sheet) return;
     const data = await searchOffers(seed, 12);
     if (!sheet) return;
@@ -273,15 +480,5 @@ export function createSheet(host, ctx) {
     box.hidden = false;
   }
 
-  function relatedQuery(offer) {
-    const base = cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || '';
-    const tokens = base
-      .split(/\s+/)
-      .filter((t) => t && !/^\d/.test(t) && t.length > 2)
-      .slice(0, 3);
-    if (tokens.length) return tokens.join(' ');
-    return offer.category ? offer.category.replace(/-/g, ' ') : null;
-  }
-
-  return { open, close, isOpen };
+  return { open, close, isOpen, setDetent };
 }
