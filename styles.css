@@ -919,128 +919,6 @@ a.summary-name:hover { text-decoration: underline; }
 .bsk .sk-cover { aspect-ratio: 3 / 4; }
 .bsk .sk-line { height: 12px; border-radius: 6px; margin: 10px 12px; }
 
-/* ==========================================================================
-   In-app brochure viewer (shared)
-   ========================================================================== */
-
-.bv-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
-  background: rgba(10, 9, 22, 0.74);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  animation: fade-up 0.2s ease both;
-}
-.bv-panel {
-  display: flex;
-  flex-direction: column;
-  width: min(920px, 100%);
-  height: 100%;
-  max-height: 100%;
-  background: var(--surface);
-  overflow: hidden;
-}
-@media (min-width: 560px) {
-  .bv-panel { height: min(94%, 100%); border-radius: var(--radius); box-shadow: var(--shadow-lift); }
-}
-.bv-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  flex: 0 0 auto;
-}
-.bv-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.bv-store { font-size: 16px; font-weight: 800; letter-spacing: -0.2px; }
-.bv-date {
-  font-size: 12.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.bv-close {
-  margin-left: auto;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  background: var(--surface-2);
-  border: none;
-  border-radius: var(--pill);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.bv-close:hover { color: var(--text); background: var(--surface-3); }
-.bv-stage {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  background: var(--surface-2);
-  padding: 12px;
-}
-.bv-img { display: block; object-fit: contain; border-radius: 4px; }
-.bv-pdf { width: 100%; height: 100%; border: none; background: #fff; }
-.bv-msg {
-  margin: auto;
-  color: var(--muted);
-  font-size: 14px;
-  padding: 24px;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.bv-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-  flex: 0 0 auto;
-}
-.bv-controls button {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border: none;
-  border-radius: var(--pill);
-  padding: 9px 16px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.bv-controls button:hover:not(:disabled) { background: var(--brand); color: #fff; }
-.bv-controls button:disabled { opacity: 0.4; cursor: default; }
-.bv-counter {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  min-width: 62px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.bv-open-pdf {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--brand);
-  text-decoration: none;
-  padding: 9px 14px;
-}
-.bv-open-pdf:hover { text-decoration: underline; }
-.bv-zoom { margin-left: auto; display: flex; gap: 6px; }
-.bv-zoom button { width: 40px; padding: 9px 0; text-align: center; }
 
 /* ---- the unified marketplace (one grid, every source; source = metadata) ---- */
 .sources-strip {
@@ -1466,64 +1344,10 @@ a.watch-name:hover { text-decoration: underline; }
    Tappable brochures: hotspot overlay, product sheet, cart
    ========================================================================== */
 
-/* --- hotspot overlay inside the viewer ----------------------------------- */
-.bv-imgwrap { position: relative; flex: 0 0 auto; margin: auto; }
-.bv-imgwrap .bv-img { width: 100%; height: 100%; display: block; }
-.bv-spots { position: absolute; inset: 0; }
-.bv-spot {
-  position: absolute;
-  background: transparent;
-  border: 1.5px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  padding: 0;
-  transition: border-color 0.15s, background 0.15s;
-}
-.bv-spot::after {
-  /* the persistent affordance: a small "+" dot in the box corner */
-  content: '+';
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  background: var(--brand);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 17px;
-  text-align: center;
-  opacity: 0.82;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-}
-.bv-spot:hover,
-.bv-spot:focus-visible,
-.bv-spot:active {
-  border-color: var(--brand);
-  background: rgba(37, 99, 235, 0.12);
-  outline: none;
-}
-/* first-render flash so tappability is discoverable */
-.bv-spots-flash .bv-spot { animation: spot-flash 1.6s ease 1; }
+
 @keyframes spot-flash {
   0%, 100% { border-color: transparent; background: transparent; }
   25%, 60% { border-color: var(--brand); background: rgba(37, 99, 235, 0.14); }
-}
-.bv-hint {
-  position: sticky;
-  top: 4px;
-  align-self: flex-start;
-  margin: 0 auto;
-  z-index: 5;
-  background: rgba(15, 23, 42, 0.88);
-  color: #fff;
-  font-size: 12.5px;
-  font-weight: 700;
-  padding: 8px 14px;
-  border-radius: var(--pill);
-  pointer-events: none;
-  animation: fade-up 0.25s ease both;
 }
 
 /* --- product sheet (tap a hotspot) ---------------------------------------- */
@@ -1853,11 +1677,7 @@ a.watch-name:hover { text-decoration: underline; }
 .cart-note { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0; }
 .ps-until.is-ended { color: var(--bad, #dc2626); font-weight: 700; }
 
-/* --- mobile polish: gestures, scrim, small screens ------------------------- */
-/* pan stays native; pinch + double-tap are handled by viewer.js (zoomAt) */
-.bv-stage { touch-action: pan-x pan-y; }
-.bv-img { -webkit-user-drag: none; user-select: none; }
-.bv-spot { -webkit-tap-highlight-color: transparent; user-select: none; }
+
 
 .ps-scrim {
   position: absolute;
@@ -2388,3 +2208,11 @@ a.watch-name:hover { text-decoration: underline; }
 }
 .cart-item.is-purchased .cart-name { text-decoration: line-through; }
 .cart-bought { color: var(--muted); font-weight: 600; margin-left: 6px; }
+
+/* --- landscape phones: reclaim vertical space -------------------------------- */
+@media (orientation: landscape) and (max-height: 520px) {
+  .vv-head { padding-top: calc(4px + env(safe-area-inset-top)); padding-bottom: 4px; }
+  .vv-bottom { display: none; } /* the indicator opens the overview grid */
+  .vv-indicator { bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .ps-sheet-v2 { height: min(94dvh, 760px); }
+}

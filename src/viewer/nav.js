@@ -34,6 +34,7 @@ export function createNav(root, pages, { onJump }) {
   indicator.type = 'button';
   indicator.className = 'vv-indicator';
   indicator.setAttribute('aria-label', 'Open page overview');
+  indicator.setAttribute('aria-live', 'polite'); // announces "N / M" page turns
 
   /* --- overview grid ------------------------------------------------------------ */
   let grid = null;

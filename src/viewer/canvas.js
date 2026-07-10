@@ -26,9 +26,13 @@ import {
 } from './transform.js';
 
 const easeOut = (p) => 1 - Math.pow(1 - p, 3);
-const PAGE_ANIM_MS = 280;
-const ZOOM_ANIM_MS = 240;
-const SNAP_MS = 220;
+// Respect prefers-reduced-motion: every animation collapses to ~a frame.
+const REDUCED =
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ms = (n) => (REDUCED ? 1 : n);
+const PAGE_ANIM_MS = ms(280);
+const ZOOM_ANIM_MS = ms(240);
+const SNAP_MS = ms(220);
 const FLICK_V = 0.45; // px/ms of horizontal velocity that turns a page
 
 export function createPageCanvas(stage, opts) {
@@ -40,6 +44,8 @@ export function createPageCanvas(stage, opts) {
     onPressCancel = () => {},
     onMountPage = () => {}, // (i, contentEl, fit) — attach overlays here
     onZoomChange = () => {},
+    onPullDown = () => {}, // (dy) — vertical drag at 1×: dismiss preview
+    onPullDownEnd = () => {}, // (dy, vy) — release: close or spring back
     startPage = 0,
     startZoom = 1,
   } = opts;
@@ -57,7 +63,8 @@ export function createPageCanvas(stage, opts) {
   let trackX = 0; // current track translation
   let raf = null; // the single animation frame handle
   let momentum = null; // live momentum state
-  let dragAxis = null; // 'page' | 'pan' while a pan gesture is live
+  let dragAxis = null; // 'page' | 'pan' | 'dismiss' | 'none' while a pan is live
+  let pullY = 0; // accumulated pull-down distance while dismissing
   let pinchBase = null; // transform at pinch start
   let destroyed = false;
 
@@ -113,6 +120,7 @@ export function createPageCanvas(stage, opts) {
     img.className = 'vv-page';
     img.alt = `Page ${i + 1}`;
     img.decoding = 'async';
+    img.fetchPriority = i === idx ? 'high' : 'low'; // current page wins the network
     img.draggable = false;
     content.appendChild(img);
     el.appendChild(content);
@@ -299,11 +307,20 @@ export function createPageCanvas(stage, opts) {
     },
     onPanStart() {
       dragAxis = null;
+      pullY = 0;
     },
     onPan(dx, dy) {
       const s = slots.get(idx);
       if (!s || !s.fit) return;
-      if (dragAxis == null) dragAxis = t().z > 1.02 ? 'pan' : Math.abs(dx) >= Math.abs(dy) ? 'page' : 'none';
+      if (dragAxis == null) {
+        // At 1×: horizontal drags page, DOWNWARD drag arms dismiss (Photos).
+        dragAxis = t().z > 1.02 ? 'pan' : Math.abs(dx) >= Math.abs(dy) ? 'page' : dy > 0 ? 'dismiss' : 'none';
+      }
+      if (dragAxis === 'dismiss') {
+        pullY = Math.max(0, pullY + dy);
+        onPullDown(pullY);
+        return;
+      }
       if (dragAxis === 'pan') {
         const cur = t();
         const next = clamp(
@@ -324,6 +341,11 @@ export function createPageCanvas(stage, opts) {
     onPanEnd(vx, vy) {
       const s = slots.get(idx);
       if (!s || !s.fit) return;
+      if (dragAxis === 'dismiss') {
+        onPullDownEnd(pullY, vy);
+        dragAxis = null;
+        return;
+      }
       if (dragAxis === 'pan') {
         // Settle out-of-bounds overshoot, then coast.
         const hard = clamp(t(), s.fit.w, s.fit.h, stageW, stageH);

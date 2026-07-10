@@ -343,6 +343,25 @@ export function openBrochureViewer(b, storeName, opts = {}) {
         zoomOut.disabled = z <= 1.01;
         zoomIn.disabled = z >= 3.99;
       },
+      // Pull-down-to-dismiss (Photos-style): the viewer follows the finger,
+      // dims, and a committed pull (or flick) closes through the history
+      // stack; a hesitant one springs back.
+      onPullDown: (dy) => {
+        overlay.style.transition = 'none';
+        overlay.style.transform = `translateY(${dy * 0.55}px)`;
+        overlay.style.opacity = String(Math.max(0.5, 1 - dy / 900));
+      },
+      onPullDownEnd: (dy, vy) => {
+        overlay.style.transition = 'transform 0.22s ease, opacity 0.22s ease';
+        if (dy > 150 || vy > 0.65) {
+          overlay.style.transform = 'translateY(100%)';
+          overlay.style.opacity = '0';
+          setTimeout(() => hist.closeAll(), 180);
+        } else {
+          overlay.style.transform = '';
+          overlay.style.opacity = '';
+        }
+      },
     });
     nav.setPage(startPage);
 
