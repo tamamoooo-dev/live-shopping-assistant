@@ -298,6 +298,13 @@ export function openBrochureViewer(b, storeName, opts = {}) {
           stage.focus({ preventScroll: true });
         }
       },
+      // "Full comparison in Search": close the whole viewer stack, then hand
+      // the query to the search page (app.js listens) — the entire
+      // marketplace + summary machinery runs, nothing re-implemented here.
+      openSearch: (q) => {
+        hist.closeAll();
+        window.dispatchEvent(new CustomEvent('supersearch:search-query', { detail: { query: q } }));
+      },
     });
 
     canvas = createPageCanvas(stage, {

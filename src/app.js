@@ -209,6 +209,17 @@ window.addEventListener('supersearch:search-store', (e) => {
   input.focus();
 });
 
+// The viewer's product sheet can ask for a full comparison: land on the
+// search page with the product's query already running.
+window.addEventListener('supersearch:search-query', (e) => {
+  const q = e.detail && e.detail.query;
+  if (!q) return;
+  location.hash = '#/search';
+  route();
+  input.value = q;
+  runSearch(q);
+});
+
 // --- recent searches ---------------------------------------------------------
 const RECENT_MAX = 8;
 function recentSearches() {

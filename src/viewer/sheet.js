@@ -14,6 +14,7 @@
 import { searchOffers, storeLabel, storeColor, cleanOfferName, pricesForQuery } from '../brochure.js';
 import { addToCart, inCart } from '../cart.js';
 import { openWatchDialog } from '../alertsPage.js';
+import { isRelevant, relevance } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
@@ -412,7 +413,87 @@ export function createSheet(host, ctx) {
     });
 
     loadIntelligence(offer, seed);
+    loadCompare(offer, seed);
     loadRelated(offer);
+  }
+
+  /* --- "Available elsewhere" (same product, other stores, this week) ------------ */
+  // Built from the SAME cached /offers call the similar strip uses (the search
+  // engine's flyer offers) — zero extra requests. Honest gating: a row must be
+  // genuinely name-relevant to the product AND size-comparable (a 200 ml can
+  // never "beat" a 2 L). Live online prices stay one tap away via Search.
+  async function loadCompare(offer, seed) {
+    if (!seed || !sheet) return;
+    const data = await searchOffers(seed, 24);
+    if (!sheet) return;
+    const box = sheet.querySelector('.ps-compare');
+    const bodyEl = sheet.querySelector('.ps-compare-body');
+    if (!box || !bodyEl) return;
+    const mySize = offerSize(offer).size;
+    const rows = (((data && data.offers) || []))
+      .filter((o) => o.id !== offer.id && o.store !== offer.store)
+      .filter((o) => {
+        const nm = `${cleanOfferName(o.name) || ''} ${cleanOfferName(o.nameAr) || ''}`.trim();
+        const item = { name: nm };
+        if (!nm || !isRelevant(item, seed) || relevance(item, seed) <= 0) return false;
+        const sz = offerSize(o).size;
+        if (mySize && sz) {
+          return sz.unit === mySize.unit && Math.abs(sz.total - mySize.total) / mySize.total <= 0.25;
+        }
+        return true; // both unsized (or reference unsized): relevance decides
+      })
+      .sort((a, b) => a.price - b.price)
+      .slice(0, 4);
+
+    const fmt = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
+    const rowEls = rows.map((o) => {
+      const delta = Math.round((o.price - offer.price) * 100) / 100;
+      const badge =
+        delta < -0.01
+          ? `<span class="ps-h-badge is-good">−${fmt(Math.abs(delta))}</span>`
+          : delta > 0.01
+            ? `<span class="ps-h-badge">+${fmt(delta)}</span>`
+            : '<span class="ps-h-badge">same</span>';
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'ps-cmp-row';
+      row.innerHTML = `
+        <span class="ps-rel-store" style="--chip:${storeColor(o.store)}">${esc(storeLabel(o.store))}</span>
+        <span class="ps-cmp-name" dir="auto">${esc(cleanOfferName(o.name) || cleanOfferName(o.nameAr) || '')}</span>
+        <b class="ps-cmp-price">${fmt(o.price)} <small>${esc(o.currency || 'SAR')}</small></b>
+        ${badge}`;
+      row.addEventListener('click', () => open({ offer: o }));
+      return row;
+    });
+
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'ps-cmp-more';
+    more.textContent = 'Full comparison in Search — online + flyers ↗';
+    more.addEventListener('click', () => ctx.openSearch && ctx.openSearch(seed));
+
+    if (rowEls.length) {
+      bodyEl.replaceChildren(...rowEls, more);
+      box.hidden = false;
+      // The headline intelligence: this exact product cheaper somewhere else.
+      const best = rows[0];
+      if (best && best.price < offer.price - 0.01) {
+        const ins = sheet.querySelector('.ps-insights');
+        if (ins) {
+          const line = document.createElement('div');
+          line.className = 'ps-insight is-good';
+          line.innerHTML = `<span class="ps-insight-ic" aria-hidden="true">💸</span><span dir="auto">This product is cheaper at ${esc(
+            storeLabel(best.store),
+          )} — ${esc(fmtMoney(best.price))} this week.</span>`;
+          ins.prepend(line);
+          ins.hidden = false;
+        }
+      }
+    } else {
+      // Nothing comparable in the flyers — still offer the full search.
+      bodyEl.replaceChildren(more);
+      box.hidden = false;
+    }
   }
 
   /* --- intelligence + history (insights.js over /prices) ---------------------------- */

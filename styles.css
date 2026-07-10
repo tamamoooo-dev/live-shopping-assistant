@@ -2319,3 +2319,72 @@ a.watch-name:hover { text-decoration: underline; }
 }
 .ps-h-badge.is-good { background: var(--good-soft); color: var(--good); }
 .ps-h-trend { color: var(--muted); font-weight: 700; }
+
+/* --- sheet comparison ("Available elsewhere") -------------------------------- */
+.ps-cmp-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 2px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.ps-cmp-row:last-of-type { border-bottom: none; }
+.ps-cmp-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ps-cmp-price { flex: 0 0 auto; font-weight: 800; }
+.ps-cmp-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 11px;
+  background: none;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* --- cart: mark purchased ------------------------------------------------------ */
+.cart-check {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  margin-right: 2px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  align-self: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.cart-item.is-purchased .cart-check {
+  background: var(--good);
+  border-color: var(--good);
+  color: #fff;
+}
+.cart-item.is-purchased .cart-info,
+.cart-item.is-purchased .cart-thumb,
+.cart-item.is-purchased .cart-qty {
+  opacity: 0.45;
+}
+.cart-item.is-purchased .cart-name { text-decoration: line-through; }
+.cart-bought { color: var(--muted); font-weight: 600; margin-left: 6px; }

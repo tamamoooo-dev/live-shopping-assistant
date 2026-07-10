@@ -68,6 +68,16 @@ export function removeFromCart(id) {
   write(read().filter((it) => it.id !== id));
 }
 
+// Mark an item bought while shopping (strike-through on the cart page; the
+// running total counts only what's still to buy). Toggling back un-buys.
+export function togglePurchased(id) {
+  const items = read();
+  const item = items.find((it) => it.id === id);
+  if (!item) return;
+  item.purchased = !item.purchased;
+  write(items);
+}
+
 export function clearCart() {
   write([]);
 }

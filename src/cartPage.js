@@ -7,7 +7,7 @@
 // brochure is still held (brochureId + pageIndex snapshotted at add time);
 // once an edition expires out of the engine the link simply hides.
 
-import { cartItems, setQty, removeFromCart, clearCart, CART_EVENT } from './cart.js';
+import { cartItems, setQty, removeFromCart, clearCart, togglePurchased, CART_EVENT } from './cart.js';
 import { loadBrochures, storeLabel, storeColor } from './brochure.js';
 import { openBrochureViewer } from './viewer.js';
 
@@ -46,17 +46,24 @@ function render(root) {
     return;
   }
 
-  // Group by store, keeping each group's items in recency order.
+  // Group by store, keeping each group's items in recency order but sinking
+  // purchased ones to the bottom (the live shopping list stays on top).
   const groups = new Map();
   for (const it of items) {
     if (!groups.has(it.store)) groups.set(it.store, []);
     groups.get(it.store).push(it);
   }
 
+  // Totals count only what's still TO BUY — ticked items are already in the
+  // trolley; the number you see is the number left to spend.
   let grand = 0;
+  let boughtCount = 0;
   const sections = [];
   for (const [store, list] of groups) {
-    const subtotal = list.reduce((n, it) => n + it.price * (it.qty || 1), 0);
+    list.sort((a, b) => (a.purchased ? 1 : 0) - (b.purchased ? 1 : 0));
+    const open = list.filter((it) => !it.purchased);
+    boughtCount += list.length - open.length;
+    const subtotal = open.reduce((n, it) => n + it.price * (it.qty || 1), 0);
     grand += subtotal;
     sections.push(`
       <section class="cart-store">
@@ -70,7 +77,9 @@ function render(root) {
 
   root.innerHTML = `
     <div class="cart-toolbar">
-      <span class="cart-total">Total <strong>${fmt(grand)} SAR</strong></span>
+      <span class="cart-total">To buy <strong>${fmt(grand)} SAR</strong>${
+        boughtCount ? `<small class="cart-bought">· ${boughtCount} in the trolley</small>` : ''
+      }</span>
       <button type="button" class="cart-clear">Clear cart</button>
     </div>
     ${sections.join('')}
@@ -86,6 +95,7 @@ function render(root) {
     row.querySelector('.cart-minus').addEventListener('click', () => setQty(id, (item.qty || 1) - 1));
     row.querySelector('.cart-plus').addEventListener('click', () => setQty(id, (item.qty || 1) + 1));
     row.querySelector('.cart-remove').addEventListener('click', () => removeFromCart(id));
+    row.querySelector('.cart-check').addEventListener('click', () => togglePurchased(id));
     const flyerBtn = row.querySelector('.cart-flyer');
     if (flyerBtn) flyerBtn.addEventListener('click', () => openFlyer(item, flyerBtn));
   }
@@ -96,7 +106,11 @@ function itemRow(it) {
   const line = it.price * qty;
   const name = it.name || it.nameAr || 'Flyer product';
   return `
-    <article class="cart-item" data-id="${esc(it.id)}">
+    <article class="cart-item${it.purchased ? ' is-purchased' : ''}" data-id="${esc(it.id)}">
+      <button type="button" class="cart-check" role="checkbox" aria-checked="${!!it.purchased}"
+        aria-label="${it.purchased ? 'Purchased — tap to un-tick' : 'Mark as purchased'}">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg>
+      </button>
       <div class="cart-thumb">${
         it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : '<span aria-hidden="true">🛒</span>'
       }</div>
