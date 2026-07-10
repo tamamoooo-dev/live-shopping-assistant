@@ -3594,3 +3594,55 @@ markup canary) deferred to a future task.
 ---
 
 _End of handoff._
+
+## §31 · Hotspot shortfall: partial offers table → atomic offers ingest (2026-07-10)
+
+**Symptom.** The in-app viewer showed only **3** tappable products on Al Madina
+"Summer Shop N Win" (edition `2026-W28`, D4D flyer `742356`) **page 6**, though
+the page carries **20** product hotspots. Reported as a parser bug.
+
+**Investigation (all measured, never inferred; instrumentation + census runs on
+branch `claude/hotspot-count-instrumentation-kgph3s`, backend
+`docs/HOTSPOT-ROOT-CAUSE.md`).** Stage-by-stage censuses eliminated the usual
+suspects:
+- **Parser** — page 6 imports 20 spots, lossless raw→regex→normalize→dedup→
+  persisted. Not the parser.
+- **Hotspot→offer join** — at ingest the join is lossless (page 6 20/20).
+  Not the join.
+- **Viewer** — the shipped `viewer.js` (run in headless Chromium against
+  production) faithfully renders every offer-backed spot; it drops a spot only
+  when it has no matching offer (`viewer.js:279 if (!offer) continue;`). Not a
+  viewer bug.
+
+**Root cause (backend).** The runtime path is `D1 → GET /brochures/hotspots →
+viewer`. Production served page 6's 20 spots but an `offers` map covering only
+**3** of them — because production D1 held only **64** of flyer 742356's **462**
+offers. Census of the surviving rows: one `detectedAt`, all priced, the leading
+~80 rows of the write order, exactly **2 × 40** = 2 D1 batches. A single offers
+ingest ran in the SAME Worker invocation as the brochure ingest; that invocation
+first downloaded the new edition's page images, exhausting its 50-subrequest
+budget, so `upsertMany` committed 2 batches (80 rows company-wide, 64 for 742356)
+then the 3rd threw — and the error was swallowed. Retention (180-day cutoff),
+source shortfall, price gate, and publish-timing were each measured out.
+
+**Fix (backend `tamamoooo-dev/shopping-connector`, two commits).**
+- **Phase 1 — production incident fix.** Brochure and offers ingest now run in
+  SEPARATE Worker invocations (`/ingest?mode=offers`), each with its own fresh
+  budget; the offers write completes. A failing batch is no longer swallowed —
+  it fails the ingest loudly. This restores 462/462 (page 6 20/20).
+- **Phase 2 — atomic visibility.** The offers write is all-or-nothing: fetch →
+  stage into `offer_stage` (invisible) → validate (complete + coverage) →
+  promote in ONE atomic `INSERT…SELECT…ON CONFLICT` → cleanup. Any failure
+  before the promote leaves the previous complete dataset visible.
+
+**Frontend impact.** None to `viewer.js` (proven correct) — the viewer's
+`if (!offer) continue;` behaviour is right; it was starved of offers by the
+backend. Frontend additions were investigation-only: `debug/hotspot-stage-census.mjs`,
+`debug/hotspot-dom-census.mjs` + `viewer-harness.html` (drive the real viewer
+in Chromium) and the `hotspot-stage-census` workflow.
+
+**Guarantee that now exists.** No interruption, timeout, D1 error, subrequest
+exhaustion, or Worker restart can leave users with a partially populated offers
+table: the visible `offers` table is always the complete previous dataset or the
+complete new one. (Requires a backend deploy + `migrate-2026-07-offer-stage.sql`;
+until deployed, production reflects the pre-fix state.)
