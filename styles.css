@@ -1882,3 +1882,339 @@ a.watch-name:hover { text-decoration: underline; }
   .ps-back, .ps-close { width: 38px; height: 38px; }
   .cart-qty button { width: 34px; height: 34px; }
 }
+
+/* ============================================================================
+   Brochure Viewer v2 (src/viewer/) — immersive full-screen viewer: composited
+   transforms only, floating chrome (auto-hide on tap), thumbnail strip,
+   overview grid, gesture-driven zoom. The product sheet keeps the .ps-*
+   styles above.
+   ========================================================================= */
+.vv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--surface-2);
+  animation: fade-up 0.18s ease both;
+  overscroll-behavior: contain;
+}
+.vv-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  outline: none;
+  cursor: grab;
+}
+.vv-stage:active { cursor: grabbing; }
+.vv-track {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+.vv-slot { position: absolute; inset: 0; }
+.vv-content {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.vv-page {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  box-shadow: 0 4px 24px rgba(10, 12, 40, 0.18);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.vv-page.is-ready { opacity: 1; }
+
+/* --- floating chrome ------------------------------------------------------- */
+.vv-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  background: var(--bg-veil);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.vv-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; margin-right: auto; }
+.vv-store { font-size: 16px; font-weight: 800; letter-spacing: -0.2px; }
+.vv-date {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vv-zoomctl { display: flex; gap: 6px; }
+.vv-zoomctl button {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.vv-zoomctl button:disabled { opacity: 0.35; cursor: default; }
+@media (pointer: coarse) { .vv-zoomctl { display: none; } } /* gestures own zoom on touch */
+.vv-close {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: none;
+  border-radius: var(--pill);
+  cursor: pointer;
+}
+.vv-close:hover { color: var(--text); background: var(--surface-3); }
+
+.vv-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  z-index: 3;
+  border: none;
+  border-radius: var(--pill);
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--bg-veil);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: bottom 0.25s ease, opacity 0.25s ease;
+}
+.vv-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bg-veil);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.vv-overlay.is-chrome-hidden .vv-head { transform: translateY(-110%); opacity: 0; pointer-events: none; }
+.vv-overlay.is-chrome-hidden .vv-bottom { transform: translateY(110%); opacity: 0; pointer-events: none; }
+.vv-overlay.is-chrome-hidden .vv-indicator { bottom: calc(14px + env(safe-area-inset-bottom)); }
+
+/* --- thumbnail strip --------------------------------------------------------- */
+.vv-thumbs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+}
+.vv-thumbs::-webkit-scrollbar { display: none; }
+.vv-thumb {
+  position: relative;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 62px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-3);
+  cursor: pointer;
+}
+.vv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vv-thumb span {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  min-width: 15px;
+  padding: 0 3px;
+  border-radius: 5px;
+  background: rgba(12, 12, 30, 0.62);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+.vv-thumb.is-current { border-color: var(--brand); }
+
+/* --- overview grid ------------------------------------------------------------ */
+.vv-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-veil);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.vv-grid.is-open { opacity: 1; }
+.vv-grid-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 10px;
+  font-weight: 800;
+}
+.vv-grid-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.vv-grid-cells {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 4px 14px calc(16px + env(safe-area-inset-bottom));
+}
+@media (min-width: 560px) { .vv-grid-cells { grid-template-columns: repeat(5, 1fr); } }
+.vv-cell {
+  position: relative;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-3);
+  aspect-ratio: 3 / 4;
+  cursor: pointer;
+}
+.vv-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vv-cell span {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgba(12, 12, 30, 0.62);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.vv-cell.is-current { border-color: var(--brand); }
+
+/* --- hotspots (visual layer; hit-testing lives in the gesture arbiter) -------- */
+.vv-spots { position: absolute; inset: 0; pointer-events: none; }
+.vv-spot {
+  position: absolute;
+  pointer-events: none;
+  background: transparent;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  padding: 0;
+  transition: border-color 0.12s, background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.vv-spot::after {
+  content: '+';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
+  opacity: 0.82;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.vv-spot.is-pressed,
+.vv-spot:focus-visible {
+  border-color: var(--brand);
+  background: rgba(37, 99, 235, 0.14);
+  outline: none;
+}
+.vv-spots-flash .vv-spot { animation: spot-flash 1.5s ease 1; }
+.vv-spot.is-pulse { animation: vv-pulse 2.4s ease 1; }
+@keyframes vv-pulse {
+  0%, 100% { border-color: transparent; background: transparent; box-shadow: none; }
+  12%, 55% {
+    border-color: var(--brand);
+    background: rgba(37, 99, 235, 0.18);
+    box-shadow: 0 0 0 6px var(--brand-ring), 0 0 24px 2px var(--brand-ring);
+  }
+  75% { border-color: var(--brand); background: rgba(37, 99, 235, 0.08); box-shadow: 0 0 0 2px var(--brand-ring); }
+}
+
+/* --- misc ------------------------------------------------------------------------ */
+.vv-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  top: calc(72px + env(safe-area-inset-top));
+  z-index: 3;
+  background: rgba(12, 12, 30, 0.78);
+  color: #fff;
+  border-radius: var(--pill);
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  max-width: min(86vw, 420px);
+  text-align: center;
+  animation: fade-up 0.25s ease both;
+  pointer-events: none;
+}
+.vv-loading,
+.vv-msg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
+}
+.vv-pdf { position: absolute; inset: 0; width: 100%; height: 100%; border: none; background: #fff; }
+.vv-open-pdf {
+  display: inline-block;
+  margin: 0 auto;
+  padding: 8px 16px;
+  font-weight: 700;
+  color: var(--brand);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vv-overlay, .vv-page, .vv-grid, .vv-hint { animation: none; transition: none; }
+}
