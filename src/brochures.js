@@ -25,6 +25,7 @@ import {
   daysLeft,
 } from './brochure.js';
 import { openBrochureViewer, brochureDateLabel } from './viewer.js';
+import { t, tn } from './i18n.js';
 
 let initialized = false;
 
@@ -43,7 +44,7 @@ export function initBrochuresPage() {
 function storeSection(store) {
   const el = document.createElement('section');
   el.className = 'bstore';
-  el.setAttribute('aria-label', `${store.label} brochures`);
+  el.setAttribute('aria-label', t('brochures.storeSection', { store: store.label }));
 
   const head = document.createElement('div');
   head.className = 'bstore-head';
@@ -63,7 +64,7 @@ function storeSection(store) {
     const link = document.createElement('a');
     link.className = 'bstore-search';
     link.href = '#/search';
-    link.textContent = 'Search this store';
+    link.textContent = t('brochures.searchStore');
     link.addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('supersearch:search-store', { detail: { store: store.search } }));
     });
@@ -95,7 +96,7 @@ async function renderStore(store, section) {
 
   if (active.length) {
     section.tag.className = 'bstore-tag is-live';
-    section.tag.textContent = active.length === 1 ? 'Current flyer' : `${active.length} current flyers`;
+    section.tag.textContent = active.length === 1 ? t('brochures.currentFlyer') : t('brochures.currentFlyers', { count: active.length });
     for (const b of active) section.body.appendChild(brochureCard(b, store, false));
     return;
   }
@@ -103,7 +104,7 @@ async function renderStore(store, section) {
   // No active brochure — say so clearly, and show the most recently expired
   // flyer (greyed + badged) so the state is legible rather than just empty.
   section.tag.className = 'bstore-tag is-off';
-  section.tag.textContent = 'No current flyer';
+  section.tag.textContent = t('brochures.noCurrent');
 
   const expired = editions
     .filter((b) => !isExternalBrochure(b))
@@ -111,9 +112,7 @@ async function renderStore(store, section) {
   if (!expired) {
     const empty = document.createElement('div');
     empty.className = 'bstore-empty';
-    empty.textContent = editions.length
-      ? 'No current brochure right now — check back after the weekly refresh.'
-      : 'No brochures held for this store yet.';
+    empty.textContent = editions.length ? t('brochures.noneNow') : t('brochures.noneHeld');
     section.body.replaceWith(empty);
     return;
   }
@@ -143,15 +142,15 @@ function brochureCard(b, store, expired) {
   badge.className = 'bcard-badge';
   if (expired) {
     badge.classList.add('is-expired');
-    badge.textContent = 'Expired';
+    badge.textContent = t('brochures.badge.expired');
   } else {
     const left = daysLeft(b);
     if (left != null && left <= 1) {
       badge.classList.add('is-ending');
-      badge.textContent = left === 0 ? 'Ends today' : 'Ends tomorrow';
+      badge.textContent = left === 0 ? t('brochures.badge.endsToday') : t('brochures.badge.endsTomorrow');
     } else {
       badge.classList.add('is-current');
-      badge.textContent = 'Current';
+      badge.textContent = t('brochures.badge.current');
     }
   }
 
@@ -175,15 +174,15 @@ function brochureCard(b, store, expired) {
   const title = document.createElement('span');
   title.className = 'bcard-title';
   title.dir = 'auto';
-  title.textContent = b.title || `${store.label} weekly flyer`;
+  title.textContent = b.title || t('brochures.weeklyFlyer', { store: store.label });
   const dates = document.createElement('span');
   dates.className = 'bcard-dates';
   dates.textContent = brochureDateLabel(b);
   body.append(title, dates);
   const kind = document.createElement('span');
   kind.className = 'bcard-kind';
-  if (external) kind.textContent = 'Official offers page ↗';
-  else if (isPdfBrochure(b)) kind.textContent = 'PDF brochure';
+  if (external) kind.textContent = t('brochures.officialPage');
+  else if (isPdfBrochure(b)) kind.textContent = t('brochures.pdfBrochure');
   if (kind.textContent) body.appendChild(kind);
 
   el.append(cover, body);
@@ -207,7 +206,7 @@ async function loadCoverInto(cover, b) {
   if (data.pages.length > 1) {
     const pages = document.createElement('span');
     pages.className = 'bcard-pages';
-    pages.textContent = `${data.pages.length} pages`;
+    pages.textContent = t('brochures.pages', { count: data.pages.length });
     cover.appendChild(pages);
   }
 }

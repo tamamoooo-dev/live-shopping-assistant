@@ -10,6 +10,7 @@
 import { cartItems, setQty, removeFromCart, clearCart, togglePurchased, CART_EVENT } from './cart.js';
 import { loadBrochures, storeLabel, storeColor } from './brochure.js';
 import { openBrochureViewer } from './viewer.js';
+import { t, tn } from './i18n.js';
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -39,9 +40,9 @@ function render(root) {
     root.innerHTML = `
       <div class="cart-empty">
         <div class="cart-empty-icon" aria-hidden="true">🛒</div>
-        <h2>Your cart is empty</h2>
-        <p>Open a brochure and tap any product to add it here.</p>
-        <a class="cart-browse" href="#/brochures">Browse brochures</a>
+        <h2>${esc(t('cart.empty'))}</h2>
+        <p>${esc(t('cart.emptyHint'))}</p>
+        <a class="cart-browse" href="#/brochures">${esc(t('cart.browse'))}</a>
       </div>`;
     return;
   }
@@ -77,16 +78,16 @@ function render(root) {
 
   root.innerHTML = `
     <div class="cart-toolbar">
-      <span class="cart-total">To buy <strong>${fmt(grand)} SAR</strong>${
-        boughtCount ? `<small class="cart-bought">· ${boughtCount} in the trolley</small>` : ''
+      <span class="cart-total">${esc(t('cart.toBuy'))} <strong>${fmt(grand)} SAR</strong>${
+        boughtCount ? `<small class="cart-bought">· ${esc(tn('cart.inTrolley', boughtCount))}</small>` : ''
       }</span>
-      <button type="button" class="cart-clear">Clear cart</button>
+      <button type="button" class="cart-clear">${esc(t('cart.clear'))}</button>
     </div>
     ${sections.join('')}
-    <p class="cart-note">Flyer prices are machine-extracted from this week's brochures — the printed flyer prevails at the till.</p>`;
+    <p class="cart-note">${esc(t('cart.note'))}</p>`;
 
   root.querySelector('.cart-clear').addEventListener('click', () => {
-    if (window.confirm('Remove everything from the cart?')) clearCart();
+    if (window.confirm(t('cart.confirmClear'))) clearCart();
   });
 
   for (const row of root.querySelectorAll('.cart-item')) {
@@ -104,7 +105,7 @@ function render(root) {
 function itemRow(it) {
   const qty = it.qty || 1;
   const line = it.price * qty;
-  const name = it.name || it.nameAr || 'Flyer product';
+  const name = it.name || it.nameAr || t('cart.flyerProduct');
   return `
     <article class="cart-item${it.purchased ? ' is-purchased' : ''}" data-id="${esc(it.id)}">
       <button type="button" class="cart-check" role="checkbox" aria-checked="${!!it.purchased}"
@@ -122,14 +123,14 @@ function itemRow(it) {
           ${qty > 1 ? `<span class="cart-line">× ${qty} = ${fmt(line)}</span>` : ''}
         </p>
         <p class="cart-actions">
-          ${it.brochureId ? '<button type="button" class="cart-flyer">View flyer</button>' : ''}
-          <button type="button" class="cart-remove">Remove</button>
+          ${it.brochureId ? `<button type="button" class="cart-flyer">${esc(t('cart.viewFlyer'))}</button>` : ''}
+          <button type="button" class="cart-remove">${esc(t('cart.remove'))}</button>
         </p>
       </div>
-      <div class="cart-qty" aria-label="Quantity">
-        <button type="button" class="cart-minus" aria-label="Decrease quantity">−</button>
+      <div class="cart-qty" aria-label="${esc(t('cart.quantity'))}">
+        <button type="button" class="cart-minus" aria-label="${esc(t('cart.decrease'))}">−</button>
         <span>${qty}</span>
-        <button type="button" class="cart-plus" aria-label="Increase quantity">+</button>
+        <button type="button" class="cart-plus" aria-label="${esc(t('cart.increase'))}">+</button>
       </div>
     </article>`;
 }
@@ -151,7 +152,7 @@ async function openFlyer(item, btn) {
     } else if (item.sourceUrl) {
       window.open(item.sourceUrl, '_blank', 'noopener');
     } else {
-      btn.textContent = 'Flyer expired';
+      btn.textContent = t('cart.flyerExpired');
     }
   } finally {
     btn.disabled = false;

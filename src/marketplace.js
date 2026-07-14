@@ -26,6 +26,7 @@ import { brochureForOffer, storeLabel, storeColor } from './brochure.js';
 import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage } from './match.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.js';
+import { t, tn } from './i18n.js';
 
 const DEFAULT_VISIBLE = 12;
 // Lowest price is a presentation transform: only the first PRICE_SORT_WINDOW of
@@ -236,11 +237,11 @@ function matchBadge(e, query, qFam, freshFam, priceMode) {
   // the order. Lowest price groups by stage only, so the badge is purely
   // stage-based; Best value still groups by family band, so a different-identity
   // product reads "Related".
-  if (!priceMode && qFam && entryBand(e, qFam, freshFam) <= 0) return { cls: 'related', text: 'Related' };
+  if (!priceMode && qFam && entryBand(e, qFam, freshFam) <= 0) return { cls: 'related', text: t('market.badge.related') };
   const stage = entryStage(e, query);
-  if (stage >= 4) return { cls: 'best', text: 'Best match' };
-  if (stage === 3) return { cls: 'close', text: 'Close match' };
-  return { cls: 'related', text: 'Related' };
+  if (stage >= 4) return { cls: 'best', text: t('market.badge.best') };
+  if (stage === 3) return { cls: 'close', text: t('market.badge.close') };
+  return { cls: 'related', text: t('market.badge.related') };
 }
 
 // D4D lists branch/language variants of the SAME flyer offer (same store, same
@@ -315,7 +316,7 @@ function priceRow(price, oldPrice, currency, discountLabel, up) {
     const upLabel = unitPriceLabel({ up });
     if (upLabel) prices.appendChild(el('span', 'unit-price', upLabel));
   } else {
-    prices.appendChild(el('span', 'no-price', 'Tap to see price'));
+    prices.appendChild(el('span', 'no-price', t('market.tapForPrice')));
   }
   return prices;
 }
@@ -344,8 +345,8 @@ function onlineCard(store, item, badge) {
     const bell = el('button', 'card-watch', '🔔');
     bell.type = 'button';
     const exact = store.id === 'amazon';
-    bell.title = exact ? 'Watch this product’s price' : 'Watch this — across every store';
-    bell.setAttribute('aria-label', `Watch the price of ${item.name}`);
+    bell.title = exact ? t('market.watchExact') : t('market.watchCross');
+    bell.setAttribute('aria-label', t('market.watchAria', { name: item.name }));
     bell.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -399,13 +400,13 @@ function flyerCard(listing, badge) {
   const card = el('button', 'card card-flyer');
   card.type = 'button';
   const displayName = listing.name;
-  card.title = `${displayName} — flyer price, tap to verify on the flyer`;
+  card.title = t('market.flyerCardTitle', { name: displayName });
 
   card.appendChild(cardImage(offer.imageUrl, displayName));
 
   const body = el('div', 'card-body');
   if (badge) body.appendChild(matchChip(badge));
-  const until = offer.validTo ? `flyer · until ${fmtDateShort(offer.validTo)}` : 'flyer';
+  const until = offer.validTo ? t('market.flyerUntil', { date: fmtDateShort(offer.validTo) }) : t('market.flyerTag');
   body.appendChild(storeBadge(storeLabel(offer.store), storeColor(offer.store), until));
   const name = el('div', 'card-name', displayName);
   name.dir = 'auto';
@@ -475,7 +476,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   }
   const flyerChip = el('span', 'src-chip src-chip-flyers is-loading');
   flyerChip.appendChild(el('span', null, '📄'));
-  flyerChip.appendChild(el('span', 'src-name', "This week's flyers"));
+  flyerChip.appendChild(el('span', 'src-name', t('market.weeklyFlyers')));
   const flyerState = el('span', 'src-state', '…');
   flyerChip.appendChild(flyerState);
   strip.appendChild(flyerChip);
@@ -484,7 +485,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   // The grid.
   const section = el('section', 'market');
   const head = el('div', 'market-head');
-  head.appendChild(el('span', 'market-title', 'All offers'));
+  head.appendChild(el('span', 'market-title', t('market.allOffers')));
   const count = el('span', 'market-count', '…');
   head.appendChild(count);
 
@@ -493,11 +494,11 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   // group so it reads as one control with two mutually-exclusive options.
   const sortWrap = el('div', 'sort-toggle');
   sortWrap.setAttribute('role', 'radiogroup');
-  sortWrap.setAttribute('aria-label', 'Rank results by');
+  sortWrap.setAttribute('aria-label', t('market.rankBy'));
   const sortButtons = {};
   const SORTS = [
-    ['price', 'Lowest price'],
-    ['value', 'Best value'],
+    ['price', t('market.lowestPrice')],
+    ['value', t('market.bestValue')],
   ];
   for (const [mode, label] of SORTS) {
     const b = el('button', 'sort-opt', label);
@@ -572,8 +573,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     }
     const view = activeStore ? ordered.filter((e) => entryStoreId(e) === activeStore) : ordered;
     count.textContent = String(view.length);
-    subnote.textContent =
-      sort === 'value' ? 'Best matches • sorted by best value' : 'Best matches • sorted by lowest price';
+    subnote.textContent = sort === 'value' ? t('market.sortedValue') : t('market.sortedPrice');
     subnote.hidden = finished && !view.length;
     body.innerHTML = '';
     if (!view.length) {
@@ -582,7 +582,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
           el(
             'div',
             'store-note',
-            activeStore ? 'No matching offers from this store.' : 'No matching offers found in any source.',
+            activeStore ? t('market.noneFromStore') : t('market.noneAnywhere'),
           ),
         );
       } else {
@@ -598,7 +598,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     }
     body.appendChild(grid);
     if (view.length > DEFAULT_VISIBLE) {
-      const btn = el('button', 'show-all', expanded ? 'Show fewer' : `Show all ${view.length} offers`);
+      const btn = el('button', 'show-all', expanded ? t('market.showFewer') : t('market.showAll', { count: view.length }));
       btn.type = 'button';
       btn.setAttribute('aria-expanded', String(expanded));
       btn.addEventListener('click', () => {
@@ -617,9 +617,9 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       const c = chips.get(store.id);
       if (c) {
         c.chip.classList.remove('is-loading');
-        c.state.textContent = items.length ? String(items.length) : 'no matches';
+        c.state.textContent = items.length ? String(items.length) : t('market.state.noMatches');
         if (!items.length) c.chip.classList.add('is-empty');
-        if (hidden > 0) c.chip.title = `${hidden} unrelated result${hidden === 1 ? '' : 's'} hidden`;
+        if (hidden > 0) c.chip.title = tn('market.hidden', hidden);
       }
       render();
     },
@@ -628,7 +628,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       if (c) {
         c.chip.classList.remove('is-loading');
         c.chip.classList.add('is-failed');
-        c.state.textContent = bestEffort ? 'temporarily unavailable' : 'unreachable';
+        c.state.textContent = bestEffort ? t('market.state.tempUnavailable') : t('market.state.unreachable');
       }
       render();
     },
@@ -638,14 +638,14 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       const unique = dedupeFlyers(listings);
       for (const l of unique) pool.push({ kind: 'flyer', listing: l });
       flyerChip.classList.remove('is-loading');
-      flyerState.textContent = unique.length ? `${unique.length} offers` : 'no matches';
+      flyerState.textContent = unique.length ? t('market.state.offers', { count: unique.length }) : t('market.state.noMatches');
       if (!unique.length) flyerChip.classList.add('is-empty');
       render();
     },
     flyersUnavailable() {
       flyerChip.classList.remove('is-loading');
       flyerChip.classList.add('is-empty');
-      flyerState.textContent = 'unavailable';
+      flyerState.textContent = t('market.state.unavailable');
       render();
     },
     flyerSlot(storeId) {

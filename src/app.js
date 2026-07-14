@@ -36,6 +36,7 @@ import { createMarketplace } from './marketplace.js';
 import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.js';
 import { initCartPage } from './cartPage.js';
 import { cartCount, CART_EVENT } from './cart.js';
+import { t, tn, applyI18n, initLangSwitch } from './i18n.js';
 
 const memory = createMemory('app');
 
@@ -108,12 +109,12 @@ function route() {
   pageCart.hidden = name !== 'cart';
   document.title =
     name === 'brochures'
-      ? 'Super Search — Weekly brochures'
+      ? t('title.brochures')
       : name === 'alerts'
-      ? 'Super Search — Price alerts'
+      ? t('title.alerts')
       : name === 'cart'
-      ? 'Super Search — Cart'
-      : 'Super Search — Live shopping search';
+      ? t('title.cart')
+      : t('title.search');
   for (const link of document.querySelectorAll('[data-nav]')) {
     const active = link.dataset.nav === name;
     link.classList.toggle('is-active', active);
@@ -272,7 +273,7 @@ async function runSearch(query) {
   if (!q) return input.focus();
   const stores = selectedStores();
   if (!stores.length) {
-    status.textContent = 'Select at least one store to search.';
+    status.textContent = t('search.needOneStore');
     return;
   }
 
@@ -280,7 +281,7 @@ async function runSearch(query) {
   inFlight = token;
   home.hidden = true;
   setBusy(true);
-  status.textContent = `Searching ${stores.length} store${stores.length > 1 ? 's' : ''}…`;
+  status.textContent = tn('search.searching', stores.length);
   results.innerHTML = '';
   saveRecent(q);
 
@@ -346,7 +347,11 @@ async function runSearch(query) {
         if (inFlight === token && finished === stores.length) {
           setBusy(false);
           market.finish();
-          status.textContent = `${total} result${total === 1 ? '' : 's'} across ${stores.length} store${stores.length > 1 ? 's' : ''} for “${q}”`;
+          status.textContent = tn('search.results', total, {
+            total,
+            stores: tn('search.storesInline', stores.length),
+            q,
+          });
           fillSummary(summarySlot, q, tagged, token);
         }
       }
@@ -435,30 +440,32 @@ async function fillFlyer(slot, storeId, token) {
   btn.type = 'button';
   btn.className = 'store-flyer';
   const text = document.createElement('span');
-  text.textContent = '📖 Flyer';
+  text.textContent = t('flyer.chip');
   btn.appendChild(text);
   const date = document.createElement('span');
   date.className = 'flyer-date';
   if (active) {
-    date.textContent = b.validTo ? `· until ${fmtDateShort(b.validTo)}` : '· this week';
+    date.textContent = b.validTo ? t('flyer.until', { date: fmtDateShort(b.validTo) }) : t('flyer.thisWeek');
   } else {
     btn.classList.add('is-stale');
-    date.textContent = b.validTo ? `· expired ${fmtDateShort(b.validTo)}` : '· may be outdated';
+    date.textContent = b.validTo ? t('flyer.expired', { date: fmtDateShort(b.validTo) }) : t('flyer.mayBeOutdated');
   }
   btn.appendChild(date);
   if (isExternalBrochure(b)) {
-    btn.title = "View this store's official offers page";
+    btn.title = t('flyer.officialTitle');
     btn.addEventListener('click', () =>
       window.open(b.sourceUrl, '_blank', 'noopener,noreferrer'),
     );
   } else {
-    btn.title = b.title ? `${b.title} — view this flyer` : 'View this flyer';
+    btn.title = b.title ? t('flyer.viewTitled', { title: b.title }) : t('flyer.view');
     btn.addEventListener('click', () => openBrochureViewer(b, label));
   }
   slot.replaceChildren(btn);
 }
 
 // --- boot ---------------------------------------------------------------------
+applyI18n(); // language metadata (lang; dir stays ltr in Phase 1) + static shell
+initLangSwitch(); // the language chip beside the logo
 renderChips();
 renderHomeChips();
 route();
