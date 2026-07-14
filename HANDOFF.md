@@ -7,7 +7,9 @@
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
 > **Last updated:** 2026-07-05 · All five roadmap pillars **plus tappable
-> brochures + cart** are built and verified. Latest change: the
+> brochures + cart** are built and verified. Note: a **ClicFlyer feasibility
+> study** was completed this day (HISTORY §31) — **not adopted**, no code
+> changed; D4D stays the foundation. Latest architecture change: the
 > **snapshot-at-ingest redesign** (HISTORY §30) — the runtime no longer
 > depends on D4D staying unchanged after ingestion: hotspot geometry is
 > captured AT INGEST from the same leaflet HTML as the pages (atomically
@@ -17,6 +19,10 @@
 > were permission-gated this session): ship with one `npx wrangler deploy` in
 > `brochure-engine/` + one `git push` per repo. Until the engine deploys,
 > hotspots keep using the old on-demand fetch path.
+>
+> **New (2026-07-06):** an evidence-based **retailer feasibility investigation**
+> is now preserved as living project docs in [docs/](docs/) — see §12. Future
+> retailer decisions must be based on it, not assumptions.
 
 ---
 
@@ -113,6 +119,10 @@ conflicts with this file, this file wins).
 
 ## 4. Online search stores (7 providers, both repos)
 
+> **Before adding any new store, consult
+> [docs/FEASIBILITY-VALIDATION.md](docs/FEASIBILITY-VALIDATION.md)** — the
+> evidence-based authority on which retailers are Worker-reachable and how (§12).
+
 | id | Method | Notes |
 |---|---|---|
 | `panda` | Public JSON `api.panda.sa` (`products-v3` → `suggestions-v3`) | Emit the **VARIETY id** for result `id` + link — catalogue `product.id` 412s on the product page |
@@ -129,9 +139,22 @@ localStorage key.
 
 **Do not re-investigate (settled):** HungerStation Market (menu API is
 Cloudflare-gated to datacenter IPs) and Keeta Market (signed Meituan "Sailor"
-API, geo-gated) are **not addable from a Worker**. ClicFlyer WAF-blocks
-datacenter IPs (503). OffersInMe was the original aggregator — replaced by D4D
-(stale data). Manuel was retired (dead on D4D since 2025-09, no official
+API, geo-gated) are **not addable from a Worker**. **ClicFlyer — CLOSED, not
+adopted (deep study 2026-07-05, HISTORY §31).** Correcting the old note: the 503
+was NOT a datacenter/WAF IP block — it's a missing-header load-shed (200 with
+normal `Accept-Language`). The real blockers: (1) the web/HTML zone **302-loops
+Cloudflare-Worker egress to `/Home/Error`** (IP/ASN-scoped, every path incl.
+static files, both FR+GB colos; residential+generic datacenter get 200 — so the
+CDN and `api.clicflyer.com` ARE Worker-reachable, but the web app is not);
+(2) the **mobile API** (`api.clicflyer.com/api/v2/ClicFlyerAPI/*`) exposes a full
+data superset but every read sits behind a JWT whose `GuestLogin` bootstrap
+requires a **bespoke RSA+AES-GCM encrypted-credential blob** (embedded RSA pubkey
++ Azure Key Vault `LiveApiKey`, server-rotatable) — usable only by forging the
+app's credentials. The mobile-API probe **stopped intentionally at the auth layer;
+no attempt was made to reproduce/bypass the credential encryption.** Do not reopen
+absent NEW evidence (official/partner API, relaxed $0/Worker-only constraints, or
+the vendor dropping both gates). OffersInMe was the original aggregator — replaced
+by D4D (stale data). Manuel was retired (dead on D4D since 2025-09, no official
 offers page); its D1 history rows are kept.
 
 ## 5. Brochure engine (the stateful Worker)
@@ -408,6 +431,36 @@ external product images — verify via `preview_eval` DOM inspection; preview
    converges price-history identities (better names = fewer series splits).
 5. **Best-effort store monitoring:** notice when Amazon/Noon silently stop
    returning results (both are fragile to upstream markup changes).
+
+## 12. Expansion & feasibility docs (consult before adding any retailer)
+
+Two **living** engineering references live in [docs/](docs/) (index:
+[docs/README.md](docs/README.md)):
+
+- **[docs/FEASIBILITY-VALIDATION.md](docs/FEASIBILITY-VALIDATION.md)** — the
+  evidence-based authority on which retailers/platforms are integrable. Per
+  candidate it records **Worker-egress reachability** (probed from the Cloudflare
+  edge via `wrangler dev --remote` vs residential `curl`), search technology, data
+  quality, recommended connector, engineering effort, confidence, and a
+  **✅ Build / 🟡 Investigate / 🔴 Skip** verdict — plus a reproducible probe method
+  (§1) and a revision log (§8).
+- **[docs/EXPANSION-ROADMAP.md](docs/EXPANSION-ROADMAP.md)** — the 12-month
+  strategy: tiering, effort×impact roadmap, the platform multipliers (D4D, Salla,
+  the Algolia/Unbxd hosted-search cluster), rejected retailers, and the
+  **Future Opportunities** feature backlog (loyalty, coupons, basket optimization,
+  price intelligence, barcode/voice search, etc.).
+
+**Decision rule (hard):** every choice to build, defer, or skip a retailer **must
+cite the evidence in FEASIBILITY-VALIDATION.md — never an assumption.** Where
+roadmap theory and validation evidence disagree, **the validation file wins**
+(that is how ClicFlyer-class Worker-egress traps get caught before wasting build
+time — e.g. this investigation flipped Al Dawaa, Carrefour-online, and Landmark
+from "feasible" to blocked with hard evidence).
+
+**Maintenance rule (hard):** future investigations **update these two files in
+place** — edit the row, bump the score, add a dated line to the revision log — and
+**never create new disconnected reports**. Do **not** overwrite a prior conclusion
+without new evidence; supersede it and record what changed.
 
 ---
 

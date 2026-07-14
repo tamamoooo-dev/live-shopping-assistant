@@ -869,11 +869,15 @@ Panda, Carrefour, LuLu, Danube, Tamimi, Manuel, Nesto** (M2, aggregator images).
 = **8 providers held in production.**
 
 ### 12.B Aggregator chosen: OffersInMe (not the Discovery's ClicFlyer)
-ARCHITECTURE §12.3 *recommended* ClicFlyer "confirm before building." On
-inspection **ClicFlyer's web frontend returns HTTP 503 to every datacenter
-request** (WAF-blocks non-residential IPs) — unusable from a Cloudflare Worker.
-**OffersInMe** (`ksa.offersinme.com`) server-renders clean, fetchable pages for
-all target stores and was reachable, so it is the M2 adapter. The collector is
+ARCHITECTURE §12.3 *recommended* ClicFlyer "confirm before building." At the
+time, a bare fetch of ClicFlyer's web frontend returned HTTP 503 and this was
+recorded as "WAF-blocks non-residential IPs — unusable from a Cloudflare
+Worker." **⚠️ That diagnosis was WRONG — see §31 (2026-07-05 deep study).** The
+503 was a missing-header load-shed (an `Accept-Language`-less request), not an
+IP/WAF block. ClicFlyer was nonetheless correctly **not** adopted; the real
+(and different) blockers are documented in §31. **OffersInMe**
+(`ksa.offersinme.com`) server-renders clean, fetchable pages for all target
+stores and was reachable, so it is the M2 adapter. The collector is
 adapter-driven precisely so this is a **one-line swap** (§10.F risk #1: "don't
 hard-depend on one aggregator"); adding ClicFlyer/Tiendeo later = a new adapter,
 zero collector change.
@@ -3590,6 +3594,200 @@ false alarm. Tests: reingest.test.mjs gains empty-over-non-empty refusal (both
 the `ensureHotspots` and dedupe paths) + the no-false-alarm case. Remaining
 review items (orphan-spot metric, `/asset` CORS guard test, health coverage,
 markup canary) deferred to a future task.
+
+---
+
+## §31 · ClicFlyer feasibility study — CLOSED, not adopted (2026-07-05)
+
+> **Status:** Investigation complete. **Decision: do NOT adopt ClicFlyer** as an
+> ingestion source under the current architecture ($0, Cloudflare-Worker-only,
+> low-maintenance personal tool). No code written; D4D remains the foundation.
+> This section supersedes the old ClicFlyer rejection reason in §12.B (which was
+> based on a wrong diagnosis). Read this before ever reconsidering ClicFlyer.
+
+### 31.A What was investigated
+Whether ClicFlyer (`clicflyer.com` / `api.clicflyer.com`, GCC offers aggregator,
+Android app `main.ClicFlyer`) can **independently** power Super Search — i.e.
+fully replace the D4D ingestion path (brochure discovery + page images +
+structured offers + prices + retailer metadata + validity), executed from a real
+Cloudflare Worker at $0. Three fronts examined, each with live evidence:
+(1) the previous report's rejection reason; (2) the HTML/web-app path;
+(3) the official mobile API (via APK reverse-engineering + live requests).
+
+### 31.B What was proven (evidence-based)
+- **The old rejection reason was wrong.** The 503 was NOT an IP/WAF block: a bare
+  request 503s, but the SAME residential IP with normal `Accept`/`Accept-Language`
+  headers → 200; Googlebot/Bingbot UAs → 200; a US datacenter fetch → 200. The 503
+  is a crude missing-header load-shed (`Server: Kestrel`, "backend overloaded"),
+  trivially defeated with browser headers.
+- **The HTML path's data is real and complete.** With correct headers the web app
+  serves, via an ASP.NET anti-forgery (`__RequestVerificationToken`) flow that
+  mirrors D4D's CSRF pattern: `POST …/Retailers/GetFlyerOffersNew` (per-product
+  offers w/ `real-price`+`grey-cross-text` old price + `% off` + validity;
+  Lulu `totalpageoffer=1275`), `GetFlyers` + the flyer viewer (full page-image set
+  `cdn.clicflyer.net/appimages/flyerpages/flyerprocessing_<id>_<N>_compressed.webp`,
+  ~80 pages), absolute dates ("Valid Till Jul 07, 2026"), bilingual EN/AR by URL
+  segment, and stable numeric retailer ids (lulu=8, panda=2, carrefour=1, othaim=5,
+  tamimi=6, danube=12…). Coverage is broader than D4D (adds al-sadhan, bindawood,
+  alraya, pharmacies). Offer names are cleaner brand+product titles than D4D OCR.
+  No tap-polygons (only an offer→page number encoded in the crop id).
+- **The HTML path is CLOSED from a Cloudflare Worker.** A throwaway probe Worker
+  was deployed to `*.tamamoooo.workers.dev`, ran the full flow from Cloudflare's
+  edge, and was deleted. Every `www.clicflyer.com` / apex request (all paths incl.
+  static `robots.txt`/`sitemapen.xml`, both FR and GB egress colos) → **302 loop to
+  `/Home/Error`** at a Cloudflare edge. Residential and generic datacenter get 200;
+  only Cloudflare-Worker egress is trapped (the app zone is a Cloudflare zone whose
+  redirect rule fires on Worker subrequests, which are forced through that edge;
+  ordinary users resolve straight to the Azure origin and never hit it).
+  `cdn.clicflyer.net` (images) and `api.clicflyer.com` ARE Worker-reachable (200).
+  Headers/sec-fetch/UA variation does not help — it is IP/ASN-scoped, not header-based.
+- **The mobile API is a data superset — behind a bespoke encrypted-credential gate.**
+  From the APK (v10.5.3, 8 DEX, no app-native crypto `.so`): base
+  `https://api.clicflyer.com/api/v2/ClicFlyerAPI/<Action>` (+ `Account`, `UserAPI`).
+  All ingestion needs exist as endpoints: `GetFlyersWithBanner`/`GetHomeRetailers`
+  (discovery), `GetFlyerPages` (page list), `GetFlyerOffersSort`/`GetOfferDetail`
+  (products+prices), `GetRetailerStores`/`GetRetailerDetailsById`/`GetStoresByFlyerId`
+  (retailer metadata), `GetCountries`/`GetCitiesByCountry` (geo). The host is
+  Worker-reachable and returns JSON to anonymous clients on at least one endpoint
+  (`AddDeviceToken` → 200 JSON). BUT data endpoints require a **JWT** from
+  `POST api/v2/Account/Token` (the `GuestLogin`→`GenerateJWToken` path — anonymous,
+  no user credentials). That token requires an RSA/AES-GCM **encrypted credential
+  blob** carrying `DeviceId`+`UniqueId`(+shared `ApiKey`): a shotgun of every
+  plaintext header/query/body name for DeviceId/UniqueId returned a byte-identical
+  `{"code":400,"message":"Device Id and Unique Id not found."}`, proving those live
+  inside the encrypted payload. Confirmed app-owned crypto:
+  `AsymmetricEncryptionUtil.encryptWithPublicKey` (embedded RSA public key
+  `MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2S5Dp65m…`), `AesGcmUtil`/`AESEncryption`,
+  `KVConstants`, validated server-side via Azure Key Vault
+  `kv-liveclicflyerapp.vault.azure.net/keys/LiveApiKey/decrypt` (versioned
+  `api-version=2025-07-01`). No per-request HMAC interceptor
+  (only `DynamicBaseUrlInterceptor`+`RetryInterceptor`); Play Integrity strings are
+  ads/Play-Core library artifacts with **no** binding to the ClicFlyer API.
+- **Device identity vs login (settled).** DeviceId/UniqueId is a device/guest layer
+  BENEATH user auth (`GuestLogin` interactor is distinct from `Login`/`SocialLogin`/
+  `Register`/`UpGradeUserInfo`; identity generated client-side via `randomUUID`/
+  Firebase `InstallationId`). Login does NOT satisfy it and cannot bypass it — every
+  authenticated session rides on the same device-scoped, encrypted-credential JWT.
+
+### 31.C Assumptions disproven from the previous investigation
+1. "ClicFlyer WAF-blocks non-residential/datacenter IPs (503)." → FALSE. 503 = a
+   missing-header load-shed; datacenter and residential both get 200 with headers.
+2. Implicitly, "there is no machine-readable path." → FALSE. Both a CSRF-style HTML
+   API and a full mobile JSON API exist and were mapped.
+3. The bottom line ("not usable from a Worker") happened to hold, but for a
+   **completely different, now-precisely-identified reason** (a Worker-egress 302
+   trap on the web zone; an encrypted-credential gate on the mobile API), and it
+   was too broad — it missed that the CDN and mobile-API hosts ARE Worker-reachable.
+
+### 31.D Why the project is NOT adopting ClicFlyer (under current constraints)
+- **HTML path:** closed from Cloudflare Workers (302 trap, IP/ASN-scoped, not
+  header-fixable). The only workarounds — a non-Cloudflare egress/proxy — break both
+  the $0 rule and the Worker-only architecture.
+- **Mobile API path:** data is reachable in principle, but the **sole** access door
+  is a deliberately-engineered client-side encrypted-credential handshake (RSA +
+  AES-GCM, server-validated via a rotatable Azure Key Vault key). Using it requires
+  extracting the vendor's shared secret and reimplementing that cipher to **forge**
+  the app's credentials — an adversarial, brittle, maintained anti-abuse control that
+  can be rotated at will (one Key-Vault rotation kills ingestion with no notice).
+  That is the opposite of a simple, honest, low-maintenance personal tool.
+- **The investigation stopped INTENTIONALLY at the authentication layer.** No attempt
+  was made to reproduce, forge, or bypass the credential-encryption mechanism. The
+  stop was a deliberate boundary (do not build a circumvention of an access-control /
+  anti-abuse measure), not merely a tooling limit.
+
+### 31.E Do-not-reopen guidance
+Do **not** re-investigate ClicFlyer unless there is genuinely NEW external evidence:
+(a) ClicFlyer publishes an **official/partner API** (documented auth, ToS-permitted);
+(b) the **project constraints change** (a paid non-Cloudflare egress/proxy becomes
+acceptable, i.e. the $0 + Worker-only rules are relaxed); or (c) ClicFlyer removes the
+web-zone Worker-egress block AND the mobile encrypted-credential gate. Absent one of
+those, the answer is settled: **not viable; D4D stays the foundation.** All raw
+evidence (APK, DEX strings, request/response captures, probe-Worker outputs) lived in
+the session scratchpad and is not committed.
+
+---
+
+## §32 · Expansion roadmap + evidence-based feasibility investigation (2026-07-06)
+
+> **Status:** Complete. Produced two **living** engineering docs, now preserved in
+> [docs/](docs/) (`docs/EXPANSION-ROADMAP.md`,
+> `docs/FEASIBILITY-VALIDATION.md`, indexed by `docs/README.md`). No connector code
+> written — this is planning + validation. Establishes the rule that future
+> retailer decisions cite FEASIBILITY-VALIDATION.md, not assumptions, and that
+> future investigations update these files in place rather than forking new reports.
+
+### 32.A What was produced
+1. **EXPANSION-ROADMAP.md** — a 12-month plan covering ~29 candidate retailers/
+   platforms with the full attribute set (category, coverage, catalog size, search
+   capability, PDP, pricing/image/promo/brochure availability, auth, bot protection,
+   API, complexity, connector strategy, maintenance, feasibility + user-value
+   scores), Tier 1/2/3 classification, an effort×impact roadmap, the platform
+   multipliers, explicit "not worth integrating" rejections, and a "Future
+   Opportunities" feature backlog (loyalty, coupons, cashback, price guarantees,
+   wishlist sync, stock, location-aware pricing, barcode/voice search, AI assistant,
+   recommendations, basket optimization, cheapest-complete-basket, price
+   intelligence, deal detection, flyer-OCR/`deriveNames`, notifications, seasonal
+   prediction).
+2. **FEASIBILITY-VALIDATION.md** — replaced the roadmap's *theoretical* scores with
+   *measured* evidence for every Tier 1/2 candidate.
+
+### 32.B How feasibility was actually tested (the method that matters)
+The decisive question is **Worker-egress reachability** — does a source behave the
+same from a Cloudflare datacenter IP as from a browser? Residential `curl` cannot
+answer it (the ClicFlyer trap: residential 200, Worker 302-loop). So a throwaway
+probe Worker was run via `wrangler dev --remote` (egress from real Cloudflare
+edge, verified egress IP `2a06:98c0:3600::103`; `redirect: manual` to catch
+302-loops), and every candidate was probed from **three vantages**: CF edge,
+residential `curl` (KSA IP), and `WebFetch` (third network). The probe was
+**validated against controls first**: ClicFlyer reproduced its documented
+`302→/Home/Error` Worker-block exactly, and Panda returned JSON — so its verdicts
+are trustworthy. The wrangler session was stopped afterward; the probe scripts and
+captures lived in the session scratchpad and are not committed.
+
+### 32.C Evidence-based results (superseding the roadmap's guesses)
+- **✅ Build (measured product data from the edge):** **Jarir** (897 KB SSR search,
+  SAR+price fields), **Nahdi** (421 KB SSR, JSON-LD products; opens pharmacy),
+  **Spinneys** (994 KB SSR, 41 price / 327 image hits), **Mumzworld** (Next SSR,
+  prices+images; opens baby), **Salla platform** (live store `store.alshifahoney.com`
+  edge-200, 168 product refs + JSON-LD on a uniform theme — the SME multiplier
+  validated).
+- **🟡 Investigate (reachable; one browser network trace away):** Othaim online,
+  eXtra (Unbxd), GoldenScent (Algolia), Nana (Frappe `/api/method/*`,
+  delivery-marked-up price caveat), Nesto (Angular API lazy-loaded), and **Zid**
+  (platform NOT independently probed — repeat the Salla probe before committing).
+- **🔴 Skip (high-confidence blockers):**
+  - **Carrefour online (6→4):** every path incl. every `/api/…` returns an identical
+    53-byte `<p></p>` shell (residential too) — a JS-minted-token gate, no clean
+    endpoint. Stay flyer-only (D4D coverage already exists).
+  - **Al Dawaa (6→3):** connection refused/failed from all three vantages (edge 523,
+    residential 000, WebFetch ECONNREFUSED) — TLS/JA3 bot protection a Worker can't
+    forge.
+  - **Landmark / Home Centre + Babyshop (6→2):** Cloudflare managed-challenge 403
+    from the edge vs 200 + full HTML residentially — a confirmed ClicFlyer-class
+    Worker-egress block.
+  - **Bindawood (6→3):** web origin dead (CF 1016), `bindawood.com` on a GoDaddy
+    parking IP — app-only; Danube (same holding) already covers it.
+  - **Al Sadhan (5→2):** `alsadhan.com` 301-redirects to Gmail — no storefront.
+
+### 32.D Findings that reshape the plan
+- **Two roadmap assumptions were broken by evidence:** pharmacy cannot launch as a
+  Nahdi+Al Dawaa comparison (Al Dawaa blocked → Nahdi launches solo, validate
+  Whites/United as the partner), and the "Home+Baby in one Landmark connector" idea
+  fails at egress (Mumzworld now carries Baby alone).
+- **A second platform multiplier emerged:** a **hosted-search cluster** — Nahdi,
+  Mumzworld, Spinneys, GoldenScent all run **Algolia** and eXtra runs **Unbxd**
+  (public CDN search APIs, unconditionally Worker-reachable, clean JSON). A
+  "scrape app-id/key → query the index" helper amortizes across five+ retailers,
+  alongside the Salla parser and the existing D4D flyer multiplier.
+
+### 32.E Governance established
+- **Authority:** FEASIBILITY-VALIDATION.md is the source of truth for build/defer/
+  skip decisions; where it and the roadmap disagree, the validation file wins.
+- **Maintenance:** future investigations **update the two docs in place** (edit the
+  row, bump the score, add a dated line to the validation revision log §8) and never
+  fork new disconnected reports; a prior conclusion is **not overwritten without new
+  evidence** — it is superseded with a record of what changed. HANDOFF §12 points at
+  all of this.
 
 ---
 

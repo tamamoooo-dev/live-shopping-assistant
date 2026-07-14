@@ -12,6 +12,17 @@ It is a **pure static website**: the browser talks directly to Panda's public
 API. There is **no backend, no build step, and nothing to run on a server** —
 just static files (`index.html`, `styles.css`, and the ES modules in `src/`).
 
+## Documentation
+
+> This README is historical (the project has since grown well beyond Panda-only
+> live search). The current source of truth is **[HANDOFF.md](HANDOFF.md)**
+> (state + rules) and **[HISTORY.md](HISTORY.md)** (milestones). Living
+> engineering references live in **[docs/](docs/)**:
+> [FEASIBILITY-VALIDATION.md](docs/FEASIBILITY-VALIDATION.md) (the evidence-based
+> authority on which retailers are integrable) and
+> [EXPANSION-ROADMAP.md](docs/EXPANSION-ROADMAP.md) (the 12-month plan). New
+> retailer decisions must cite the validation evidence, not assumptions.
+
 ## Deploy (static HTTPS host)
 
 The app is served as-is. Host the folder on any static HTTPS host. The code uses
