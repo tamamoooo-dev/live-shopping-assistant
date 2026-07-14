@@ -27,6 +27,7 @@ import { createSpotLayer, spotForOffer } from './hotspots.js';
 import { createNav } from './nav.js';
 import { createSheet } from './sheet.js';
 import { rememberPosition, recallPosition } from './state.js';
+import { t, tn } from '../i18n.js';
 
 let viewerOpen = false;
 
@@ -95,7 +96,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   overlay.className = 'vv-overlay';
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-label', `${storeName} brochure`);
+  overlay.setAttribute('aria-label', t('viewer.dialogLabel', { store: storeName }));
   overlay.innerHTML = `
     <header class="vv-head">
       <div class="vv-title">
@@ -103,15 +104,15 @@ export function openBrochureViewer(b, storeName, opts = {}) {
         <span class="vv-date"></span>
       </div>
       <span class="vv-zoomctl">
-        <button type="button" class="vv-zoom-out" aria-label="Zoom out">−</button>
-        <button type="button" class="vv-zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" class="vv-zoom-out" aria-label="${t('viewer.zoomOut')}">−</button>
+        <button type="button" class="vv-zoom-in" aria-label="${t('viewer.zoomIn')}">+</button>
       </span>
-      <button type="button" class="vv-close" aria-label="Close brochure">
+      <button type="button" class="vv-close" aria-label="${t('viewer.close')}">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </header>
-    <div class="vv-stage" tabindex="0" aria-label="Brochure pages">
-      <div class="vv-loading"><span class="spinner" aria-hidden="true"></span> Loading brochure…</div>
+    <div class="vv-stage" tabindex="0" aria-label="${t('viewer.stageLabel')}">
+      <div class="vv-loading"><span class="spinner" aria-hidden="true"></span> ${t('viewer.loading')}</div>
     </div>
     <div class="vv-bottom"></div>`;
   const $$ = (sel) => overlay.querySelector(sel);
@@ -192,12 +193,12 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     const url = pdfAssetUrl(b);
     $$('.vv-zoomctl').hidden = true;
     if (!url) {
-      stage.innerHTML = '<div class="vv-msg">Sorry — this brochure could not be loaded.</div>';
+      stage.innerHTML = `<div class="vv-msg">${t('viewer.loadFailed')}</div>`;
       return;
     }
     const frame = document.createElement('iframe');
     frame.className = 'vv-pdf';
-    frame.title = `${storeName} brochure PDF`;
+    frame.title = t('viewer.pdfTitle', { store: storeName });
     frame.src = url;
     stage.replaceChildren(frame);
     const open = document.createElement('a');
@@ -205,7 +206,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     open.href = url;
     open.target = '_blank';
     open.rel = 'noopener';
-    open.textContent = 'Open PDF ↗';
+    open.textContent = t('viewer.openPdf');
     bottom.appendChild(open);
     return;
   }
@@ -216,7 +217,10 @@ export function openBrochureViewer(b, storeName, opts = {}) {
 
   /* --- spot layers ---------------------------------------------------------------- */
   const spotLabel = (offer) =>
-    `${cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || 'flyer product'} — ${offer.price} ${offer.currency || 'SAR'}`;
+    t('viewer.hotspotAria', {
+      label: cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || t('viewer.flyerProduct'),
+      price: `${offer.price} ${offer.currency || 'SAR'}`,
+    });
 
   function attachSpots(i, contentEl) {
     if (!hotspots || spotLayers.has(i)) return;
@@ -238,9 +242,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     const hint = document.createElement('div');
     hint.className = 'vv-hint';
     const n = layer.spots.length;
-    hint.textContent = n === 1
-      ? '1 product on this page — tap it for price & cart'
-      : `${n} products on this page — tap one for price & cart`;
+    hint.textContent = tn('viewer.spotsHint', n);
     stage.appendChild(hint);
     setTimeout(() => hint.remove(), 3500);
   }
@@ -256,7 +258,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   loadBrochurePages(b).then((data) => {
     if (!viewerOpen) return;
     if (!data || !data.pages.length) {
-      stage.innerHTML = '<div class="vv-msg">Sorry — this brochure could not be loaded.</div>';
+      stage.innerHTML = `<div class="vv-msg">${t('viewer.loadFailed')}</div>`;
       return;
     }
     pageSrcs = data.pages;

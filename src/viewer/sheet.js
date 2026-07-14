@@ -16,6 +16,7 @@ import { addToCart, inCart } from '../cart.js';
 import { openWatchDialog } from '../alertsPage.js';
 import { isRelevant, relevance } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
+import { t, tn } from '../i18n.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
 // Hero + cart thumbnails are cropped FROM THE STORED PAGE IMAGE (engine /asset,
@@ -114,7 +115,7 @@ export function createSheet(host, ctx) {
       sheet = document.createElement('div');
       sheet.className = 'ps-sheet ps-sheet-v2';
       sheet.setAttribute('role', 'dialog');
-      sheet.setAttribute('aria-label', 'Product details');
+      sheet.setAttribute('aria-label', t('sheet.dialogLabel'));
       host.appendChild(sheet);
       wireDrag(sheet);
     }
@@ -267,10 +268,12 @@ export function createSheet(host, ctx) {
     const fmt = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
     const todayYMD = new Date().toISOString().slice(0, 10);
     const ended = !!(offer.validTo && offer.validTo < todayYMD);
-    const until = offer.validTo ? `${ended ? 'ended' : 'until'} ${fmtDate(offer.validTo)}` : '';
+    const until = offer.validTo
+      ? t(ended ? 'sheet.ended' : 'sheet.until', { date: fmtDate(offer.validTo) })
+      : '';
     const name = cleanOfferName(offer.name);
     const nameAr = cleanOfferName(offer.nameAr);
-    const title = name || nameAr || 'Flyer product';
+    const title = name || nameAr || t('sheet.product');
     const { label: sizeText, unit } = offerSize(offer);
     const meta = [
       sizeText,
@@ -280,10 +283,10 @@ export function createSheet(host, ctx) {
     sheet.innerHTML = `
       <div class="ps-grab" aria-hidden="true"></div>
       <header class="ps-head">
-        <button type="button" class="ps-back" ${stack.length > 1 ? '' : 'hidden'} aria-label="Back to previous product">‹</button>
+        <button type="button" class="ps-back" ${stack.length > 1 ? '' : 'hidden'} aria-label="${esc(t('sheet.back'))}">‹</button>
         <span class="ps-store" style="--chip:${storeColor(offer.store)}">${esc(storeLabel(offer.store))}</span>
         ${until ? `<span class="ps-until${ended ? ' is-ended' : ''}">${esc(until)}</span>` : ''}
-        <button type="button" class="ps-close" aria-label="Back to brochure">✕</button>
+        <button type="button" class="ps-close" aria-label="${esc(t('sheet.close'))}">✕</button>
       </header>
       <div class="ps-body">
         <div class="ps-hero">
@@ -306,30 +309,30 @@ export function createSheet(host, ctx) {
         <div class="ps-actions">
           <button type="button" class="ps-add">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.2l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h7.9a1.6 1.6 0 0 0 1.6-1.3L20.5 8H6"/></svg>
-            <span>${inCart(offer.id) ? 'Add again' : 'Add to list'}</span>
+            <span>${inCart(offer.id) ? esc(t('sheet.addAgain')) : esc(t('sheet.addToList'))}</span>
           </button>
-          <button type="button" class="ps-watch" aria-label="Watch this price">
+          <button type="button" class="ps-watch" aria-label="${esc(t('sheet.watchAria'))}">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>
-            <span>Watch</span>
+            <span>${esc(t('sheet.watch'))}</span>
           </button>
-          <button type="button" class="ps-similar-btn" aria-label="Similar products">
+          <button type="button" class="ps-similar-btn" aria-label="${esc(t('sheet.similarAria'))}">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-            <span>Similar</span>
+            <span>${esc(t('sheet.similarBtn'))}</span>
           </button>
         </div>
         <div class="ps-insights" hidden></div>
         <div class="ps-history" hidden>
-          <h4>Price history</h4>
+          <h4>${esc(t('sheet.priceHistory'))}</h4>
           <div class="ps-history-body"></div>
         </div>
         <div class="ps-compare" hidden>
-          <h4>Available elsewhere</h4>
+          <h4>${esc(t('sheet.availableElsewhere'))}</h4>
           <div class="ps-compare-body"></div>
         </div>
-        <p class="ps-note">Flyer price, machine-extracted — the printed flyer prevails.
-          ${offer.sourceUrl ? `<a href="${esc(offer.sourceUrl)}" target="_blank" rel="noopener">Verify ↗</a>` : ''}</p>
+        <p class="ps-note">${esc(t('sheet.note'))}
+          ${offer.sourceUrl ? `<a href="${esc(offer.sourceUrl)}" target="_blank" rel="noopener">${esc(t('sheet.verify'))}</a>` : ''}</p>
         <div class="ps-related" hidden>
-          <h4>Similar offers this week</h4>
+          <h4>${esc(t('sheet.similar'))}</h4>
           <div class="ps-rel-strip"></div>
         </div>
       </div>`;
@@ -382,12 +385,12 @@ export function createSheet(host, ctx) {
         validTo: offer.validTo,
       });
       addBtn.classList.add('is-added');
-      addBtn.querySelector('span').textContent = 'Added ✓';
+      addBtn.querySelector('span').textContent = t('sheet.added');
       setTimeout(() => {
         if (!addBtn.isConnected) return;
         addBtn.classList.remove('is-added');
         const span = addBtn.querySelector('span');
-        if (span) span.textContent = 'Add again';
+        if (span) span.textContent = t('sheet.addAgain');
       }, 1300);
     });
 
@@ -453,7 +456,7 @@ export function createSheet(host, ctx) {
           ? `<span class="ps-h-badge is-good">−${fmt(Math.abs(delta))}</span>`
           : delta > 0.01
             ? `<span class="ps-h-badge">+${fmt(delta)}</span>`
-            : '<span class="ps-h-badge">same</span>';
+            : `<span class="ps-h-badge">${esc(t('sheet.samePrice'))}</span>`;
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'ps-cmp-row';
@@ -469,7 +472,7 @@ export function createSheet(host, ctx) {
     const more = document.createElement('button');
     more.type = 'button';
     more.className = 'ps-cmp-more';
-    more.textContent = 'Full comparison in Search — online + flyers ↗';
+    more.textContent = t('sheet.fullComparison');
     more.addEventListener('click', () => ctx.openSearch && ctx.openSearch(seed));
 
     if (rowEls.length) {
@@ -482,9 +485,9 @@ export function createSheet(host, ctx) {
         if (ins) {
           const line = document.createElement('div');
           line.className = 'ps-insight is-good';
-          line.innerHTML = `<span class="ps-insight-ic" aria-hidden="true">💸</span><span dir="auto">This product is cheaper at ${esc(
-            storeLabel(best.store),
-          )} — ${esc(fmtMoney(best.price))} this week.</span>`;
+          line.innerHTML = `<span class="ps-insight-ic" aria-hidden="true">💸</span><span dir="auto">${esc(
+            t('sheet.cheaperAt', { store: storeLabel(best.store), price: fmtMoney(best.price) }),
+          )}</span>`;
           ins.prepend(line);
           ins.hidden = false;
         }
@@ -518,17 +521,20 @@ export function createSheet(host, ctx) {
     const histBody = sheet.querySelector('.ps-history-body');
     if (hist && histBody && history && prices) {
       const trendGlyph = history.trend === 'down' ? '↘' : history.trend === 'up' ? '↗' : '→';
+      const trendWord = t(
+        history.trend === 'down' ? 'sheet.trendDown' : history.trend === 'up' ? 'sheet.trendUp' : 'sheet.trendSteady',
+      );
+      const weeksCount = history.weeks || prices.weeks || 0;
+      const pctStr = history.pct > 0 ? `+${history.pct}%` : `${history.pct}%`;
       const vs = history.atLowest
-        ? '<span class="ps-h-badge is-good">at the historical low</span>'
-        : `<span class="ps-h-badge">${history.pct > 0 ? `+${history.pct}%` : `${history.pct}%`} vs low</span>`;
+        ? `<span class="ps-h-badge is-good">${esc(t('sheet.atHistoricalLow'))}</span>`
+        : `<span class="ps-h-badge">${esc(t('sheet.vsLow', { pct: pctStr }))}</span>`;
       histBody.innerHTML = `
-        <div class="ps-h-row"><span>Lowest recorded</span><b>${esc(fmtMoney(history.lowest.price))}${
-          history.lowest.store ? ` <small>at ${esc(storeLabel(history.lowest.store))}</small>` : ''
+        <div class="ps-h-row"><span>${esc(t('sheet.lowestRecorded'))}</span><b>${esc(fmtMoney(history.lowest.price))}${
+          history.lowest.store ? ` <small>${esc(t('sheet.atStore', { store: storeLabel(history.lowest.store) }))}</small>` : ''
         }</b></div>
-        <div class="ps-h-row"><span>This offer</span><b>${esc(fmtMoney(offer.price))} ${vs}</b></div>
-        <div class="ps-h-row"><span>Recorded over</span><b>${history.weeks || prices.weeks || 0} week${
-          (history.weeks || prices.weeks) === 1 ? '' : 's'
-        } <small class="ps-h-trend">${trendGlyph} ${esc(history.trend || 'steady')}</small></b></div>`;
+        <div class="ps-h-row"><span>${esc(t('sheet.thisOffer'))}</span><b>${esc(fmtMoney(offer.price))} ${vs}</b></div>
+        <div class="ps-h-row"><span>${esc(t('sheet.recordedOver'))}</span><b>${esc(tn('sheet.weeks', weeksCount))} <small class="ps-h-trend">${trendGlyph} ${esc(trendWord)}</small></b></div>`;
       hist.hidden = false;
     }
   }

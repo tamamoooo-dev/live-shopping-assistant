@@ -3,18 +3,20 @@
 // reuse the page images the canvas already fetches (downscaled by CSS +
 // loading=lazy), so navigation costs no new backend assets.
 
+import { t, tn } from '../i18n.js';
+
 export function createNav(root, pages, { onJump }) {
   /* --- thumbnail strip -------------------------------------------------------- */
   const strip = document.createElement('div');
   strip.className = 'vv-thumbs';
   strip.setAttribute('role', 'tablist');
-  strip.setAttribute('aria-label', 'Pages');
+  strip.setAttribute('aria-label', t('viewer.navPages'));
   const thumbs = pages.map((p, i) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'vv-thumb';
     b.setAttribute('role', 'tab');
-    b.setAttribute('aria-label', `Page ${i + 1}`);
+    b.setAttribute('aria-label', t('viewer.navPage', { n: i + 1 }));
     const im = document.createElement('img');
     im.src = p.src;
     im.alt = '';
@@ -33,7 +35,7 @@ export function createNav(root, pages, { onJump }) {
   const indicator = document.createElement('button');
   indicator.type = 'button';
   indicator.className = 'vv-indicator';
-  indicator.setAttribute('aria-label', 'Open page overview');
+  indicator.setAttribute('aria-label', t('viewer.navOpenOverview'));
   indicator.setAttribute('aria-live', 'polite'); // announces "N / M" page turns
 
   /* --- overview grid ------------------------------------------------------------ */
@@ -43,15 +45,15 @@ export function createNav(root, pages, { onJump }) {
     grid = document.createElement('div');
     grid.className = 'vv-grid';
     grid.setAttribute('role', 'dialog');
-    grid.setAttribute('aria-label', 'All pages');
+    grid.setAttribute('aria-label', t('viewer.navAllPages'));
     const head = document.createElement('div');
     head.className = 'vv-grid-head';
     const title = document.createElement('span');
-    title.textContent = `${pages.length} pages`;
+    title.textContent = tn('viewer.navPageCount', pages.length);
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'vv-grid-close';
-    close.setAttribute('aria-label', 'Close overview');
+    close.setAttribute('aria-label', t('viewer.navCloseOverview'));
     close.textContent = '✕';
     close.addEventListener('click', closeGrid);
     head.append(title, close);
@@ -61,7 +63,7 @@ export function createNav(root, pages, { onJump }) {
       const c = document.createElement('button');
       c.type = 'button';
       c.className = 'vv-cell' + (i === current ? ' is-current' : '');
-      c.setAttribute('aria-label', `Go to page ${i + 1}`);
+      c.setAttribute('aria-label', t('viewer.navGoToPage', { n: i + 1 }));
       const im = document.createElement('img');
       im.src = p.src;
       im.alt = '';

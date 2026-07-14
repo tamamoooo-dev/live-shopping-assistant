@@ -7,6 +7,7 @@
 
 import { parseSize, sizeLabel, unitPrice } from '../match.js';
 import { cleanOfferName } from '../brochure.js';
+import { t, tn } from '../i18n.js';
 
 // The Price History query seed for an offer: its most name-like tokens
 // (sizes/numbers dropped), same recipe the similar-products strip uses.
@@ -87,32 +88,34 @@ export function buildInsights({ offer, prices, storeLabel = (s) => s }) {
       label: variant ? variant.label || '' : '',
     };
     if (history.atLowest) {
-      lines.push({ icon: '🏆', tone: 'good', text: 'This is the lowest recorded price.' });
+      lines.push({ icon: '🏆', tone: 'good', text: t('insights.lowestPrice') });
     } else if (pct >= 3) {
       const ago = weeksAgo(low.week);
       lines.push({
         icon: '📉',
         tone: 'info',
-        text:
-          `Historical low: ${fmtMoney(low.price)}${low.store ? ` at ${storeLabel(low.store)}` : ''}` +
-          (ago != null && ago > 0 ? `, ${ago} week${ago === 1 ? '' : 's'} ago` : '') +
-          ` — current is ${pct}% above.`,
+        text: t('insights.historicalLow', {
+          price: fmtMoney(low.price),
+          at: low.store ? t('insights.atStore', { store: storeLabel(low.store) }) : '',
+          ago: ago != null && ago > 0 ? tn('insights.weeksAgo', ago) : '',
+          pct,
+        }),
       });
     }
     if (trend === 'down' && !history.atLowest) {
-      lines.push({ icon: '↘', tone: 'good', text: 'This price has been trending down.' });
+      lines.push({ icon: '↘', tone: 'good', text: t('insights.trendingDown') });
     }
   }
 
   // Validity urgency.
   const left = daysUntil(offer.validTo);
-  if (left === 0) lines.push({ icon: '⏳', tone: 'warn', text: 'This offer ends today.' });
-  else if (left === 1) lines.push({ icon: '⏳', tone: 'warn', text: 'This offer ends tomorrow.' });
+  if (left === 0) lines.push({ icon: '⏳', tone: 'warn', text: t('insights.endsToday') });
+  else if (left === 1) lines.push({ icon: '⏳', tone: 'warn', text: t('insights.endsTomorrow') });
 
   // A big printed discount is worth calling out even without history.
   if (offer.oldPrice && offer.oldPrice > offer.price) {
     const off = Math.round(((offer.oldPrice - offer.price) / offer.oldPrice) * 100);
-    if (off >= 30) lines.push({ icon: '🔥', tone: 'good', text: `Big drop — ${off}% off the was-price.` });
+    if (off >= 30) lines.push({ icon: '🔥', tone: 'good', text: t('insights.bigDrop', { off }) });
   }
 
   return { lines: lines.slice(0, 3), history };
