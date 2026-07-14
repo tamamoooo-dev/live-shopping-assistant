@@ -16,6 +16,8 @@
 //   GET /prices?q=<query>                 -> { lowest, latest[], variants[], observations,
 //                                             weeks, firstSeen, trend } (derived, stage-gated)
 
+import { t } from './i18n.js';
+
 const ENGINE_BASE = 'https://brochure-engine.tamamoooo.workers.dev';
 
 // Every store the Brochure Engine covers, in display order for the Brochures
@@ -361,7 +363,7 @@ export async function createWatch(body) {
     if (!r.ok) return { error: j.error || `HTTP ${r.status}` };
     return { watch: j.watch };
   } catch {
-    return { error: 'The alerts service is unreachable right now.' };
+    return { error: t('watch.createError') };
   }
 }
 

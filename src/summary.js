@@ -18,6 +18,7 @@
 
 import { sizeLabel } from './match.js';
 import { unitPriceLabel } from './compare.js';
+import { t, tn } from './i18n.js';
 
 // --- rendering helpers ---------------------------------------------------------
 function money(v, c = 'SAR') {
@@ -36,15 +37,15 @@ function el(tag, cls, text) {
 }
 
 const CONF_LABEL = {
-  high: 'High confidence · same product compared',
-  medium: 'Medium confidence · compared by unit value',
-  low: 'Low confidence · different sizes/variants',
+  high: t('summary.conf.high'),
+  medium: t('summary.conf.medium'),
+  low: t('summary.conf.low'),
 };
 
 const KICKER = {
-  'best-buy': 'Best buy',
-  'best-value': 'Best buy · best value per unit',
-  cheapest: 'Cheapest option',
+  'best-buy': t('summary.kicker.bestBuy'),
+  'best-value': t('summary.kicker.bestValue'),
+  cheapest: t('summary.kicker.cheapest'),
 };
 
 function nameLink(l) {
@@ -70,12 +71,12 @@ function priceLine(l, { big = true, shared = null } = {}) {
     shared && shared.length
       ? [l.store.label, ...shared.map((s) => s.label)].join(' · ')
       : l.store.label;
-  line.appendChild(el('span', 'summary-at', `at ${stores}`));
+  line.appendChild(el('span', 'summary-at', t('summary.atStores', { stores })));
   const sz = sizeLabel(l.size);
   if (sz) line.appendChild(el('span', 'summary-size', sz));
   const up = unitPriceLabel(l);
   if (up) line.appendChild(el('span', 'summary-unit', up));
-  if (l.source === 'flyer') line.appendChild(el('span', 'summary-flyer-badge', "this week's flyer"));
+  if (l.source === 'flyer') line.appendChild(el('span', 'summary-flyer-badge', t('summary.flyerBadge')));
   return line;
 }
 
@@ -86,7 +87,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
 
   // Header: title + confidence chip (+ the watch action)
   const head = el('div', 'summary-head');
-  head.appendChild(el('span', 'summary-title', 'Shopping summary'));
+  head.appendChild(el('span', 'summary-title', t('summary.title')));
   const conf = el('span', `summary-conf conf-${s.confidence}`);
   conf.appendChild(el('span', 'conf-dot'));
   conf.appendChild(el('span', null, CONF_LABEL[s.confidence]));
@@ -94,8 +95,8 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   if (opts.onWatch) {
     const btn = el('button', 'summary-watch');
     btn.type = 'button';
-    btn.textContent = '🔔 Watch price';
-    btn.title = 'Get an alert when this drops to your target price';
+    btn.textContent = t('summary.watch');
+    btn.title = t('summary.watchTitle');
     btn.addEventListener('click', () => opts.onWatch(s));
     head.appendChild(btn);
   }
@@ -103,8 +104,8 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
 
   // Overview
   const ov = el('div', 'summary-overview');
-  const parts = [`${s.offers} offer${s.offers === 1 ? '' : 's'} across ${s.stores} store${s.stores === 1 ? '' : 's'}`];
-  if (s.flyerCount) parts.push(`${s.flyerCount} from this week's flyers`);
+  const parts = [tn('summary.overview', s.offers, { offers: s.offers, stores: tn('summary.overviewStores', s.stores) })];
+  if (s.flyerCount) parts.push(t('summary.fromFlyers', { count: s.flyerCount }));
   ov.appendChild(el('span', null, parts.join(' · ')));
   ov.appendChild(el('span', 'summary-range', `${money(s.range.min)} – ${money(s.range.max)}`));
   wrap.appendChild(ov);
@@ -112,18 +113,16 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   // Headline — the recommendation
   const h = s.headline.listing;
   const hero = el('div', 'summary-hero');
-  hero.appendChild(el('span', 'summary-kicker', KICKER[s.headline.kind] || 'Best buy'));
+  hero.appendChild(el('span', 'summary-kicker', KICKER[s.headline.kind] || t('summary.kicker.bestBuy')));
   hero.appendChild(priceLine(h, { shared: s.sharedWith }));
   if (s.sharedWith && s.sharedWith.length) {
     hero.appendChild(
-      el('div', 'summary-shared-note', `Best price shared by ${s.sharedWith.length + 1} stores`),
+      el('div', 'summary-shared-note', t('summary.sharedBy', { count: s.sharedWith.length + 1 })),
     );
   }
   hero.appendChild(nameLink(h));
   if (h.source === 'flyer') {
-    hero.appendChild(
-      el('div', 'summary-note', 'Flyer price — read automatically from the flyer image; tap the name to verify on the flyer.'),
-    );
+    hero.appendChild(el('div', 'summary-note', t('summary.flyerNote')));
   }
   // Same product elsewhere (only when the headline itself is the verified group)
   if (s.equivalent && h.it && s.equivalent.sorted.some((i) => i.it === h.it)) {
@@ -132,55 +131,25 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
       .slice(0, 3)
       .map((i) => `${i.store.label} ${money(i.it.price)}`)
       .join(' · ');
-    if (others) hero.appendChild(el('div', 'summary-others', `Same product elsewhere: ${others}`));
+    if (others) hero.appendChild(el('div', 'summary-others', t('summary.sameElsewhere', { others })));
   }
   if (s.confidence === 'low') {
-    hero.appendChild(el('div', 'summary-note', 'Results are different sizes or variants — compare carefully below.'));
+    hero.appendChild(el('div', 'summary-note', t('summary.lowConfNote')));
   }
   if (s.stageExcluded > 0) {
-    hero.appendChild(
-      el(
-        'div',
-        'summary-family-note',
-        `${s.stageExcluded} weaker match${s.stageExcluded === 1 ? '' : 'es'} excluded — the comparison only considers the results that match your search best.`,
-      ),
-    );
+    hero.appendChild(el('div', 'summary-family-note', tn('summary.excl.stage', s.stageExcluded)));
   }
   if (s.familyExcluded > 0) {
-    hero.appendChild(
-      el(
-        'div',
-        'summary-family-note',
-        `${s.familyExcluded} similar-name product${s.familyExcluded === 1 ? '' : 's'} from a different category excluded from this comparison.`,
-      ),
-    );
+    hero.appendChild(el('div', 'summary-family-note', tn('summary.excl.family', s.familyExcluded)));
   }
   if (s.typeExcluded > 0) {
-    hero.appendChild(
-      el(
-        'div',
-        'summary-family-note',
-        `${s.typeExcluded} product${s.typeExcluded === 1 ? '' : 's'} of a different type excluded from this comparison.`,
-      ),
-    );
+    hero.appendChild(el('div', 'summary-family-note', tn('summary.excl.type', s.typeExcluded)));
   }
   if (s.freshExcluded > 0) {
-    hero.appendChild(
-      el(
-        'div',
-        'summary-family-note',
-        `${s.freshExcluded} frozen/processed or flavoured variant${s.freshExcluded === 1 ? '' : 's'} excluded — prices compare the fresh product (add e.g. "مجمد" to your search to compare those instead).`,
-      ),
-    );
+    hero.appendChild(el('div', 'summary-family-note', tn('summary.excl.fresh', s.freshExcluded)));
   }
   if (s.identityExcluded > 0) {
-    hero.appendChild(
-      el(
-        'div',
-        'summary-family-note',
-        `${s.identityExcluded} cheaper look-alike${s.identityExcluded === 1 ? '' : 's'} from a different brand or variant excluded — prices are compared only for the product identified above.`,
-      ),
-    );
+    hero.appendChild(el('div', 'summary-family-note', tn('summary.excl.identity', s.identityExcluded)));
   }
   wrap.appendChild(hero);
 
@@ -188,7 +157,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   // best buy — never hidden, honestly framed.
   if (s.secondary) {
     const sec = el('div', 'summary-secondary');
-    sec.appendChild(el('span', 'summary-sec-tag', 'Lowest price · if you need less'));
+    sec.appendChild(el('span', 'summary-sec-tag', t('summary.secondaryTag')));
     sec.appendChild(priceLine(s.secondary.listing, { big: false }));
     const nm = el('span', 'summary-sec-name');
     nm.dir = 'auto';
@@ -202,7 +171,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   if (s.equivalent && !(h.it && s.equivalent.sorted.some((i) => i.it === h.it))) {
     const g = s.equivalent;
     const row = el('div', 'summary-value');
-    row.appendChild(el('span', 'summary-value-tag', `Same product · ${g.stores} stores`));
+    row.appendChild(el('span', 'summary-value-tag', t('summary.sameProductTag', { stores: g.stores })));
     const best = g.sorted[0];
     const nm = el('span', 'summary-value-name');
     nm.dir = 'auto';
@@ -216,32 +185,41 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
     const hh = s.history;
     const box = el('div', `summary-history verdict-${hh.verdict}`);
     const title = el('div', 'sh-title');
-    title.appendChild(el('span', 'sh-badge', 'Price history'));
+    title.appendChild(el('span', 'sh-badge', t('summary.history.badge')));
+    const delta = hh.delta != null ? hh.delta.toFixed(2) : '';
     const vlabel =
       hh.verdict === 'building'
-        ? 'History is still building — not enough weeks recorded yet'
+        ? t('summary.history.building')
         : hh.verdict === 'at-low'
-        ? "Today's best matches the lowest ever recorded"
+        ? t('summary.history.atLow')
         : hh.verdict === 'near-low'
-        ? `Close to the record low (+${hh.delta.toFixed(2)})`
-        : `Above the record low (+${hh.delta.toFixed(2)})`;
+        ? t('summary.history.nearLow', { delta })
+        : t('summary.history.aboveLow', { delta });
     title.appendChild(el('span', 'sh-verdict', vlabel));
     if (hh.trend && hh.verdict !== 'building') {
       title.appendChild(
-        el('span', `sh-trend trend-${hh.trend}`, hh.trend === 'down' ? '↓ trending down' : hh.trend === 'up' ? '↑ trending up' : '→ steady'),
+        el(
+          'span',
+          `sh-trend trend-${hh.trend}`,
+          hh.trend === 'down'
+            ? t('summary.history.trendDown')
+            : hh.trend === 'up'
+            ? t('summary.history.trendUp')
+            : t('summary.history.trendSteady'),
+        ),
       );
     }
     box.appendChild(title);
     const low = hh.low;
     const sizeTag = hh.variant && hh.variant.label ? ` (${hh.variant.label})` : '';
-    const lowLabel = hh.verdict === 'building' ? 'Lowest so far' : 'Lowest recorded';
+    const lowLabel = hh.verdict === 'building' ? t('summary.history.lowestSoFar') : t('summary.history.lowestRecorded');
     box.appendChild(
       el(
         'div',
         'sh-detail',
-        `${lowLabel}${sizeTag}: ${money(low.price)} at ${storeLabelFn(low.store)}${
+        `${lowLabel}${sizeTag}: ${money(low.price)} ${t('alerts.atStore', { store: storeLabelFn(low.store) })}${
           low.observedAt ? ` · ${fmtDate(low.observedAt)}` : low.edition ? ` · ${low.edition}` : ''
-        }${hh.verdict === 'building' && hh.firstSeen ? ` · recording since ${fmtDate(hh.firstSeen)}` : ''}`,
+        }${hh.verdict === 'building' && hh.firstSeen ? ` · ${t('summary.history.recordingSince', { date: fmtDate(hh.firstSeen) })}` : ''}`,
       ),
     );
     if (hh.latest && hh.latest.length) {
@@ -253,7 +231,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
         const d = el('span', 'sh-delta');
         if (p.price <= low.price + 1e-9) {
           d.classList.add('is-best');
-          d.textContent = hh.verdict === 'building' ? 'lowest so far' : 'record low';
+          d.textContent = hh.verdict === 'building' ? t('summary.history.lowestSoFarTag') : t('summary.history.recordLow');
         } else {
           d.classList.add('is-above');
           d.textContent = `+${(p.price - low.price).toFixed(2)}`;
@@ -266,7 +244,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
     // Other tracked sizes, each with its own independent lowest-ever record.
     if (hh.otherVariants && hh.otherVariants.length) {
       const ov = el('div', 'sh-variants');
-      ov.appendChild(el('span', 'sh-variants-label', 'Other sizes: '));
+      ov.appendChild(el('span', 'sh-variants-label', t('summary.history.otherSizes')));
       ov.appendChild(
         el(
           'span',

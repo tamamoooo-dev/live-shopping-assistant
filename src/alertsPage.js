@@ -20,6 +20,7 @@ import {
   markAlertsSeen,
   storeLabel,
 } from './brochure.js';
+import { t } from './i18n.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -40,7 +41,9 @@ function fmtDate(iso) {
         d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
-const SOURCE_LABEL = { online: 'online store', flyer: "this week's flyer" };
+// Alert source label — a translated label for known sources, else the raw
+// source string the engine sent (never a bare i18n key).
+const sourceLabel = (s) => (s === 'online' || s === 'flyer' ? t(`alerts.source.${s}`) : s);
 
 // --- the unseen-alerts badge (topbar + tab bar) --------------------------------
 export function setAlertsBadge(n) {
@@ -75,7 +78,7 @@ export function openWatchDialog(opts) {
   const form = el('form', 'wd-form');
   form.method = 'dialog';
 
-  form.appendChild(el('h2', 'wd-title', 'Watch this price'));
+  form.appendChild(el('h2', 'wd-title', t('watch.title')));
   const what = el('div', 'wd-what');
   what.dir = 'auto';
   what.textContent = opts.label || opts.query;
@@ -85,13 +88,13 @@ export function openWatchDialog(opts) {
       'p',
       'wd-hint',
       opts.kind === 'product'
-        ? `Checked daily at ${storeLabel(opts.provider) || opts.provider}. You'll get an alert when this exact product drops to your target.`
-        : "Checked daily across every online store and this week's flyers. You'll get an alert when a matching product reaches your target.",
+        ? t('watch.hintProduct', { store: storeLabel(opts.provider) || opts.provider })
+        : t('watch.hintGrocery'),
     ),
   );
 
   const row = el('label', 'wd-row');
-  row.appendChild(el('span', 'wd-label', 'Alert me at or below (SAR)'));
+  row.appendChild(el('span', 'wd-label', t('watch.rowLabel')));
   const input = document.createElement('input');
   input.type = 'number';
   input.step = '0.05';
@@ -102,7 +105,7 @@ export function openWatchDialog(opts) {
   row.appendChild(input);
   form.appendChild(row);
   if (opts.currentPrice != null) {
-    form.appendChild(el('p', 'wd-current', `Current best: ${money(opts.currentPrice)}`));
+    form.appendChild(el('p', 'wd-current', t('watch.currentBest', { price: money(opts.currentPrice) })));
   }
 
   const err = el('p', 'wd-error');
@@ -110,10 +113,10 @@ export function openWatchDialog(opts) {
   form.appendChild(err);
 
   const actions = el('div', 'wd-actions');
-  const cancel = el('button', 'wd-cancel', 'Cancel');
+  const cancel = el('button', 'wd-cancel', t('watch.cancel'));
   cancel.type = 'button';
   cancel.addEventListener('click', () => dlg.close());
-  const save = el('button', 'wd-save', 'Start watching');
+  const save = el('button', 'wd-save', t('watch.start'));
   save.type = 'submit';
   actions.append(cancel, save);
   form.appendChild(actions);
@@ -123,7 +126,7 @@ export function openWatchDialog(opts) {
     const targetPrice = Number(input.value);
     if (!Number.isFinite(targetPrice) || targetPrice <= 0) return;
     save.disabled = true;
-    save.textContent = 'Saving…';
+    save.textContent = t('watch.saving');
     const res = await createWatch({
       kind: opts.kind,
       query: opts.query,
@@ -139,7 +142,7 @@ export function openWatchDialog(opts) {
       err.textContent = res.error;
       err.hidden = false;
       save.disabled = false;
-      save.textContent = 'Start watching';
+      save.textContent = t('watch.start');
       return;
     }
     dlg.close();
@@ -208,7 +211,7 @@ function watchRow(w, onDelete) {
 
   // Secondary — the living status. Friendly and active, never technical. The
   // colour cue lives on the title above; this line stays neutral.
-  const status = el('div', 'watch-status', hasDeal ? '✓ Deal found!' : '● Still watching…');
+  const status = el('div', 'watch-status', hasDeal ? t('alerts.dealFound') : t('alerts.stillWatching'));
   main.appendChild(status);
 
   // Current best price — the number the user actually cares about. Shown for
@@ -218,11 +221,11 @@ function watchRow(w, onDelete) {
     const store = storeLabel(w.lastStore) || w.lastStore || '';
     price.textContent =
       money(w.lastPrice) +
-      (store ? ` at ${store}` : '') +
-      (w.lastSource === 'flyer' ? ' (flyer)' : '');
+      (store ? ` ${t('alerts.atStore', { store })}` : '') +
+      (w.lastSource === 'flyer' ? t('alerts.flyerSuffix') : '');
     if (hasDeal) price.classList.add('is-deal');
   } else {
-    price.textContent = 'Checking every store daily…';
+    price.textContent = t('alerts.checkingDaily');
     price.classList.add('is-pending');
   }
   main.appendChild(price);
@@ -230,10 +233,10 @@ function watchRow(w, onDelete) {
   // Tertiary — quiet supporting details.
   const scope =
     w.kind === 'product'
-      ? `${storeLabel(w.provider) || w.provider} · this product`
-      : 'All stores + flyers';
-  const bits = [scope, `target ${money(w.targetPrice)}`];
-  bits.push(w.checkedAt ? `checked ${fmtDate(w.checkedAt)}` : 'first check tonight');
+      ? t('alerts.scopeProduct', { store: storeLabel(w.provider) || w.provider })
+      : t('alerts.scopeAll');
+  const bits = [scope, t('alerts.target', { price: money(w.targetPrice) })];
+  bits.push(w.checkedAt ? t('alerts.checkedAt', { date: fmtDate(w.checkedAt) }) : t('alerts.firstCheck'));
   const meta = el('div', 'watch-meta', bits.join(' · '));
   meta.dir = 'auto';
   main.appendChild(meta);
@@ -242,8 +245,8 @@ function watchRow(w, onDelete) {
 
   const del = el('button', 'watch-delete', '✕');
   del.type = 'button';
-  del.title = 'Stop watching';
-  del.setAttribute('aria-label', `Stop watching ${w.label || w.query}`);
+  del.title = t('alerts.stopWatching');
+  del.setAttribute('aria-label', t('alerts.stopWatchingItem', { label: w.label || w.query }));
   del.addEventListener('click', () => onDelete(w, row));
   row.appendChild(del);
 
@@ -258,26 +261,29 @@ function alertRow(a, watchById) {
   const main = el('div', 'alert-main');
   const title = el('div', 'alert-title');
   title.dir = 'auto';
-  title.textContent = `${w ? w.label || w.query : a.name || 'Watched product'} hit ${money(a.price, a.currency)}`;
+  title.textContent = t('alerts.hit', {
+    label: w ? w.label || w.query : a.name || t('alerts.watchedProduct'),
+    price: money(a.price, a.currency),
+  });
   main.appendChild(title);
   const detail = el('div', 'alert-detail');
   detail.dir = 'auto';
   const bits = [];
   if (a.name) bits.push(a.name);
-  bits.push(`at ${storeLabel(a.store) || a.store || '—'}`);
-  bits.push(`target was ${money(a.targetPrice, a.currency)}`);
-  if (a.source) bits.push(SOURCE_LABEL[a.source] || a.source);
+  bits.push(t('alerts.atStore', { store: storeLabel(a.store) || a.store || '—' }));
+  bits.push(t('alerts.targetWas', { price: money(a.targetPrice, a.currency) }));
+  if (a.source) bits.push(sourceLabel(a.source));
   detail.textContent = bits.join(' · ');
   main.appendChild(detail);
   if (a.source === 'flyer') {
-    main.appendChild(el('div', 'alert-note', 'Flyer price — verify on the flyer before you go.'));
+    main.appendChild(el('div', 'alert-note', t('alerts.flyerVerify')));
   }
   row.appendChild(main);
 
   const side = el('div', 'alert-side');
   side.appendChild(el('span', 'alert-when', fmtDate(a.observedAt)));
   if (a.link) {
-    const go = el('a', 'alert-link', 'View ↗');
+    const go = el('a', 'alert-link', t('alerts.view'));
     go.href = a.link;
     go.target = '_blank';
     go.rel = 'noopener';
@@ -293,13 +299,13 @@ export async function initAlertsPage(force = false) {
   const root = document.getElementById('alerts-root');
   if (!root) return;
   root.innerHTML = '';
-  root.appendChild(el('p', 'alerts-loading', 'Loading your watches…'));
+  root.appendChild(el('p', 'alerts-loading', t('alerts.loading')));
 
   const [watchData, alertData] = await Promise.all([listWatches(), listAlerts(50)]);
   root.innerHTML = '';
 
   if (!watchData) {
-    root.appendChild(el('p', 'alerts-empty', 'The alerts service is unreachable right now — try again in a minute.'));
+    root.appendChild(el('p', 'alerts-empty', t('alerts.unreachable')));
     rendered = false; // retry on next visit
     return;
   }
@@ -308,14 +314,14 @@ export async function initAlertsPage(force = false) {
 
   // Watches
   const wHead = el('div', 'alerts-section-head');
-  wHead.appendChild(el('h2', null, 'Watched prices'));
-  wHead.appendChild(el('span', 'alerts-count', `${watchData.watches.length} / ${watchData.max}`));
+  wHead.appendChild(el('h2', null, t('alerts.watchedTitle')));
+  wHead.appendChild(el('span', 'alerts-count', t('alerts.watchCount', { count: watchData.watches.length, max: watchData.max })));
   root.appendChild(wHead);
   if (!watchData.watches.length) {
     const empty = el('div', 'alerts-empty');
     empty.append(
-      el('p', null, 'Nothing watched yet.'),
-      el('p', 'alerts-empty-hint', 'Search for a product, then use “🔔 Watch price” in the summary — or the bell on any result — to set a target price. The engine checks every store and flyer daily.'),
+      el('p', null, t('alerts.noneWatched')),
+      el('p', 'alerts-empty-hint', t('alerts.noneWatchedHint')),
     );
     root.appendChild(empty);
   } else {
@@ -335,10 +341,10 @@ export async function initAlertsPage(force = false) {
 
   // Alerts
   const aHead = el('div', 'alerts-section-head');
-  aHead.appendChild(el('h2', null, 'Alerts'));
+  aHead.appendChild(el('h2', null, t('alerts.alertsTitle')));
   root.appendChild(aHead);
   if (!alertData || !alertData.alerts.length) {
-    root.appendChild(el('p', 'alerts-empty', 'No alerts yet — you’ll see one here (and on the badge) the moment a watched price is reached.'));
+    root.appendChild(el('p', 'alerts-empty', t('alerts.noAlerts')));
   } else {
     const list = el('div', 'alert-list');
     for (const a of alertData.alerts) list.appendChild(alertRow(a, watchById));

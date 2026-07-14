@@ -29,6 +29,7 @@ import {
   cleanOfferName,
 } from './brochure.js';
 import { addToCart, inCart } from './cart.js';
+import { t } from './i18n.js';
 
 let viewerOpen = false;
 
@@ -113,7 +114,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   overlay.className = 'bv-overlay';
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-label', `${storeName} brochure`);
+  overlay.setAttribute('aria-label', t('viewer.dialogLabel', { store: storeName }));
   overlay.innerHTML = `
     <div class="bv-panel">
       <header class="bv-head">
@@ -121,18 +122,18 @@ export function openBrochureViewer(b, storeName, opts = {}) {
           <span class="bv-store"></span>
           <span class="bv-date"></span>
         </div>
-        <button type="button" class="bv-close" aria-label="Close brochure">
+        <button type="button" class="bv-close" aria-label="${t('viewer.close')}">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </header>
-      <div class="bv-stage" tabindex="0"><div class="bv-msg"><span class="spinner" aria-hidden="true"></span> Loading brochure…</div></div>
+      <div class="bv-stage" tabindex="0"><div class="bv-msg"><span class="spinner" aria-hidden="true"></span> ${t('viewer.loading')}</div></div>
       <footer class="bv-controls">
-        <button type="button" class="bv-prev" aria-label="Previous page">‹ Prev</button>
+        <button type="button" class="bv-prev" aria-label="${t('viewer.prevAria')}">${t('viewer.prev')}</button>
         <span class="bv-counter" aria-live="polite">—</span>
-        <button type="button" class="bv-next" aria-label="Next page">Next ›</button>
+        <button type="button" class="bv-next" aria-label="${t('viewer.nextAria')}">${t('viewer.next')}</button>
         <span class="bv-zoom">
-          <button type="button" class="bv-zoom-out" aria-label="Zoom out">−</button>
-          <button type="button" class="bv-zoom-in" aria-label="Zoom in">+</button>
+          <button type="button" class="bv-zoom-out" aria-label="${t('viewer.zoomOut')}">−</button>
+          <button type="button" class="bv-zoom-in" aria-label="${t('viewer.zoomIn')}">+</button>
         </span>
       </footer>
     </div>`;
@@ -214,12 +215,12 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     zoomInBtn.parentElement.hidden = true;
     if (!url) {
       counter.textContent = '';
-      stage.innerHTML = '<div class="bv-msg">Sorry — this brochure could not be loaded.</div>';
+      stage.innerHTML = `<div class="bv-msg">${t('viewer.loadFailed')}</div>`;
       return;
     }
     const frame = document.createElement('iframe');
     frame.className = 'bv-pdf';
-    frame.title = `${storeName} brochure PDF`;
+    frame.title = t('viewer.pdfTitle', { store: storeName });
     frame.src = url;
     stage.replaceChildren(frame);
     const open = document.createElement('a');
@@ -227,7 +228,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     open.href = url;
     open.target = '_blank';
     open.rel = 'noopener';
-    open.textContent = 'Open PDF ↗';
+    open.textContent = t('viewer.openPdf');
     counter.replaceWith(open);
     return;
   }
@@ -242,7 +243,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   wrap.className = 'bv-imgwrap';
   const img = document.createElement('img');
   img.className = 'bv-img';
-  img.alt = `${storeName} brochure page`;
+  img.alt = t('viewer.pageAlt', { store: storeName });
   const spotLayer = document.createElement('div');
   spotLayer.className = 'bv-spots';
   wrap.append(img, spotLayer);
@@ -284,8 +285,8 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       btn.style.top = `${s.y * 100}%`;
       btn.style.width = `${s.w * 100}%`;
       btn.style.height = `${s.h * 100}%`;
-      const label = cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || 'flyer product';
-      btn.setAttribute('aria-label', `${label} — ${offer.price} ${offer.currency || 'SAR'}`);
+      const label = cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || t('viewer.flyerProduct');
+      btn.setAttribute('aria-label', t('viewer.hotspotAria', { label, price: `${offer.price} ${offer.currency || 'SAR'}` }));
       // The spot + the stored page image travel with the offer so the sheet
       // and the cart can crop the product SELF-HOSTED (see cropFromPage).
       btn.addEventListener('click', () => openProductSheet({ offer, spot: s, pageSrc: pages[idx] }));
@@ -297,7 +298,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       overlay.dataset.spotsHinted = '1';
       spotLayer.classList.add('bv-spots-flash');
       setTimeout(() => spotLayer.classList.remove('bv-spots-flash'), 1600);
-      showHint(`${spots.length} products on this page — tap one for price & cart`);
+      showHint(t('viewer.spotsHint', { count: spots.length }));
     }
   };
 
@@ -353,7 +354,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       sheet = document.createElement('div');
       sheet.className = 'ps-sheet';
       sheet.setAttribute('role', 'dialog');
-      sheet.setAttribute('aria-label', 'Product details');
+      sheet.setAttribute('aria-label', t('sheet.dialogLabel'));
       overlay.appendChild(sheet);
       wireSheetDrag(sheet);
       sheetCloser = closeSheet;
@@ -422,17 +423,19 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     // Honest validity: some in-flyer promos end before the flyer does.
     const todayYMD = new Date().toISOString().slice(0, 10);
     const ended = !!(offer.validTo && offer.validTo < todayYMD);
-    const until = offer.validTo ? `${ended ? 'ended' : 'until'} ${fmtDate(offer.validTo)}` : '';
+    const until = offer.validTo
+      ? t(ended ? 'sheet.ended' : 'sheet.until', { date: fmtDate(offer.validTo) })
+      : '';
     const name = cleanOfferName(offer.name);
     const nameAr = cleanOfferName(offer.nameAr);
-    const title = name || nameAr || 'Flyer product';
+    const title = name || nameAr || t('sheet.product');
     sheet.innerHTML = `
       <div class="ps-grab" aria-hidden="true"></div>
       <header class="ps-head">
-        <button type="button" class="ps-back" ${sheetStack.length > 1 ? '' : 'hidden'} aria-label="Back to previous product">‹</button>
+        <button type="button" class="ps-back" ${sheetStack.length > 1 ? '' : 'hidden'} aria-label="${esc(t('sheet.back'))}">‹</button>
         <span class="ps-store" style="--chip:${storeColor(offer.store)}">${esc(storeLabel(offer.store))}</span>
         ${until ? `<span class="ps-until${ended ? ' is-ended' : ''}">${esc(until)}</span>` : ''}
-        <button type="button" class="ps-close" aria-label="Back to brochure">✕</button>
+        <button type="button" class="ps-close" aria-label="${esc(t('sheet.close'))}">✕</button>
       </header>
       <div class="ps-body">
         <div class="ps-imgbox">${
@@ -449,12 +452,12 @@ export function openBrochureViewer(b, storeName, opts = {}) {
         </div>
         <button type="button" class="ps-add">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.2l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h7.9a1.6 1.6 0 0 0 1.6-1.3L20.5 8H6"/></svg>
-          <span>${inCart(offer.id) ? 'Add again' : 'Add to Cart'}</span>
+          <span>${inCart(offer.id) ? esc(t('sheet.addAgain')) : esc(t('sheet.addToCart'))}</span>
         </button>
-        <p class="ps-note">Flyer price, machine-extracted — the printed flyer prevails.
-          ${offer.sourceUrl ? `<a href="${esc(offer.sourceUrl)}" target="_blank" rel="noopener">Verify ↗</a>` : ''}</p>
+        <p class="ps-note">${esc(t('sheet.note'))}
+          ${offer.sourceUrl ? `<a href="${esc(offer.sourceUrl)}" target="_blank" rel="noopener">${esc(t('sheet.verify'))}</a>` : ''}</p>
         <div class="ps-related" hidden>
-          <h4>Similar offers this week</h4>
+          <h4>${esc(t('sheet.similar'))}</h4>
           <div class="ps-rel-strip"></div>
         </div>
       </div>`;
@@ -511,12 +514,12 @@ export function openBrochureViewer(b, storeName, opts = {}) {
         validTo: offer.validTo,
       });
       addBtn.classList.add('is-added');
-      addBtn.querySelector('span').textContent = 'Added to cart ✓';
+      addBtn.querySelector('span').textContent = t('sheet.added');
       setTimeout(() => {
         if (!addBtn.isConnected) return;
         addBtn.classList.remove('is-added');
         const span = addBtn.querySelector('span');
-        if (span) span.textContent = 'Add again';
+        if (span) span.textContent = t('sheet.addAgain');
       }, 1300);
     });
 
@@ -667,7 +670,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   loadBrochurePages(b).then((data) => {
     if (!viewerOpen) return; // closed while loading
     if (!data || !data.pages.length) {
-      stage.innerHTML = '<div class="bv-msg">Sorry — this brochure could not be loaded.</div>';
+      stage.innerHTML = `<div class="bv-msg">${t('viewer.loadFailed')}</div>`;
       return;
     }
     pages = data.pages;
