@@ -3652,3 +3652,26 @@ languages (market floor, dept listing, paging, brand page, A–Z index).
 **Not deployed in this session** (permission-gated): D1 migration
 (`migrate-2026-07-browse.sql`), `wrangler deploy`, backfill, pushes — exact
 sequence in HANDOFF §11 TODO #1.
+
+**Production rollout (2026-07-16, user-approved).** In order: ① D1 migration
+(`migrate-2026-07-browse.sql`) — verified 2 new columns + 3 indexes, 36,043
+offers rows intact; ② `wrangler deploy` — bindings + both crons intact;
+③ `GET /browse` live (200 in ~0.6s, all 12 departments folded through the
+canonical mapping; brands/history rails empty pre-backfill, exactly as
+expected); ④ `INGEST_SECRET` rotated + per-store backfill over all 18 stores
+(7 transiently failed with HTML error pages on the first back-to-back pass,
+all succeeded on a paced retry — idempotent by design) → 34,200/36,043 rows
+carry an identity, 8,756 a brand; ⑤ end-to-end verification — 93 brands live
+(Sadia 102 offers/9 stores, Almarai 72/10, …), all five rails populated,
+Exceptional Deals leading with verifiable badges (e.g. −52% + lowest-in-4-
+weeks), every `/browse/offers` filter combination spot-checked (aisle+sort,
+brand, dept+store, rail, the derived `other` aisle, explicit 400s on bad
+ids), and the deployed GitHub Pages frontend driven in-browser: market
+floor → Dairy & Eggs (real aisle counts) → card tap → AlJazera flyer opened
+in the viewer (48 pages) with the product sheet — zero console errors.
+
+**Rollout lesson → fix shipped same day:** the backfill reshaped the summary
+but `/browse` stayed edge-cached for 1h with no invalidation. The guarded
+write paths (ingest, backfill) now purge the cached summary (per-colo,
+best-effort); browser-side `max-age` staleness (≤1h) remains by design.
+Sharp-edge notes added to HANDOFF §10.

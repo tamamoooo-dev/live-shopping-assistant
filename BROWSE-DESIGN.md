@@ -1,10 +1,15 @@
 # Browse — Design Document
 
-> **Status:** Rev 2 (2026-07-15) — approved and **IMPLEMENTED** (engine M1 +
-> frontend M2 + brands M3; HISTORY §31). Production rollout steps are HANDOFF
-> §11 TODO #1. Phase 4 (mining, shelves, For-you/In-season, collections) is
-> future work. Search is frozen (HANDOFF rule 9) — Browse is an independent
-> sibling section and changes nothing about Search, ranking, or matching.
+> **Status:** Rev 2 — approved, implemented, and **LIVE IN PRODUCTION**
+> (2026-07-16; verification record in HISTORY §31). This document is now the
+> architecture reference for the shipped system. Phase 4 (§11 — brand
+> mining, shelf refinements, For-you/In-season rails, collections, per-deal
+> "why exceptional" explainer) is the open roadmap. Standing principles for
+> all future Browse work: canonical knowledge stays provider-independent
+> (Provider → Mapping → Canonical → Browse); new knowledge modules
+> (packaging, attributes, brand relationships) follow the §5 extension shape;
+> reuse over duplication, always. Search is frozen (HANDOFF rule 9) — Browse
+> changes nothing about Search, ranking, or matching.
 >
 > **Rev 2 changes (review):** (1) provider-independent canonical taxonomy —
 > Provider → Mapping → Canonical Knowledge → Browse; D4D is one mapped source,

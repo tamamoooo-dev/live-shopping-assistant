@@ -6,15 +6,13 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-15 · Latest change: the **Browse pillar**
-> (HISTORY §31, BROWSE-DESIGN.md) — engine canonical taxonomy + `/browse`
-> API + Exceptional Deals + brand knowledge, frontend `#/browse` market
-> floor. **Code complete, tests green, NOT yet in production** — the D1
-> migration + engine deploy + backfill + pushes were permission-gated this
-> session; the exact ship sequence is TODO #1 in §11. (The 2026-07-05
-> snapshot-at-ingest redesign, HISTORY §30, deployed earlier; viewer v2 /
-> i18n / brand-knowledge milestones of 2026-07-10..15 are in git history,
-> HISTORY sections pending.)
+> **Last updated:** 2026-07-16 · Latest change: the **Browse pillar is LIVE
+> in production** (HISTORY §31, BROWSE-DESIGN.md Rev 2) — D1 migration
+> applied, engine deployed, back catalog backfilled (34.2k identities /
+> 8.8k brands stamped), API + frontend verified end-to-end including the
+> card → viewer → product-sheet tap-through. Everything is committed AND
+> pushed. (Viewer v2 / i18n / brand-knowledge milestones of 2026-07-10..15
+> are in git history; their HISTORY sections are still pending.)
 
 ---
 
@@ -412,21 +410,22 @@ external product images — verify via `preview_eval` DOM inspection; preview
   won't re-find their product; re-create them.
 - A first request to a **freshly created** workers.dev subdomain can return
   `error code: 1042` for a few seconds — retry, don't debug.
+- **/browse is cached twice**: 1h at the edge (Cache API; the guarded write
+  paths purge it per-colo after ingest/backfill) AND up to 1h in the BROWSER
+  (`max-age=3600`). Right after an ingest, a user who visited recently can
+  see the previous floor for up to ~1h — accepted for a 3×/week substrate;
+  don't "fix" by shortening the TTL without re-checking D1 read volume.
+- **Per-store /prices/backfill calls can transiently fail** with an HTML
+  error page when hammered back-to-back (seen 2026-07-16: 7 of 18 stores);
+  idempotent — re-run the failed stores with a few seconds' pacing.
 
 ## 11. Open TODOs (priority order)
 
-1. **Browse pillar — SHIP IT (code complete 2026-07-15, NOT yet in
-   production).** Design Rev 2 + implementation (engine M1 + frontend M2 +
-   brands M3) are committed; all tests green; UI browser-verified EN+AR
-   against fixtures. Production rollout (in order, from `brochure-engine/`):
-   1) `npx wrangler d1 execute brochure-engine --remote
-   --file=./migrate-2026-07-browse.sql` (adds offers.identity + brand_slug
-   + 3 indexes); 2) `npx wrangler deploy`; 3) rotate `INGEST_SECRET`, then
-   `POST /prices/backfill` (stamps identity+brand on the back catalog);
-   4) `git push` both repos. Until then the Browse tab shows its calm
-   "unavailable" state. Remaining Browse roadmap (BROWSE-DESIGN.md §11
-   Phase 4): brand mining (observed tier), shelf refinements, For-you /
-   In-season rails, collections, cart intelligence.
+1. **Browse Phase 4** (BROWSE-DESIGN.md §11; none is urgent): brand mining
+   (observed tier), shelf (family) refinements, For-you / In-season rails,
+   collections, cart intelligence, per-deal "why exceptional" explainer
+   sheet (badges already carry the signals; a tap-through explanation view
+   would deepen trust — user request 2026-07-16).
 2. **Optional:** enable phone push — `npx wrangler secret put NTFY_TOPIC`.
 2. **Amazon durability:** configure PA-API secrets, or keep accepting
    best-effort.
