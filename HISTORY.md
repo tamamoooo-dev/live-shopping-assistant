@@ -3594,3 +3594,61 @@ markup canary) deferred to a future task.
 ---
 
 _End of handoff._
+
+## §31 · The Browse pillar: walk this week's market (2026-07-15)
+
+**What.** Browse (`#/browse`) — the product-discovery experience beside
+Search: the whole ~8k-live-offer substrate reorganized as a navigable market
+(BROWSE-DESIGN.md, Rev 2). One session took it design → review refinements →
+engine (M1) → frontend (M2) → brands (M3).
+
+**Design (Rev 2 refinements, per review).** Provider independence became the
+architecture's spine: Provider category → per-source mapping → CANONICAL
+Super Search knowledge → Browse; D4D is one mapped source, never the
+foundation. Knowledge stays deliberately small: a canonical taxonomy (11
+departments, ~70 bilingual aisles), per-provider category mappings (95 D4D
+slugs; unmapped ⇒ visible `other`, read-time so fixes apply retroactively),
+a canonical brand KB (~95 entries + OCR repair, ported from the viewer's
+brandKnowledge/brandNormalize split), and the existing family lexicons as
+future shelves. **Exceptional Deals** is the flagship: a transparent score
+(lowest-ever +50 · drop ≥40% +30 / ≥25% +15 · rarely-promoted +20 ·
+return-to-low +15 · multi-buy +10; qualify ≥50) where history-backed signals
+outweigh anything the flyer merely claims — an advertised discount alone can
+NEVER qualify. Honest signals only; "Popular" does not exist (nothing
+measures popularity).
+
+**Engine (M1+M3).** `src/browse/{taxonomy,mapping,brands,deals,api}.js` +
+`storage/browseStore.js` (read-only view over offers + price history — no
+new tables). The offers ingest stamps two derived columns: `identity` (the
+SAME deriveIdentity the price-history harvest uses — one indexed join from
+an offer to its history) and `brand_slug` (detectBrand; failure mode "no
+brand", never "wrong brand"); the weekly upsert refreshes both, so knowledge
+additions reach every current offer on the next ingest with no backfill.
+`/prices/backfill` extended to heal pre-column rows once. New reads:
+`GET /browse` (market floor: departments, brands, rails; edge-cached 1h) and
+`GET /browse/offers` (universal listing: dept/aisle/brand/rail/store filters,
+4 sorts, paging) — canonical ids only, D1-only, zero new subrequests or KV
+writes (§8 budgets untouched). Cross-flyer duplicate deals collapse via the
+identity key.
+
+**Frontend (M2+M3).** New tab + `browsePage.js`: market floor (Exceptional
+Deals first; department tiles and brand pills as EQUAL peers; drops /
+lowest-ever / ending-soon / new-this-week rails), dept/aisle/brand/brands/
+rail listings with aisle chips, sort chips, store filter, paging. Pure
+reuse: marketplace's card primitives were EXPORTED (el/cardImage/priceRow/
+storeBadge) and its flyer tap-through extracted as `openFlyerOffer` — Browse
+cards are the same card, and a tap runs the same viewer deep-link
+(land → fly to hotspot → pulse → product sheet). Engine reads live only in
+`brochure.js` (rule 7), best-effort: engine down ⇒ calm empty state. Full
+EN/AR: canonical nodes carry their own bilingual names; UI strings in i18n.
+
+**Verified.** 41 engine browse tests (taxonomy integrity, mapping coverage
+of every production slug, scoring table, brand detection incl. OCR repairs
+and ambiguous-word guards, API docs over a stub store, route statuses) +
+all existing suites (163 match / 73 compare / 100 viewer / reingest /
+hotspots) green; UI exercised in the browser against fixtures in both
+languages (market floor, dept listing, paging, brand page, A–Z index).
+
+**Not deployed in this session** (permission-gated): D1 migration
+(`migrate-2026-07-browse.sql`), `wrangler deploy`, backfill, pushes — exact
+sequence in HANDOFF §11 TODO #1.

@@ -2252,3 +2252,135 @@ a.watch-name:hover { text-decoration: underline; }
   .vv-indicator { bottom: calc(12px + env(safe-area-inset-bottom)); }
   .ps-sheet-v2 { height: min(94dvh, 760px); }
 }
+
+/* ================================================================
+   Browse — the market floor (BROWSE-DESIGN.md §8)
+   Composes the existing card/chip/grid idioms; only layout is new.
+   ================================================================ */
+.browse-root { display: flex; flex-direction: column; gap: 4px; }
+
+.browse-hero { margin: 6px 2px 10px; }
+.browse-hero h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.4px; }
+.browse-lead { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+
+.browse-loading {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--muted); font-size: 14px; padding: 22px 2px;
+}
+.browse-empty { color: var(--muted); font-size: 14px; padding: 18px 2px; }
+
+/* --- rails (horizontal scrollers, finite, with See all) --- */
+.browse-rail { margin: 14px 0 4px; }
+.browse-rail-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin: 0 2px 8px;
+}
+.browse-rail-head h2 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.2px; }
+.browse-seeall { font-size: 13px; font-weight: 700; color: var(--brand); text-decoration: none; }
+.browse-seeall:hover { text-decoration: underline; }
+.browse-rail-scroll {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 150px;
+  gap: 10px; overflow-x: auto; padding: 2px 2px 10px;
+  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+}
+.browse-rail-scroll > .card { scroll-snap-align: start; }
+@media (min-width: 640px) { .browse-rail-scroll { grid-auto-columns: 180px; } }
+
+/* --- department tiles --- */
+.browse-depts { margin: 14px 0 4px; }
+.browse-depts h2 { margin: 0 2px 8px; font-size: 17px; font-weight: 800; letter-spacing: -0.2px; }
+.browse-dept-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+}
+.browse-dept-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 8px 12px; text-align: center; text-decoration: none; color: inherit;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s;
+}
+.browse-dept-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--brand-ring); }
+.browse-dept-icon { font-size: 26px; line-height: 1; }
+.browse-dept-name { font-size: 12.5px; font-weight: 700; line-height: 1.25; }
+.browse-dept-count {
+  font-size: 11px; font-weight: 700; color: var(--brand);
+  background: var(--brand-soft); border-radius: 999px; padding: 1px 8px;
+}
+
+/* --- badges on Browse cards --- */
+.browse-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.bb {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.1px;
+  border-radius: 999px; padding: 2px 7px; white-space: nowrap;
+}
+.bb-low { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+.bb-drop { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
+.bb-rare { background: rgba(124, 58, 237, 0.1); color: #7c3aed; }
+.bb-multi { background: rgba(217, 119, 6, 0.12); color: #b45309; }
+.bb-ends { background: var(--brand-soft); color: var(--brand); }
+@media (prefers-color-scheme: dark) {
+  .bb-low { background: rgba(74, 222, 128, 0.14); color: #4ade80; }
+  .bb-drop { background: rgba(248, 113, 113, 0.14); color: #f87171; }
+  .bb-rare { background: rgba(196, 181, 253, 0.14); color: #c4b5fd; }
+  .bb-multi { background: rgba(251, 191, 36, 0.14); color: #fbbf24; }
+}
+
+/* --- listing pages --- */
+.browse-list-head { margin: 6px 2px 10px; }
+.browse-back {
+  display: inline-block; font-size: 13px; font-weight: 700;
+  color: var(--brand); text-decoration: none; margin-bottom: 4px;
+}
+.browse-back:hover { text-decoration: underline; }
+.browse-list-head h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+
+.browse-chiprow {
+  display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px;
+  -webkit-overflow-scrolling: touch;
+}
+.browse-chiprow .quick-chip { flex: 0 0 auto; text-decoration: none; }
+.quick-chip.is-active {
+  background: var(--brand-soft); color: var(--brand);
+  border-color: var(--brand-ring); font-weight: 800;
+}
+
+.browse-controls {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 2px 12px;
+}
+.browse-store-select {
+  margin-inline-start: auto; font: inherit; font-size: 13px; font-weight: 600;
+  color: inherit; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 10px;
+}
+
+.browse-grid { margin-bottom: 12px; }
+.browse-card { cursor: pointer; text-align: start; font: inherit; padding: 0; }
+
+.browse-more {
+  display: block; margin: 2px auto 18px; font: inherit; font-size: 14px;
+  font-weight: 700; color: var(--brand); background: var(--brand-soft);
+  border: 1px solid var(--brand-ring); border-radius: 999px; padding: 9px 22px;
+  cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.browse-more:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+
+/* --- brand pills (the equal-peer brand entry point) --- */
+.browse-brand-row {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 2px;
+}
+.browse-brand-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; text-decoration: none; color: inherit;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; box-shadow: var(--shadow-sm);
+  font-size: 13px; font-weight: 700;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s;
+}
+.browse-brand-pill:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-color: var(--brand-ring); }
+.browse-brand-count {
+  font-size: 11px; font-weight: 700; color: var(--brand);
+  background: var(--brand-soft); border-radius: 999px; padding: 1px 7px;
+}
+.browse-brand-grid { padding: 2px 2px 18px; }

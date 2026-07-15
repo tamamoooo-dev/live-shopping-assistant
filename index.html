@@ -37,6 +37,10 @@
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
           <span data-i18n="nav.search">Search</span>
         </a>
+        <a class="nav-link" href="#/browse" data-nav="browse">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2l-1.7 4-4 1.7 1.7-4z"/></svg>
+          <span data-i18n="nav.browse">Browse</span>
+        </a>
         <a class="nav-link" href="#/brochures" data-nav="brochures">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5A2.5 2.5 0 0 1 17.5 21H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7.5h8M8 11h8M8 14.5h5"/></svg>
           <span data-i18n="nav.brochures">Brochures</span>
@@ -101,6 +105,13 @@
       </div>
     </section>
 
+    <!-- ============ Browse (the market floor) ============ -->
+    <section id="page-browse" class="page" aria-label="Browse the market" hidden>
+      <div id="browse-root" class="browse-root" aria-live="polite">
+        <!-- rendered by browsePage.js -->
+      </div>
+    </section>
+
     <!-- ============ Brochures ============ -->
     <section id="page-brochures" class="page" aria-label="Weekly brochures" hidden>
       <header class="page-head">
@@ -140,6 +151,10 @@
     <a class="tab" href="#/search" data-nav="search">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
       <span data-i18n="nav.search">Search</span>
+    </a>
+    <a class="tab" href="#/browse" data-nav="browse">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2l-1.7 4-4 1.7 1.7-4z"/></svg>
+      <span data-i18n="nav.browse">Browse</span>
     </a>
     <a class="tab" href="#/brochures" data-nav="brochures">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5A2.5 2.5 0 0 1 17.5 21H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7.5h8M8 11h8M8 14.5h5"/></svg>

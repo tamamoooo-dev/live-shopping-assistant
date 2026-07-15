@@ -29,6 +29,7 @@ import {
 } from './brochure.js';
 import { openBrochureViewer } from './viewer.js';
 import { initBrochuresPage } from './brochures.js';
+import { initBrowsePage } from './browsePage.js';
 import { rankItems as smartRank, relevance as matchRelevance, isRelevant, sizeLabel } from './match.js';
 import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
@@ -84,6 +85,7 @@ const home = $('home');
 const chipsWrap = $('store-chips');
 const chipAll = $('chip-all');
 const pageSearch = $('page-search');
+const pageBrowse = $('page-browse');
 const pageBrochures = $('page-brochures');
 const pageAlerts = $('page-alerts');
 const pageCart = $('page-cart');
@@ -96,7 +98,9 @@ let inFlight = null; // token so a newer search cancels an older one's rendering
 // plain links; this just toggles pages and active states.
 function route() {
   const hash = location.hash || '';
-  const name = hash.startsWith('#/brochures')
+  const name = hash.startsWith('#/browse')
+    ? 'browse'
+    : hash.startsWith('#/brochures')
     ? 'brochures'
     : hash.startsWith('#/alerts')
     ? 'alerts'
@@ -104,11 +108,14 @@ function route() {
     ? 'cart'
     : 'search';
   pageSearch.hidden = name !== 'search';
+  pageBrowse.hidden = name !== 'browse';
   pageBrochures.hidden = name !== 'brochures';
   pageAlerts.hidden = name !== 'alerts';
   pageCart.hidden = name !== 'cart';
   document.title =
-    name === 'brochures'
+    name === 'browse'
+      ? t('title.browse')
+      : name === 'brochures'
       ? t('title.brochures')
       : name === 'alerts'
       ? t('title.alerts')
@@ -122,6 +129,7 @@ function route() {
     else link.removeAttribute('aria-current');
   }
   window.scrollTo(0, 0);
+  if (name === 'browse') initBrowsePage(); // re-renders per sub-route hash
   if (name === 'brochures') initBrochuresPage(); // idempotent, lazy first render
   if (name === 'alerts') initAlertsPage(true); // fresh state on every visit
   if (name === 'cart') initCartPage(); // local data, re-rendered per visit

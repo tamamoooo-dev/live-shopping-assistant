@@ -332,6 +332,45 @@ export async function brochureForOffer(offer) {
   return list.find((b) => b.edition === offer.edition) || null;
 }
 
+// --- Browse (the product-discovery pillar, BROWSE-DESIGN.md) -------------------
+// GET /browse — the market floor in one payload: canonical departments/aisles
+// with live-offer counts plus the rails (Exceptional Deals first). Cached for
+// the page session (the substrate changes 3×/week; the engine edge-caches it
+// too). GET /browse/offers — the universal listing behind every Browse node.
+// Both best-effort like every engine read: null just means "Browse is resting".
+let browseSummaryPromise = null;
+export function loadBrowseSummary() {
+  if (!browseSummaryPromise) {
+    browseSummaryPromise = fetch(`${ENGINE_BASE}/browse`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => (j && Array.isArray(j.departments) ? j : null))
+      .catch(() => null);
+  }
+  return browseSummaryPromise;
+}
+
+// params: { dept?, aisle?, rail?, store?, sort?, limit?, offset? } — canonical
+// ids only (the engine owns the provider-category mapping).
+const browseOffersCache = new Map();
+export function browseOffers(params = {}) {
+  const qs = new URLSearchParams();
+  for (const k of ['dept', 'aisle', 'rail', 'store', 'sort', 'limit', 'offset']) {
+    if (params[k] != null && params[k] !== '') qs.set(k, params[k]);
+  }
+  const key = qs.toString();
+  if (!browseOffersCache.has(key)) {
+    if (browseOffersCache.size > 30) browseOffersCache.clear(); // tiny session cache
+    browseOffersCache.set(
+      key,
+      fetch(`${ENGINE_BASE}/browse/offers?${key}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => (j && Array.isArray(j.offers) ? j : null))
+        .catch(() => null),
+    );
+  }
+  return browseOffersCache.get(key);
+}
+
 // --- Price Monitoring (watches + alerts) --------------------------------------
 // The engine's Keepa-inspired monitoring: the user sets a target price on a
 // specific product (kind 'product': provider + stable product id) or a grocery

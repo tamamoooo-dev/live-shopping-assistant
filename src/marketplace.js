@@ -34,18 +34,22 @@ const DEFAULT_VISIBLE = 12;
 // Single tunable knob — nothing else about Lowest price depends on the value.
 const PRICE_SORT_WINDOW = 20;
 
-function el(tag, cls, text) {
+// The card-building primitives (el/money/cardImage/priceRow/storeBadge) and
+// the flyer-offer tap-through are EXPORTED: the Browse page composes its cards
+// from these same pieces, so there is exactly one card idiom and one "open an
+// offer" behaviour in the app (BROWSE-DESIGN.md §8 — reuse, never reimplement).
+export function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text != null) e.textContent = text;
   return e;
 }
 
-function money(value, currency = 'SAR') {
+export function money(value, currency = 'SAR') {
   return value == null ? '' : `${Number(value).toFixed(2)} ${currency}`;
 }
 
-function fmtDateShort(iso) {
+export function fmtDateShort(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
@@ -277,7 +281,7 @@ function dedupeFlyers(listings) {
 // --- cards ---------------------------------------------------------------------
 // The store badge every card carries — the source is metadata, shown the same
 // lightweight way for both worlds.
-function storeBadge(label, color, flyerTag) {
+export function storeBadge(label, color, flyerTag) {
   const row = el('div', 'card-store');
   const dot = el('span', 'chip-dot');
   dot.style.background = color;
@@ -292,7 +296,7 @@ function matchChip(badge) {
   return el('span', `card-match ${badge.cls}`, badge.text);
 }
 
-function cardImage(src, alt) {
+export function cardImage(src, alt) {
   const imgWrap = el('div', 'card-img');
   if (src) {
     const img = new Image();
@@ -307,7 +311,7 @@ function cardImage(src, alt) {
   return imgWrap;
 }
 
-function priceRow(price, oldPrice, currency, discountLabel, up) {
+export function priceRow(price, oldPrice, currency, discountLabel, up) {
   const prices = el('div', 'card-prices');
   if (price != null) {
     prices.appendChild(el('span', 'price', money(price, currency)));
@@ -414,25 +418,27 @@ function flyerCard(listing, badge) {
   body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', listing.up));
   card.appendChild(body);
 
-  card.addEventListener('click', async () => {
-    // Prefer the in-app viewer when the engine holds this offer's edition —
-    // the user never leaves Super Search (the viewer handles page images AND
-    // stored PDFs); otherwise the offer's flyer page.
-    const b = await brochureForOffer(offer).catch(() => null);
-    if (b && (b.sourceType === 'images' || b.sourceType === 'pdf')) {
-      // Open the in-app viewer ON this offer's own product: the viewer lands
-      // on the page (pageRef), flies to the hotspot carrying this offerId,
-      // pulses it and opens the product sheet — degrading level by level
-      // (page-only -> page 1) when an older edition lacks the data.
-      openBrochureViewer(b, storeLabel(offer.store), {
-        targetPageId: offer.pageRef,
-        targetOfferId: offer.offerId,
-      });
-    } else if (offer.sourceUrl) {
-      window.open(offer.sourceUrl, '_blank', 'noopener,noreferrer');
-    }
-  });
+  card.addEventListener('click', () => openFlyerOffer(offer));
   return card;
+}
+
+// The ONE "open a flyer offer" behaviour (search grid + Browse share it).
+// Prefer the in-app viewer when the engine holds this offer's edition — the
+// user never leaves Super Search (the viewer handles page images AND stored
+// PDFs); it lands on the offer's page (pageRef), flies to the hotspot carrying
+// this offerId, pulses it and opens the product sheet — degrading level by
+// level (page-only -> page 1) when an older edition lacks the data. Otherwise
+// the offer's own flyer page opens externally.
+export async function openFlyerOffer(offer) {
+  const b = await brochureForOffer(offer).catch(() => null);
+  if (b && (b.sourceType === 'images' || b.sourceType === 'pdf')) {
+    openBrochureViewer(b, storeLabel(offer.store), {
+      targetPageId: offer.pageRef,
+      targetOfferId: offer.offerId,
+    });
+  } else if (offer.sourceUrl) {
+    window.open(offer.sourceUrl, '_blank', 'noopener,noreferrer');
+  }
 }
 
 // --- the factory -----------------------------------------------------------------

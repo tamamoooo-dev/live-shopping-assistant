@@ -6,17 +6,15 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-05 · All five roadmap pillars **plus tappable
-> brochures + cart** are built and verified. Latest change: the
-> **snapshot-at-ingest redesign** (HISTORY §30) — the runtime no longer
-> depends on D4D staying unchanged after ingestion: hotspot geometry is
-> captured AT INGEST from the same leaflet HTML as the pages (atomically
-> consistent by construction), `/brochures/hotspots` serves storage-only, and
-> the product sheet + cart crop products from the STORED page images. Both
-> halves are **committed but NOT shipped** (`npx wrangler deploy` and pushes
-> were permission-gated this session): ship with one `npx wrangler deploy` in
-> `brochure-engine/` + one `git push` per repo. Until the engine deploys,
-> hotspots keep using the old on-demand fetch path.
+> **Last updated:** 2026-07-15 · Latest change: the **Browse pillar**
+> (HISTORY §31, BROWSE-DESIGN.md) — engine canonical taxonomy + `/browse`
+> API + Exceptional Deals + brand knowledge, frontend `#/browse` market
+> floor. **Code complete, tests green, NOT yet in production** — the D1
+> migration + engine deploy + backfill + pushes were permission-gated this
+> session; the exact ship sequence is TODO #1 in §11. (The 2026-07-05
+> snapshot-at-ingest redesign, HISTORY §30, deployed earlier; viewer v2 /
+> i18n / brand-knowledge milestones of 2026-07-10..15 are in git history,
+> HISTORY sections pending.)
 
 ---
 
@@ -28,6 +26,10 @@ commercial product. You type a product (Arabic or English) and get:
 
 - **Live search** across 7 online stores, merged with **this week's flyer
   offers** from ~18 physical stores, in one ranked marketplace grid.
+- **Browse** (`#/browse`, BROWSE-DESIGN.md) — "walk this week's market": the
+  whole offers substrate organized by canonical departments/aisles + brands
+  (equal entry points) with data-backed rails, flagship **Exceptional Deals**
+  (transparent deal-quality score, never advertised discount alone).
 - A **comparison summary** (best buy by per-unit value, honest lowest-price
   claims, confidence ladder, price-history verdict).
 - **Weekly brochures** browsable in an in-app viewer (`#/brochures`) with
@@ -248,9 +250,23 @@ non-current AND expired >28 days (row marked `pruned_at`); ≤250 KV deletes +
 **D1 tables:** `brochures`, `price_points`, `offers`, `watches`, `alerts`
 (canonical `schema.sql`; past deltas in `migrate-*.sql`, already applied).
 
+**Browse** (engine `src/browse/`, BROWSE-DESIGN.md): read-only views over the
+offers+history substrate, speaking ONLY canonical ids. `taxonomy.js` (11
+depts / ~70 aisles, bilingual, OURS) + `mapping.js` (per-source category →
+aisle; unmapped ⇒ visible `other`, read-time so fixes apply retroactively) +
+`brands.js` (canonical brand KB ~95 entries + OCR-repair detection, ported
+from the viewer's split; NOT part of the matching mirrors) + `deals.js`
+(Exceptional Deals scoring — history signals outweigh advertised discount,
+qualify ≥50, pure+tested). Ingest stamps two derived columns on offers:
+`identity` (deriveIdentity — the history join) and `brand_slug` (detectBrand);
+`/prices/backfill` heals pre-column rows. Tests:
+`node src/browse/browse.test.mjs`.
+
 **API:** public reads `GET /` (health), `/brochures[?store=&region=]`,
 `/brochures/history`, `/brochures/hotspots?id=`, `/asset/<key>`,
-`/offers?q=`, `/lowest?q=`, `/prices?q=` (legacy `product=` maps to q),
+`/offers?q=`, `/browse` (market floor, edge-cached 1h),
+`/browse/offers?dept=|aisle=|brand=|rail=|store=&sort=`,
+`/lowest?q=`, `/prices?q=` (legacy `product=` maps to q),
 `/watches`, `/alerts[?unseen=1]`;
 open writes `POST /watches`, `DELETE /watches?id=`, `POST /alerts/seen`;
 guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`,
@@ -267,7 +283,8 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`
 | `compare.js` | Comparison engine: bilingual flyer listings, **Search-Roadmap STAGE GATE first** (rule 9 — the summary only reasons over the grid's best match band), then family/type/coverage gates, **product-identity lock** (anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
 | `summary.js` | Renders the comparison model (headline, confidence, excluded-counts, history verdict) |
 | `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family); sort order = Roadmap stage (rule 9) → family band → price/value |
-| `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `cleanOfferName` (leading OCR-banner trim); never throws |
+| `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
+| `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (Exceptional Deals first, dept tiles + brand pills as EQUAL peers, rails), listings w/ aisle chips + sorts + store filter + paging. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
 | `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
 | `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). Sheet hero + cart thumbnail are **SELF-HOSTED crops** from the STORED page image via the tapped spot's bbox (`cropFromPage`: canvas + `crossOrigin` on the CORS-open /asset → data-URL); D4D's CDN crop (`offer.imageUrl`) is only a fallback when no geometry is at hand (similar-strip, marketplace). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
@@ -398,7 +415,19 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
-1. **Optional:** enable phone push — `npx wrangler secret put NTFY_TOPIC`.
+1. **Browse pillar — SHIP IT (code complete 2026-07-15, NOT yet in
+   production).** Design Rev 2 + implementation (engine M1 + frontend M2 +
+   brands M3) are committed; all tests green; UI browser-verified EN+AR
+   against fixtures. Production rollout (in order, from `brochure-engine/`):
+   1) `npx wrangler d1 execute brochure-engine --remote
+   --file=./migrate-2026-07-browse.sql` (adds offers.identity + brand_slug
+   + 3 indexes); 2) `npx wrangler deploy`; 3) rotate `INGEST_SECRET`, then
+   `POST /prices/backfill` (stamps identity+brand on the back catalog);
+   4) `git push` both repos. Until then the Browse tab shows its calm
+   "unavailable" state. Remaining Browse roadmap (BROWSE-DESIGN.md §11
+   Phase 4): brand mining (observed tier), shelf refinements, For-you /
+   In-season rails, collections, cart intelligence.
+2. **Optional:** enable phone push — `npx wrangler secret put NTFY_TOPIC`.
 2. **Amazon durability:** configure PA-API secrets, or keep accepting
    best-effort.
 3. **README.md / CHANGELOG.md are badly stale** (still "Panda Live Search
