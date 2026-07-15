@@ -35,11 +35,29 @@ export function createSpotLayer(contentEl, spots, offers, { onActivate, labelOf 
     spots,
     // The spot under page fractions (fx, fy), or null. Smallest spot wins when
     // boxes overlap (the more specific product).
-    hit(fx, fy) {
+    //
+    // minW/minH (page fractions, optional) give every spot a MINIMUM hit box —
+    // the caller passes ~44px converted to fractions so small products stay
+    // tappable at any zoom. Coordinates never change: the halo is centered on
+    // the spot's real box, and a finger inside a spot's REAL box always beats
+    // a neighbour's halo.
+    hit(fx, fy, minW = 0, minH = 0) {
       let best = null;
+      let bestDirect = false;
       for (const s of spots) {
-        if (fx >= s.x && fx <= s.x + s.w && fy >= s.y && fy <= s.y + s.h && offers[s.offerId]) {
-          if (!best || s.w * s.h < best.w * best.h) best = s;
+        if (!offers[s.offerId]) continue;
+        const direct = fx >= s.x && fx <= s.x + s.w && fy >= s.y && fy <= s.y + s.h;
+        let inside = direct;
+        if (!inside) {
+          const ex = Math.max(0, (minW - s.w) / 2);
+          const ey = Math.max(0, (minH - s.h) / 2);
+          inside =
+            fx >= s.x - ex && fx <= s.x + s.w + ex && fy >= s.y - ey && fy <= s.y + s.h + ey;
+        }
+        if (!inside) continue;
+        if (!best || (direct && !bestDirect) || (direct === bestDirect && s.w * s.h < best.w * best.h)) {
+          best = s;
+          bestDirect = direct;
         }
       }
       return best;

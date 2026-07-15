@@ -309,6 +309,17 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       },
     });
 
+    // A ~44px finger-sized minimum hit box (Apple HIG tap target), expressed
+    // in page fractions at the CURRENT zoom so small products stay tappable
+    // without moving any hotspot coordinates.
+    const MIN_TAP_PX = 44;
+    const tapMin = (i) => {
+      const fit = canvas && canvas.fitOf(i);
+      if (!fit) return { w: 0, h: 0 };
+      const z = canvas.zoom() || 1;
+      return { w: MIN_TAP_PX / (fit.w * z), h: MIN_TAP_PX / (fit.h * z) };
+    };
+
     canvas = createPageCanvas(stage, {
       pages: data.pages.map((src) => ({ src })),
       startPage,
@@ -322,7 +333,8 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       onPress: (i, { fx, fy }) => {
         const layer = spotLayers.get(i);
         if (!layer) return;
-        const s = layer.hit(fx, fy);
+        const m = tapMin(i);
+        const s = layer.hit(fx, fy, m.w, m.h);
         if (s) layer.press(s);
       },
       onPressCancel: () => {
@@ -331,7 +343,8 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       },
       onTap: (i, { fx, fy }) => {
         const layer = spotLayers.get(i);
-        const s = layer && layer.hit(fx, fy);
+        const m = tapMin(i);
+        const s = layer && layer.hit(fx, fy, m.w, m.h);
         if (s && hotspots) {
           const offer = hotspots.offers[s.offerId];
           if (offer) {

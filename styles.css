@@ -1988,23 +1988,31 @@ a.watch-name:hover { text-decoration: underline; }
   position: absolute;
   right: 3px;
   bottom: 3px;
-  width: 17px;
-  height: 17px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: var(--brand);
   color: #fff;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 800;
-  line-height: 17px;
+  line-height: 26px;
   text-align: center;
-  opacity: 0.82;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  opacity: 0.9;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.25, 1.2);
+  will-change: transform;
 }
 .vv-spot.is-pressed,
 .vv-spot:focus-visible {
   border-color: var(--brand);
   background: rgba(37, 99, 235, 0.14);
   outline: none;
+}
+/* The instant a finger lands on a product the marker pops larger. */
+.vv-spot.is-pressed::after,
+.vv-spot:focus-visible::after {
+  transform: scale(1.4);
+  opacity: 1;
 }
 .vv-spots-flash .vv-spot { animation: spot-flash 1.5s ease 1; }
 .vv-spot.is-pulse { animation: vv-pulse 2.4s ease 1; }
@@ -2092,6 +2100,10 @@ a.watch-name:hover { text-decoration: underline; }
 .ps-sheet-v2 .ps-name { margin: 2px 0 2px; font-size: 16.5px; line-height: 1.3; }
 .ps-sheet-v2 .ps-name-ar { margin: 0 0 2px; font-size: 13.5px; color: var(--muted); }
 .ps-meta { margin: 0 0 4px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+/* Structured brand/size fields under the name lines. */
+.ps-attrs { margin: 2px 0 2px; display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.ps-attr { white-space: nowrap; }
+.ps-attr-k { color: var(--muted); font-weight: 600; margin-inline-end: 5px; }
 .ps-sheet-v2 .ps-pricerow { margin: 4px 0 0; }
 .ps-actions {
   display: grid;

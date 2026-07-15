@@ -11,6 +11,7 @@ import {
 } from './transform.js';
 import { createSpotLayer, spotForOffer } from './hotspots.js';
 import { rememberPosition, recallPosition } from './state.js';
+import { structureOfferName } from './productName.js';
 
 let pass = 0;
 let fail = 0;
@@ -202,6 +203,96 @@ function recordingHandlers(log) {
   ok('spotForOffer matches across types', spotForOffer(hotspots, 9 + 'z'.slice(0, 0) ? 'z9' : 'z9') !== null);
   ok('spotForOffer misses cleanly', spotForOffer(hotspots, 'nope') === null);
   console.log('hotspots ✅');
+}
+
+/* --- hotspot minimum touch target ----------------------------------------------- */
+{
+  const fakeEl = () => ({
+    style: {},
+    classList: { add() {}, remove() {} },
+    setAttribute() {},
+    addEventListener() {},
+    appendChild() {},
+    append() {},
+    remove() {},
+  });
+  global.document = { createElement: fakeEl };
+  const spots = [
+    { offerId: 'tiny', x: 0.5, y: 0.5, w: 0.02, h: 0.02 },
+    { offerId: 'big', x: 0.1, y: 0.1, w: 0.35, h: 0.35 },
+  ];
+  const offers = { tiny: { id: 't' }, big: { id: 'b' } };
+  const layer = createSpotLayer(fakeEl(), spots, offers, { onActivate() {}, labelOf: () => 'x' });
+  // Just outside the tiny spot: a plain hit misses, a min-target hit lands.
+  ok('no min: near-miss stays a miss', layer.hit(0.54, 0.5) === null);
+  ok('min target: halo catches the near-miss', layer.hit(0.54, 0.5, 0.1, 0.1)?.offerId === 'tiny');
+  ok('halo is bounded', layer.hit(0.58, 0.5, 0.1, 0.1) === null);
+  ok('spots larger than the minimum are unchanged', layer.hit(0.47, 0.3, 0.1, 0.1) === null);
+  // A finger INSIDE a spot's real box always beats a neighbour's halo:
+  // (0.44, 0.44) is inside `big` and inside `tiny`'s expanded halo.
+  ok('direct hit beats a smaller neighbour halo', layer.hit(0.44, 0.44, 0.2, 0.2)?.offerId === 'big');
+  ok('coordinates unchanged: plain hit still works', layer.hit(0.51, 0.51)?.offerId === 'tiny');
+  delete global.document;
+  console.log('hotspot touch target ✅');
+}
+
+/* --- product-name normalization (the sheet's structured fields) ------------------- */
+{
+  // The merged-OCR mess: leading fragment, both languages, brand repeated in
+  // both scripts, banner debris, size/pack tokens inline.
+  const o1 = structureOfferName({
+    name: 'or chicken sadia frozen chicken breast 900 g x 10 doux',
+    nameAr: 'عرض صدور دجاج مجمد ساديا 900 جم فقط',
+  });
+  ok('en line cleaned + deduped + cased', o1.en === 'Frozen Chicken Breast');
+  ok('ar line cleaned', o1.ar === 'صدور دجاج مجمد');
+  ok('first brand wins, all brand mentions leave the lines', o1.brand === 'Sadia');
+
+  // OCR-glued brand tail ("ساديات" for ساديا) is still recognized.
+  const o2 = structureOfferName({ name: '', nameAr: 'ساديات دجاج مجمد ٩٠٠ جم' });
+  ok('brand tolerates an OCR tail', o2.brand === 'Sadia');
+  ok('arabic-indic size digits removed', o2.ar === 'دجاج مجمد');
+
+  // Duplicates collapse case-insensitively; Arabic normalization folds forms.
+  const o3 = structureOfferName({ name: 'Almarai Fresh Milk MILK milk 2L المراعي حليب' });
+  ok('brand extracted from mixed string', o3.brand === 'Almarai');
+  ok('duplicate words removed', o3.en === 'Fresh Milk');
+  ok('arabic line survives extraction', o3.ar === 'حليب');
+
+  // No brand, single language: lines pass through cleaned, brand stays null.
+  const o4 = structureOfferName({ name: 'FROZEN GREEN PEAS 400G' });
+  ok('all-caps presented in title case', o4.en === 'Frozen Green Peas');
+  ok('no lexicon hit -> no brand', o4.brand === null);
+
+  // Nothing structured derivable -> the fallback (old behaviour) is offered.
+  const o5 = structureOfferName({ name: '50% ... 2', nameAr: 'عرض فقط' });
+  ok('debris-only name yields empty lines', o5.en === '' && o5.ar === '');
+  ok('fallback preserved for the caller', o5.fallback.length > 0);
+
+  // An explicit offer.brand field is respected and stripped from the lines.
+  const o6 = structureOfferName({ name: 'Acme cola Acme 2.25 l', brand: 'Acme' });
+  ok('offer.brand wins', o6.brand === 'Acme');
+  ok('offer.brand mentions leave the lines', o6.en === 'Cola');
+
+  // Months are banner debris anywhere; glued OCR punctuation is trimmed.
+  const o7 = structureOfferName({ name: 'pepsi july diet', nameAr: 'بيبسي ميرندا… يوليو' });
+  ok('inline month removed', o7.en === 'Diet');
+  ok('glued ellipsis trimmed', o7.ar === 'ميرندا');
+  ok('brand found across scripts', o7.brand === 'Pepsi');
+
+  // Real Panda flyer regressions: "التوفير الكبير" is banner copy (توفير with
+  // the definite article; الكبير must NOT read as the Al Kabeer brand), and
+  // accented Latin duplicates ("Ülker"/"ulker") collapse.
+  const o8 = structureOfferName({
+    name: 'days only golden crown cream x 155g',
+    nameAr: 'التوفير الكبير قشطه التاج جرام',
+  });
+  ok('article-attached debris removed', !o8.ar.includes('التوفير'));
+  ok('الكبير alone is not a brand', o8.brand === null);
+  const o9 = structureOfferName({ name: 'of ülker وفر ulker tea biscuits اولكر' });
+  ok('every brand form leaves the line', o9.en === 'Of Tea Biscuits');
+  ok('brand recognized under diacritics', o9.brand === 'Ulker');
+  console.log('product name normalization ✅');
 }
 
 /* --- reading-position memory --------------------------------------------------------- */

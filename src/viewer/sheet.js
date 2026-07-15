@@ -16,6 +16,7 @@ import { addToCart, inCart } from '../cart.js';
 import { openWatchDialog } from '../alertsPage.js';
 import { isRelevant, relevance } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
+import { structureOfferName } from './productName.js';
 import { t, tn } from '../i18n.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
@@ -271,14 +272,19 @@ export function createSheet(host, ctx) {
     const until = offer.validTo
       ? t(ended ? 'sheet.ended' : 'sheet.until', { date: fmtDate(offer.validTo) })
       : '';
-    const name = cleanOfferName(offer.name);
-    const nameAr = cleanOfferName(offer.nameAr);
-    const title = name || nameAr || t('sheet.product');
+    // Structured display fields (productName.js): per-language name lines,
+    // brand and size each in their own field — never the raw merged OCR
+    // string unless nothing structured could be derived from it.
+    const sn = structureOfferName(offer);
+    const name = sn.en;
+    const nameAr = sn.ar;
+    const title = name || nameAr || sn.brand || sn.fallback || t('sheet.product');
     const { label: sizeText, unit } = offerSize(offer);
-    const meta = [
-      sizeText,
-      unit ? `${fmt(Math.round(unit.value * 100) / 100)} SAR/${unit.unit}` : '',
-    ].filter(Boolean).join(' · ');
+    const meta = unit ? `${fmt(Math.round(unit.value * 100) / 100)} SAR/${unit.unit}` : '';
+    const attrs = [
+      sn.brand ? `<span class="ps-attr"><span class="ps-attr-k">${esc(t('sheet.brand'))}</span>${esc(sn.brand)}</span>` : '',
+      sizeText ? `<span class="ps-attr"><span class="ps-attr-k">${esc(t('sheet.size'))}</span>${esc(sizeText)}</span>` : '',
+    ].filter(Boolean).join('');
 
     sheet.innerHTML = `
       <div class="ps-grab" aria-hidden="true"></div>
@@ -298,6 +304,7 @@ export function createSheet(host, ctx) {
           <div class="ps-headline">
             <h3 class="ps-name" dir="auto">${esc(title)}</h3>
             ${name && nameAr ? `<p class="ps-name-ar" dir="rtl">${esc(nameAr)}</p>` : ''}
+            ${attrs ? `<p class="ps-attrs">${attrs}</p>` : ''}
             ${meta ? `<p class="ps-meta">${esc(meta)}</p>` : ''}
             <div class="ps-pricerow">
               <span class="ps-price">${fmt(offer.price)} <small>${esc(offer.currency || 'SAR')}</small></span>
