@@ -297,6 +297,54 @@ function recordingHandlers(log) {
   console.log('product name normalization ✅');
 }
 
+/* --- confidence gate: reject OCR garbage, fall back to a canonical name ------------- */
+{
+  // THE production bug: merged banner / person-name / football garbage. The
+  // brand parses fine (Seara); the name lines must NOT show the OCR garbage.
+  const g1 = structureOfferName({
+    name: 'محمد عجم عايلي خبير frozen imily pack seara افتتاح ملاعبه من et سال صدور دجاج',
+    category: 'frozen-chicken-poultry',
+  });
+  ok('garbage english replaced by canonical', g1.en === 'Frozen Chicken Breast');
+  ok('garbage arabic replaced by canonical', g1.ar === 'صدور دجاج مجمدة');
+  ok('brand still parsed', g1.brand === 'Seara');
+  ok('no OCR garbage words survive (en)', !/imily|et\b/i.test(g1.en));
+  ok('no person names survive (ar)', !/محمد|عجم|عايلي|افتتاح|ملاعب/.test(g1.ar));
+
+  // Canonical is built from reliable signals even without a category, from the
+  // family/type/processing words present in the OCR.
+  const g2 = structureOfferName({ name: 'save عيشها goal imily frozen chicken breast xyz qwe' });
+  ok('english degrades to canonical from name signals', g2.en === 'Frozen Chicken Breast');
+
+  // A TRUSTWORTHY OCR name is kept, never overridden by the canonical.
+  const g3 = structureOfferName({ name: 'Fresh Chicken Breast', category: 'fresh-chicken-poultry' });
+  ok('good english kept as-is', g3.en === 'Fresh Chicken Breast');
+  const g4 = structureOfferName({ nameAr: 'صدور دجاج طازجة' });
+  ok('good arabic kept as-is', g4.ar === 'صدور دجاج طازجة');
+
+  // One unknown word is tolerated (not "garbage"); a real name survives.
+  const g5 = structureOfferName({ name: 'Chicken Franks' });
+  ok('single unknown word tolerated', g5.en === 'Chicken Franks');
+
+  // No reliable classification -> no canonical -> the (only) OCR line stands,
+  // never blanked, never fabricated.
+  const g6 = structureOfferName({ name: 'Frozen Green Peas 400g' });
+  ok('unclassifiable name is not blanked', g6.en === 'Frozen Green Peas');
+
+  // Low confidence with no canonical available: nothing fabricated.
+  const g7 = structureOfferName({ name: 'Zzz Qqq Www' });
+  ok('pure garbage with no family stays (no fabrication)', typeof g7.en === 'string' && g7.brand === null);
+
+  // A single UNKNOWN word (a real name we don't recognize) is never swapped for
+  // a possibly-wrong canonical — even when an ambiguous family word ("معجون" =
+  // paste → sauce family) would otherwise mis-label toothpaste as "صلصة".
+  const g8 = structureOfferName({ name: 'sensodyne السعر price وفر save معجون اسنان اكسترا فريش سنسوداين ٧٥ مل' });
+  ok('unknown single-word name kept, not canonicalized', g8.en === 'Sensodyne');
+  ok('real arabic descriptors keep the true line', g8.ar.includes('معجون') && g8.ar.includes('اسنان'));
+  ok('ambiguous family never mislabels toothpaste as sauce', !/صلصة/.test(g8.ar));
+  console.log('confidence gate ✅');
+}
+
 /* --- Brand Knowledge + OCR normalization layer ------------------------------------ */
 {
   // The knowledge base stays intentionally small and is canonical-only.
