@@ -12,6 +12,8 @@ import {
 import { createSpotLayer, spotForOffer } from './hotspots.js';
 import { rememberPosition, recallPosition } from './state.js';
 import { structureOfferName } from './productName.js';
+import { matchBrand, brandCount } from './brandNormalize.js';
+import { BRANDS } from './brandKnowledge.js';
 
 let pass = 0;
 let fail = 0;
@@ -293,6 +295,50 @@ function recordingHandlers(log) {
   ok('every brand form leaves the line', o9.en === 'Of Tea Biscuits');
   ok('brand recognized under diacritics', o9.brand === 'Ulker');
   console.log('product name normalization ✅');
+}
+
+/* --- Brand Knowledge + OCR normalization layer ------------------------------------ */
+{
+  // The knowledge base stays intentionally small and is canonical-only.
+  ok('brand set stays small (50–100)', brandCount >= 50 && brandCount <= 100);
+  ok('brandCount matches the data', brandCount === BRANDS.length);
+  ok('entries are canonical en/ar only', BRANDS.every((b) => typeof b.en === 'string' && 'ar' in b && Object.keys(b).length === 2));
+
+  // Exact canonical match, either script.
+  ok('canonical english', matchBrand('Sadia') === 'Sadia');
+  ok('canonical arabic maps to english display', matchBrand('ساديا') === 'Sadia');
+  ok('arabic-with-article', matchBrand('الوطنية') === 'Al Watania');
+  ok('arabic-without-article', matchBrand('وطنية') === 'Al Watania');
+
+  // OCR repairs — the misspellings live HERE, never in the knowledge base.
+  ok('latin diacritic folded', matchBrand('Ülker') === 'Ulker');
+  ok('trailing OCR junk repaired', matchBrand('ساديات') === 'Sadia');
+  ok('doubled-letter / ligature repaired', matchBrand('sadiaa') === 'Sadia');
+  ok('doubled interior letter repaired', matchBrand('ulkker') === 'Ulker');
+
+  // Ambiguity guard: a truthful entry whose bare word is ordinary language is
+  // not matched from that word alone.
+  ok('ambiguous arabic word is not a brand', matchBrand('الكبير') === null);
+  ok('ambiguous english word is not a brand', matchBrand('fine') === null);
+  ok('but the arabic canonical still resolves', matchBrand('فاين') === 'Fine');
+  // matchBrand is a single-TOKEN matcher (product names arrive token-by-token);
+  // Al Kabeer's distinctive English tokens still resolve, only the ambiguous
+  // Arabic word is guarded.
+  ok('english sub-word resolves', matchBrand('Kabeer') === 'Al Kabeer');
+  ok('OCR-joined english resolves', matchBrand('alkabeer') === 'Al Kabeer');
+
+  // Generic multi-word sub-tokens never hijack matching.
+  ok('generic sub-word is not a brand', matchBrand('garden') === null);
+  ok('distinctive sub-word still resolves', matchBrand('california') === 'California Garden');
+
+  // Unknown brands never fail and never require an entry — they just return null.
+  ok('unknown token -> null', matchBrand('bananas') === null);
+  ok('empty token -> null', matchBrand('') === null);
+  ok('short noise -> null', matchBrand('xy') === null);
+  // The parser keeps working with no dictionary hit.
+  const unknown = structureOfferName({ name: 'Freshline Organic Oats 500g' });
+  ok('parser works without a dictionary hit', unknown.en === 'Freshline Organic Oats' && unknown.brand === null);
+  console.log('brand knowledge + OCR layer ✅');
 }
 
 /* --- reading-position memory --------------------------------------------------------- */

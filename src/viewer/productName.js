@@ -11,66 +11,12 @@
 
 import { normalizeText } from '../match.js';
 import { cleanOfferName } from '../brochure.js';
+import { matchBrand } from './brandNormalize.js';
 
-/* --- brand lexicon --------------------------------------------------------------- */
-// Common Saudi flyer brands, [display, ...variants] with variants in either
-// script. Deliberately conservative: only names that are unambiguous as a
-// standalone word (English "fine" is a word, so Fine is Arabic-only).
-const BRANDS = [
-  ['Sadia', 'sadia', 'ساديا'],
-  ['Seara', 'seara', 'سيارا'],
-  ['Doux', 'doux', 'دوكس'],
-  ['Almarai', 'almarai', 'المراعي', 'مراعي'],
-  ['Nadec', 'nadec', 'نادك'],
-  ['Alsafi', 'alsafi', 'الصافي'],
-  ['Al Watania', 'watania', 'alwatania', 'الوطنيه', 'وطنيه'],
-  ['Americana', 'americana', 'امريكانا'],
-  ['Sunbulah', 'sunbulah', 'sunbula', 'سنبله', 'السنبله'],
-  // NO الكبير variant: "التوفير الكبير" (the big savings) is banner copy,
-  // not the Al Kabeer brand — the Arabic word alone is too ambiguous.
-  ['Al Kabeer', 'alkabeer', 'kabeer'],
-  ['Herfy', 'herfy', 'هرفي'],
-  ['Ulker', 'ulker', 'اولكر'],
-  ['Tanmiah', 'tanmiah', 'تنميه'],
-  ['Luna', 'luna', 'لونا'],
-  ['Puck', 'puck', 'بوك'],
-  ['Kiri', 'kiri', 'كيري'],
-  ['Kraft', 'kraft', 'كرافت'],
-  ['Lurpak', 'lurpak', 'لورباك'],
-  ['Nestle', 'nestle', 'نستله'],
-  ['Nescafe', 'nescafe', 'نسكافيه'],
-  ['Lipton', 'lipton', 'ليبتون'],
-  ['Deemah', 'deemah', 'ديمه'],
-  ['Goody', 'goody', 'قودي'],
-  ['Afia', 'afia', 'عافيه'],
-  ['Halwani', 'halwani', 'حلواني'],
-  ['Montana', 'montana', 'مونتانا'],
-  ['Tide', 'tide', 'تايد'],
-  ['Ariel', 'ariel', 'اريال'],
-  ['Persil', 'persil', 'برسيل'],
-  ['Clorox', 'clorox', 'كلوروكس'],
-  ['Fairy', 'fairy', 'فيري'],
-  ['Pepsi', 'pepsi', 'بيبسي'],
-  ['Fine', 'فاين'],
-];
-const BRAND_INDEX = new Map(); // normalized variant -> display name
-for (const [display, ...variants] of BRANDS) {
-  for (const v of variants) BRAND_INDEX.set(normalizeText(v), display);
-}
-
-// The brand a (normalized) word names, or null. OCR often glues a stray
-// trailing letter onto a brand ("ساديات" for ساديا), so variants long enough
-// to stay unique tolerate up to 2 extra trailing characters.
-function brandOf(norm) {
-  const exact = BRAND_INDEX.get(norm);
-  if (exact) return exact;
-  if (norm.length >= 4) {
-    for (const [v, display] of BRAND_INDEX) {
-      if (v.length >= 4 && norm.startsWith(v) && norm.length - v.length <= 2) return display;
-    }
-  }
-  return null;
-}
+// Brand detection is delegated to the two-layer Brand Knowledge: the canonical
+// truth (brandKnowledge.js) and the OCR normalization layer (brandNormalize.js,
+// matchBrand). This file never hard-codes brands — an UNKNOWN brand simply
+// isn't recognized, and the generic parsing below still cleans the name.
 
 /* --- noise detection --------------------------------------------------------------- */
 // Size/pack tokens are removed from the name lines because the size gets its
@@ -158,7 +104,9 @@ export function structureOfferName(offer) {
     .filter(Boolean);
   for (const tok of tokenized) {
     const norm = norml(tok);
-    const b = !isNoise(tok) && norm && !isDebris(norm) ? brandOf(norm) : null;
+    // Brand detection runs on the ORIGINAL token so the OCR layer can do its
+    // own folding/repair; noise and debris tokens are never brands.
+    const b = !isNoise(tok) && norm && !isDebris(norm) ? matchBrand(tok) : null;
     if (b && !brand) brand = b;
     if (
       isNoise(tok) ||
