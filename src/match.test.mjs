@@ -162,6 +162,10 @@ ok('houseware for water query gates to stage 1', matchStage({ name: 'غلاية 
 ok('bottled water sold as زجاجة stays water', productFamily('زجاجة مياه من اروى') === 'water');
 ok('bottled water w/ size stays water', productFamily('مياه شرب معبأة من أروى، 6 قطع× 1.5 لتر') === 'water');
 ok('Kettle Chips stays chips', productFamily('Kettle Chips Sea Salt 150g') === 'chips');
+ok('water thermos -> houseware', productFamily('ترمس ماء سعة 1 جالون') === 'houseware');
+// the ترمس (lupin) ambiguity is self-neutralizing: query and product share
+// the family, and same-family never gates
+ok('lupin query and lupin product share a family', queryFamily('ترمس مالح') === productFamily('ترمس مالح معلب 450 جم'));
 ok('water pump -> houseware', productFamily('رويال فورد مضخة ماء قابلة للشحن') === 'houseware');
 ok('air-fryer fries stay potato (للقلاية attached)', productFamily('بطاطس للقلاية الهوائية 1 كجم') === 'potato');
 // multi-word known-different-family cap (the "ماء أروى 1.5 steamer" regression):
