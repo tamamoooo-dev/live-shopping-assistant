@@ -6,7 +6,21 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-16 · Latest change: **Search Experience
+> **Last updated:** 2026-07-16 · Latest change: **Search Intelligence**
+> (HISTORY §36) — the grid's third perspective is now **Featured** (replaces
+> Most discounted; still exactly three modes): a new frontend-only
+> `src/featured.js` intelligence layer ABOVE the engine — category-aware
+> curated signals (organic/local/origin/known produce brands/…), an
+> expected-price soft penalty around the primary matches' median, a small
+> deal signal, and localStorage LEARNING from real card engagements
+> (`lsa.featured.learn.v1`, bounded, ranking-only) — all ordering WITHIN the
+> stage → family-band quality groups, never past them. **Lowest price is
+> price-first**: it compares stages at the 'primary' band (`stageBand`
+> collapse — word position never beats price); Best value unchanged. Saved
+> 'discount' rank pref migrates to 'featured'. Mirror side effect: family
+> lexicons gained مشبك/مشابك (care) + مفاتيح/keychain/keyring/ميداليه (toy)
+> in both repos — produce-shaped accessories found live.
+> Previous change: **Search Experience
 > Refinement** (HISTORY §35) — the polish milestone, nine tasks, no
 > architecture change. Headliners: **size-aware queries** in BOTH matching
 > mirrors (a query-named size — "Arwa Water 1.5L" — is a STRUCTURED filter:
@@ -149,6 +163,13 @@ conflicts with this file, this file wins).
    fragments must never be AND-words), `querySize` reads it, and matchStage
    CAPS results whose parsed size contradicts it at stage 1 — size-less
    results are never demoted. In both mirrors, like everything here.
+   **Stage GRANULARITY is per-perspective** (HISTORY §36): Featured and Best
+   value compare exact stages; the grid's Lowest-price perspective compares
+   at the 'primary' stageBand (5+4 one band single-word, full-coverage one
+   band multi-word — the same collapse the JOURNEY history tier declares) so
+   word position never beats price. Collapsing is the only liberty: nothing
+   may ever promote past a better BAND, and family bands hold in every
+   perspective.
 10. **INTERPRETATION IS SHARED; ONLY DECLARED POLICY DIFFERS** (HISTORY §34).
    Every comparison-shaped feature — Shopping Summary (compare.js), watch
    alerts (monitor.js), /prices statistics (priceHistory.js) — resolves "which
@@ -344,7 +365,8 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`
 | `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize` (w/ `src` count-trust marker), **`querySize`/`queryTokens`** (size-aware queries, rule 9), relevance, `sameProduct` equivalence, `matchStage`/`queryTokenPresence` (Search-Roadmap stages + SIZE CAP, rule 9 — directional flavour markers: Arabic بنكهة/بطعم/برائحة precede the flavour word, English flavoured/scented follow it), **`JOURNEY_POLICY` + `resolveJourneyPool`** (rule 10 — the shared gate ladder every comparison-shaped feature runs) |
 | `compare.js` | Comparison engine: bilingual flyer listings, **the SHARED gate ladder at the 'summary' tier** (rules 9+10 — stage band → family → type → fresh, excluded counts surfaced), coverage admission, **product-identity lock** (Summary-only policy: anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
 | `summary.js` | Renders the comparison model for SHOPPERS (HISTORY §35): image + dense headline line (price · unit · store · size), Add-to-cart + Watch actions in the header, history verdict w/ dated Other Sizes, ONE muted footer meta line (coverage · range · excluded count w/ tooltip breakdown) |
-| `marketplace.js` | Unified grid (online + flyer cards, store badges, per-card Add-to-Cart on BOTH sources + watch bell on online), sources strip, THREE sort perspectives — Lowest price / Best value / Most discounted — all ordered Roadmap stage (rule 9) → family band → perspective key (price asc / unit value within dominant unit family / discount fraction); card unit-price labels suppressed for >6×-off-median outliers |
+| `marketplace.js` | Unified grid (online + flyer cards, store badges, per-card Add-to-Cart on BOTH sources + watch bell on online), sources strip, THREE sort perspectives — Lowest price / Best value / **Featured** — ordered Roadmap stage (rule 9; Lowest price at 'primary' stageBand granularity) → family band → perspective key (price asc / unit value within dominant unit family / featuredScore); card clicks feed Featured's learning (`recordChoice`); card unit-price labels suppressed for >6×-off-median outliers |
+| `featured.js` | The Featured intelligence layer (HISTORY §36, frontend-only — a grid perspective, NOT matching, so nothing to mirror): category-aware curated signal KB (per-category weights; a signal absent from a category contributes nothing), expected-price soft penalty (median of primary matches, free zone 0.5×–2×, capped — never a filter), small deal signal, and bounded localStorage learning (`lsa.featured.learn.v1`, family-keyed so both languages learn together, `b:<brand>` dynamic ids; ranking-only, never touches product data). All boosts bounded by construction. ⚠️ محلى (sweetened) is dropped RAW pre-normalization — the ى→ي fold would read it as محلي 'local' |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (dept tiles + brand pills as EQUAL peers, then Biggest Drops + Lowest Ever rails — V1.1 keeps only these two), listings w/ aisle chips + sorts (discount/price) + store filter + paging; **brand pages** open on an identity hero (deterministic monogram, bilingual name, offers·stores) + engine-fed product-family chips. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
 | `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
@@ -354,7 +376,8 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`
 | `alertsPage.js` | Alerts page + shared watch dialog + nav badge |
 | `server.js` (root) | Zero-dependency local static server → http://localhost:5173 |
 
-Tests: `node src/match.test.mjs`, `node src/compare.test.mjs` (pure, offline).
+Tests: `node src/match.test.mjs`, `node src/compare.test.mjs`,
+`node src/featured.test.mjs` (pure, offline).
 Cross-page coupling is one `supersearch:search-store` CustomEvent. Theme is
 CSS-variable driven (`--brand` blue `#2563eb`, light+dark).
 
@@ -505,9 +528,10 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
--1. **Deploy the engine for Search Experience Refinement** (HISTORY §35):
-   the size-aware query layer is committed in both repos and fully tested,
-   but the engine deploy was permission-blocked in the build session — run
+-1. **Deploy the engine** (still pending; permission-blocked AGAIN in the
+   §36 session, 2026-07-16): ships the §35 size-aware query layer AND the
+   §36 accessory lexicon words (مشابك/مفاتيح — until then the engine can
+   still classify produce-shaped accessories as produce in /offers) — run
    `npx wrangler deploy` from `…\serverless-connector\brochure-engine\`.
    Until then production /prices and /offers still fail size-carrying
    queries ("Arwa Water 1.5L"); the deployed frontend degrades gracefully

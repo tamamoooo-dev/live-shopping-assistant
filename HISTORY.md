@@ -3988,3 +3988,68 @@ overflowed narrow screens — `.market-head` wraps and ≤560px the sort
 toggle becomes a full-width three-segment row (verified at 375×812: no
 horizontal overflow, flyer-cart adds without opening the viewer, card tap
 still opens it, disclosure expands 4 linked store rows).
+
+## §36 · Search Intelligence: the Featured perspective (2026-07-16)
+
+**Why.** The three grid perspectives were all mechanical sorts (price / unit
+value / discount depth). The milestone directive: keep exactly three modes,
+make one of them INTELLIGENT — replace "Most discounted" with **Featured**,
+ranking what a shopper naturally expects to see first — while preserving
+everything that already works (Best Value untouched; Browse untouched; brand
+precision untouched; the matching engine never replaced, only built upon).
+
+**1 · Featured (new `src/featured.js`, frontend-only).** A lightweight
+intelligence layer ABOVE the engine: the stage → family-band backbone still
+decides quality groups (an intelligent pick can never outrank a better
+match), and a bounded `featuredScore` orders WITHIN a group from four signal
+sources: **(a) curated positive signals** — a category-aware bilingual KB
+(organic/local/imported/fresh/premium/origin words, explicit fat content on
+dairy, sugar-free on beverages, named varieties, well-known produce brands:
+Sharbatly/Del Monte/Driscoll's/Chiquita/Dole) where each signal carries
+per-category weights and contributes nothing in categories it's meaningless
+for (curated boost capped at 2); **(b) expected market behaviour** — the
+median price of the PRIMARY matches defines what the product typically
+costs, and prices outside 0.5×–2× take a soft log-scaled penalty (capped
+2.5) — a ranking nudge, never a filter; **(c) a small honest deal signal**
+(advertised discount fraction, capped +0.6); **(d) learning** — every real
+card engagement (open / add-to-cart / watch) increments the query's
+family-keyed signal+brand counts in localStorage (`lsa.featured.learn.v1`,
+counts/ids/keys all capped, saturating boost ≤1.5), so "strawberry → local"
+strengthens gradually across BOTH languages (family-keyed) and arbitrary
+brands learn through the explicit brand field (`b:<brand>` dynamic ids).
+Learning is ranking-only and never touches canonical product data. Not
+mirrored on purpose: Featured is a grid perspective, not matching.
+
+**2 · Lowest price is price-first.** The §35 order (stage → band → price)
+still let word position beat price: a brand-led "المراعي حليب" (stage 4) sat
+under every milk-led name (stage 5) however cheap, and flyer OCR names led
+by banner debris ("wow july موز اكوادور كيلو") could never reach the top.
+Now the price perspective compares stages at the **'primary' band**
+granularity (`stageBand(stage, multi, 'primary')` — the same collapse the
+JOURNEY history tier already declares for "word position never splits a
+series"): 5+4 are one band single-word, all full-coverage stages one band
+multi-word; family bands and the fresh-produce demotions hold unchanged, so
+a look-alike family still can't headline on price. Featured and Best value
+keep exact stages.
+
+**3 · Live-verified, with three lexicon catches.** Verified against the real
+grid ("موز", 74 offers): Featured led with Chiquita-named + Chiquita-branded
+discounted bananas, then origin-signal bananas by price, generic after,
+look-alikes last; price-first led 4.75/4.95/5.75/5.95 including the
+banner-led flyer names the old order buried. Live data exposed and fixed:
+(a) تشيكيتا — the actual Chiquita transliteration — missing from the KB;
+(b) محلى (sweetened) normalizes to محلي (local) via the ى→ي fold — the raw
+alif-maqsura spelling is now dropped pre-normalization so a sweetened
+product can never earn 'local' (conservative failure: a local product
+written with ى just goes unboosted); (c) two produce-shaped accessories
+ranking as produce — banana hair clips ("مشابك شعر موز") and a banana
+keychain ("سلسلة مفاتيح … موز") — fixed in the FAMILY lexicons (mirror
+change, both repos + both test suites: مشبك/مشابك → care, مفاتيح/keychain/
+keyring/ميداليه → toy).
+
+**Migration & UI.** The persisted rank pref maps 'discount' → 'featured'
+(a remembered Most-discounted choice lands on the tab that replaced it);
+sort labels/subnotes updated EN+AR ("Featured"/"المختارة"). Tests:
+`src/featured.test.mjs` (48 assertions, hermetic storage) + one new family
+assertion per mirror suite; all suites green (frontend 239/80/48, engine
+watchtest/offerstest/pricetest).

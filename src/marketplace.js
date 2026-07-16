@@ -23,7 +23,8 @@
 
 import { openBrochureViewer } from './viewer.js';
 import { brochureForOffer, storeLabel, storeColor } from './brochure.js';
-import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage } from './match.js';
+import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, queryTokens, stageBand } from './match.js';
+import { featuredScore, featuredContext, recordChoice } from './featured.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.js';
 import { addToCart } from './cart.js';
@@ -135,9 +136,8 @@ function entryStage(e, query) {
 // entry with a FORM word ("رول فراولة" — a cake roll the lexicon can't see)
 // drops to the bottom, a processed one (frozen/canned/peeled) to the middle;
 // "فراولة مجمدة" as the query switches this off.
-// Part of the search engine's ranking (makeComparator). Lowest price never
-// calls this — it only reorders the ranked list's OUTPUT by price. The taxonomy
-// family/identity bands are left exactly as-is.
+// Part of the search engine's ranking (makeComparator) — every perspective
+// keeps these bands (Lowest price collapses only the STAGE key, never these).
 function entryBand(e, qFam, freshFam) {
   if (qFam) {
     const f = entryFamily(e);
@@ -162,15 +162,22 @@ function entryBand(e, qFam, freshFam) {
   return r >= 75 ? 2 : r >= 45 ? 1 : 0;
 }
 // Three ranking perspectives the user can switch between:
-//   • 'price'    — lowest total price first.
+//   • 'price'    — PRICE-FIRST: "show me the cheapest matching products". The
+//     matching engine still decides what qualifies, but stages are compared at
+//     the 'primary' BAND granularity (match.js stageBand — the same collapse
+//     the JOURNEY history tier declares), so word position ("حليب المراعي" vs
+//     "المراعي حليب") never beats a lower price; family bands still hold, so a
+//     known look-alike family can't headline on price alone.
 //   • 'value'    — best price per comparable unit first (what the comparison
 //     engine already reasons about). Value is only fair WITHIN one unit family,
 //     so the ranking compares per-unit prices only among entries in the pool's
 //     dominant unit (the one shared by the most sized entries); everything else
 //     falls back to price, after the unit-ranked block.
-//   • 'discount' — biggest advertised discount first (the Browse "Biggest
-//     Drops" experience, brought into the search journey); entries without a
-//     real strike-through price follow, ordered by price.
+//   • 'featured' — the INTELLIGENT perspective (featured.js): within each
+//     quality group, products carrying meaningful category-aware signals
+//     (organic/local/known produce brands/…), priced where the market expects,
+//     and matching learned user preferences rise first. An intelligence layer
+//     above the engine — it can never promote past a better stage or band.
 // Match quality always comes first (stage → family band), so strong matches
 // stay together and a cheap look-alike never outranks the real product in ANY
 // perspective — the transition to related products is driven by match quality,
@@ -205,16 +212,43 @@ function entryDiscount(e) {
   }
   return e._disc;
 }
+// The entry's Featured score (featured.js) — computed against a per-render
+// context (expected price + learned preferences) and cached on the entry until
+// the next Featured render (learning can change between renders).
+function entryFeatured(e, ctx) {
+  if (e._feat === undefined || e._featCtx !== ctx) {
+    e._featCtx = ctx;
+    e._feat = featuredScore(
+      {
+        text: entryText(e),
+        brand: e.kind === 'online' ? e.it.brand : '',
+        family: entryFamily(e),
+        price: entryPrice(e),
+        discount: entryDiscount(e),
+      },
+      ctx,
+    );
+  }
+  return e._feat;
+}
 // makeComparator — the SEARCH ENGINE's ordering. Relevance backbone first
 // (Search-Roadmap stage → family band) in EVERY perspective — strong matches
 // stay together and related products only begin where match quality genuinely
 // drops. Within a quality group the chosen perspective orders: price ascending
-// (Lowest price), per-unit value (Best value), or discount depth (Most
-// discounted).
-function makeComparator(query, qFam, freshFam, sort, domUnit) {
+// (Lowest price — its stage key compares at the 'primary' band so price leads
+// among genuine matches), per-unit value (Best value), or the Featured score.
+function makeComparator(query, qFam, freshFam, sort, domUnit, featCtx) {
+  const multiWord = queryTokens(query).length > 1;
   return (a, b) => {
-    const stage = entryStage(b, query) - entryStage(a, query);
-    if (stage) return stage;
+    if (sort === 'price') {
+      const stage =
+        stageBand(entryStage(b, query), multiWord, 'primary') -
+        stageBand(entryStage(a, query), multiWord, 'primary');
+      if (stage) return stage;
+    } else {
+      const stage = entryStage(b, query) - entryStage(a, query);
+      if (stage) return stage;
+    }
     const band = entryBand(b, qFam, freshFam) - entryBand(a, qFam, freshFam);
     if (band) return band;
     if (sort === 'value' && domUnit) {
@@ -227,10 +261,10 @@ function makeComparator(query, qFam, freshFam, sort, domUnit) {
       if (bIn) return 1;
       // neither is in the dominant unit family -> fall back to price
     }
-    if (sort === 'discount') {
-      const d = entryDiscount(b) - entryDiscount(a);
-      if (d) return d;
-      return priceKey(a, b); // undiscounted (and ties): cheapest first
+    if (sort === 'featured' && featCtx) {
+      const f = entryFeatured(b, featCtx) - entryFeatured(a, featCtx);
+      if (f) return f;
+      return priceKey(a, b); // equal intelligence: cheapest first
     }
     return priceKey(a, b); // 'price' and value's fallback: lowest total first
   };
@@ -550,7 +584,7 @@ export async function openFlyerOffer(offer) {
 export function createMarketplace(root, stores, query = '', opts = {}) {
   const qFam = queryFamily(query);
   const freshFam = freshProduceIntent(query);
-  let sort = opts.sort === 'value' || opts.sort === 'discount' ? opts.sort : 'price';
+  let sort = opts.sort === 'value' || opts.sort === 'featured' ? opts.sort : 'price';
   const onSort = typeof opts.onSort === 'function' ? opts.onSort : () => {};
   // Sources strip: one status chip per selected store (+ its flyer chip slot),
   // plus one chip for this week's flyer offers.
@@ -620,7 +654,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   const SORTS = [
     ['price', t('market.lowestPrice')],
     ['value', t('market.bestValue')],
-    ['discount', t('market.mostDiscounted')],
+    ['featured', t('market.featured')],
   ];
   for (const [mode, label] of SORTS) {
     const b = el('button', 'sort-opt', label);
@@ -678,12 +712,30 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     render();
   }
 
+  // Featured's per-render context: the expected market price comes from the
+  // PRIMARY matches only (a look-alike's price must not skew what "a banana
+  // costs"), learned preferences are re-read so a tap refines the next render.
+  function buildFeaturedContext() {
+    const multiWord = queryTokens(query).length > 1;
+    const primary = pool.filter(
+      (e) => stageBand(entryStage(e, query), multiWord, 'primary') >= (multiWord ? 2 : 4),
+    );
+    return featuredContext(query, primary.map(entryPrice));
+  }
+
   function render() {
     // The search engine produces the ranked list (makeComparator) — quality
     // groups first, the chosen perspective within them. The retailer filter
     // only reduces which entries are shown.
     const ordered = [...pool].sort(
-      makeComparator(query, qFam, freshFam, sort, sort === 'value' ? dominantUnit(pool) : null),
+      makeComparator(
+        query,
+        qFam,
+        freshFam,
+        sort,
+        sort === 'value' ? dominantUnit(pool) : null,
+        sort === 'featured' ? buildFeaturedContext() : null,
+      ),
     );
     // Unit-price display guard (never show a misleading unit price): per-unit
     // values implausibly far off their unit family's pool median are almost
@@ -708,8 +760,8 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     subnote.textContent =
       sort === 'value'
         ? t('market.sortedValue')
-        : sort === 'discount'
-        ? t('market.sortedDiscount')
+        : sort === 'featured'
+        ? t('market.sortedFeatured')
         : t('market.sortedPrice');
     subnote.hidden = finished && !view.length;
     body.innerHTML = '';
@@ -732,7 +784,17 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     for (const e of visible) {
       const badge = matchBadge(e, query, qFam, freshFam);
       const up = upSuppressed.has(e) ? null : entryUnit(e);
-      grid.appendChild(e.kind === 'online' ? onlineCard(e.store, e.it, badge, up) : flyerCard(e.listing, badge, up));
+      const card = e.kind === 'online' ? onlineCard(e.store, e.it, badge, up) : flyerCard(e.listing, badge, up);
+      // Featured LEARNING (featured.js): every real engagement with a card —
+      // open, add-to-cart, watch — strengthens this query's relationship with
+      // the chosen product's signals/brand. Capture-phase so inner buttons
+      // count too; ranking-only, never touches the entry or product data.
+      card.addEventListener(
+        'click',
+        () => recordChoice(query, entryText(e), e.kind === 'online' ? e.it.brand : ''),
+        { capture: true },
+      );
+      grid.appendChild(card);
     }
     body.appendChild(grid);
     if (view.length > DEFAULT_VISIBLE) {

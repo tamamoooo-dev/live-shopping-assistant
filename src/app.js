@@ -306,8 +306,12 @@ async function runSearch(query) {
   // the source shown as a lightweight badge. Per-store status (and the weekly
   // flyer chips) live in the compact sources strip above the grid. The ranking
   // perspective (lowest price vs best value) is a remembered daily-use preference.
+  // 'discount' was replaced by 'featured' (Search Intelligence milestone) —
+  // a remembered Most-discounted preference migrates to the tab that took its
+  // place, never silently back to the default.
+  const savedRank = memory.get('rank') === 'discount' ? 'featured' : memory.get('rank');
   const market = createMarketplace(results, stores, q, {
-    sort: ['value', 'discount'].includes(memory.get('rank')) ? memory.get('rank') : 'price',
+    sort: ['value', 'featured'].includes(savedRank) ? savedRank : 'price',
     onSort: (mode) => memory.set('rank', mode),
   });
   for (const s of stores) fillFlyer(market.flyerSlot(s.id), s.id, token); // best-effort
