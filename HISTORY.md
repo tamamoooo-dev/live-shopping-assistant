@@ -4079,3 +4079,10 @@ perspectives lead with genuine Arwa 1.5L; jugs/kettles/hot-water bags all
 classify houseware while every real water (incl. "زجاجة مياه من اروى")
 keeps its family. Tests: 4 new frontend assertions + 4 engine (steamer cap,
 genuine-water non-demotion, زجاجة/Kettle-Chips false-positive locks).
+
+*Same-day follow-ups from production /offers*: the houseware lexicon gained
+مضخه/مضخات (rechargeable water pumps in flyer data) and ترمس — reversing the
+addendum's initial exclusion: water-thermos offers were live pollution, and
+the lupin-beans homograph is self-neutralizing (a lupin query containing
+ترمس classifies to the SAME family as the lupin products, and same-family
+never gates; tested in both mirrors).
