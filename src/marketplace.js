@@ -24,7 +24,7 @@
 import { openBrochureViewer } from './viewer.js';
 import { brochureForOffer, storeLabel, storeColor } from './brochure.js';
 import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, queryTokens, stageBand } from './match.js';
-import { featuredScore, featuredContext, recordChoice } from './featured.js';
+import { featuredScore, featuredContext, recordChoice, isPrimaryPriceTier } from './featured.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.js';
 import { addToCart } from './cart.js';
@@ -162,12 +162,13 @@ function entryBand(e, qFam, freshFam) {
   return r >= 75 ? 2 : r >= 45 ? 1 : 0;
 }
 // Three ranking perspectives the user can switch between:
-//   • 'price'    — PRICE-FIRST: "show me the cheapest matching products". The
-//     matching engine still decides what qualifies, but stages are compared at
-//     the 'primary' BAND granularity (match.js stageBand — the same collapse
-//     the JOURNEY history tier declares), so word position ("حليب المراعي" vs
-//     "المراعي حليب") never beats a lower price; family bands still hold, so a
-//     known look-alike family can't headline on price alone.
+//   • 'price'    — PRICE-FIRST, **LOCKED** (user directive 2026-07-16, see
+//     featured.js isPrimaryPriceTier): exactly TWO tiers. Genuine matches of
+//     the queried product are ordered by PRICE ALONE — "milk 1 riyal comes
+//     before milk 3 riyals no matter how identical the 3-riyal milk is to the
+//     search criteria" — and the related tail (weak/flavour/known-different-
+//     family matches) follows. Never split the genuine tier by any exactness
+//     signal again unless the user explicitly asks.
 //   • 'value'    — best price per comparable unit first (what the comparison
 //     engine already reasons about). Value is only fair WITHIN one unit family,
 //     so the ranking compares per-unit prices only among entries in the pool's
@@ -241,14 +242,23 @@ function makeComparator(query, qFam, freshFam, sort, domUnit, featCtx) {
   const multiWord = queryTokens(query).length > 1;
   return (a, b) => {
     if (sort === 'price') {
+      // THE LOCKED CONTRACT (featured.js isPrimaryPriceTier): genuine matches
+      // by price alone, then the related tail (which keeps the quality
+      // backbone so a known look-alike still sits at the very bottom).
+      const ga = isPrimaryPriceTier(entryStage(a, query), multiWord, entryBand(a, qFam, freshFam), qFam);
+      const gb = isPrimaryPriceTier(entryStage(b, query), multiWord, entryBand(b, qFam, freshFam), qFam);
+      if (ga !== gb) return ga ? -1 : 1;
+      if (ga) return priceKey(a, b); // tier 1: PRICE ALONE — never split further
       const stage =
         stageBand(entryStage(b, query), multiWord, 'primary') -
         stageBand(entryStage(a, query), multiWord, 'primary');
       if (stage) return stage;
-    } else {
-      const stage = entryStage(b, query) - entryStage(a, query);
-      if (stage) return stage;
+      const tailBand = entryBand(b, qFam, freshFam) - entryBand(a, qFam, freshFam);
+      if (tailBand) return tailBand;
+      return priceKey(a, b);
     }
+    const stage = entryStage(b, query) - entryStage(a, query);
+    if (stage) return stage;
     const band = entryBand(b, qFam, freshFam) - entryBand(a, qFam, freshFam);
     if (band) return band;
     if (sort === 'value' && domUnit) {

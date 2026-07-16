@@ -4086,3 +4086,19 @@ addendum's initial exclusion: water-thermos offers were live pollution, and
 the lupin-beans homograph is self-neutralizing (a lupin query containing
 ترمس classifies to the SAME family as the lupin products, and same-family
 never gates; tested in both mirrors).
+
+**Lowest price LOCKED (same day, explicit user directive).** "Lowest price
+should always prioritize lowest price that match the basic ranking — milk
+1 riyal should come before milk 3 riyals no matter how identical the
+3-riyal milk is to the search criteria. Fix it and never change it again
+unless I say explicitly otherwise." The perspective is now exactly TWO
+tiers (`isPrimaryPriceTier`, featured.js): genuine matches — 'primary'
+stage-band top AND, under a family query, family band ≥2 (confirmed /
+processed-variant / strong family-less; known-different-family and
+typed/flavour look-alikes stay tail) — ordered by PRICE ALONE, then the
+related tail (which keeps the quality backbone so look-alikes still sit
+last). Live-verified on "حليب": 229 genuine matches in one strictly
+price-ascending run (1.25 → …), brand-led and milk-led names interleaved
+purely by price. Locked tests in featured.test.mjs; rule 9 records the
+directive. Future sessions: do NOT reorder this perspective as part of any
+search improvement.

@@ -15,8 +15,9 @@
 > deal signal, and localStorage LEARNING from real card engagements
 > (`lsa.featured.learn.v1`, bounded, ranking-only) — all ordering WITHIN the
 > stage → family-band quality groups, never past them. **Lowest price is
-> price-first**: it compares stages at the 'primary' band (`stageBand`
-> collapse — word position never beats price); Best value unchanged. Saved
+> price-first and LOCKED by user directive**: genuine matches by PRICE
+> ALONE, then the related tail (rule 9; `isPrimaryPriceTier`, featured.js
+> — never change without an explicit user ask); Best value unchanged. Saved
 > 'discount' rank pref migrates to 'featured'. Mirror side effect: family
 > lexicons gained مشبك/مشابك (care) + مفاتيح/keychain/keyring/ميداليه (toy)
 > in both repos — produce-shaped accessories found live. **Engine deployed
@@ -172,12 +173,15 @@ conflicts with this file, this file wins).
    capacity digits) — family evidence beats coverage; unknown families are
    never demoted.
    **Stage GRANULARITY is per-perspective** (HISTORY §36): Featured and Best
-   value compare exact stages; the grid's Lowest-price perspective compares
-   at the 'primary' stageBand (5+4 one band single-word, full-coverage one
-   band multi-word — the same collapse the JOURNEY history tier declares) so
-   word position never beats price. Collapsing is the only liberty: nothing
-   may ever promote past a better BAND, and family bands hold in every
-   perspective.
+   value compare exact stages. **The Lowest-price perspective is LOCKED by
+   explicit user directive (2026-07-16)**: exactly TWO tiers — genuine
+   matches of the queried product ordered by PRICE ALONE ("milk 1 riyal
+   comes before milk 3 riyals no matter how identical the 3-riyal milk is
+   to the search criteria"), then the related tail. No exactness signal
+   (stage 5 vs 4, phrase order, family-confirmation strength) may ever
+   split the genuine tier. The tier gate is `isPrimaryPriceTier`
+   (featured.js, locked tests in featured.test.mjs). DO NOT change this
+   again unless the user explicitly asks.
 10. **INTERPRETATION IS SHARED; ONLY DECLARED POLICY DIFFERS** (HISTORY §34).
    Every comparison-shaped feature — Shopping Summary (compare.js), watch
    alerts (monitor.js), /prices statistics (priceHistory.js) — resolves "which

@@ -23,7 +23,29 @@
 // is a grid ranking perspective, not matching; the matching mirrors (match.js
 // ↔ engine matching.js) are untouched, so there is nothing to mirror.
 
-import { normalizeText, queryFamily, queryTokens, isProduceFamily } from './match.js';
+import { normalizeText, queryFamily, queryTokens, isProduceFamily, stageBand } from './match.js';
+
+// --- THE LOWEST-PRICE CONTRACT (LOCKED — user directive 2026-07-16) -----------
+// "Lowest price should always prioritize lowest price that match the basic
+// ranking: milk 1 riyal should come before milk 3 riyals no matter how
+// identical the 3-riyal milk is to the search criteria."
+// The perspective has exactly TWO tiers:
+//   1. GENUINE matches — entries that pass the basic matching gate (all query
+//      terms matched / the primary product, and not a KNOWN different family
+//      or flavour-only look-alike) — ordered by PRICE ALONE. No exactness
+//      refinement (phrase order, headedness, family-confirmation strength)
+//      may ever split this tier.
+//   2. everything else (the related tail), below.
+// DO NOT change this behaviour again unless the user explicitly asks.
+// isPrimaryPriceTier answers "is this entry in tier 1?": stage at the
+// 'primary' band top (single-word ≥4, multi-word = all terms matched) and,
+// when the query names a family, a family band ≥2 (family-confirmed,
+// processed-produce variant, or strong family-less) — band 1/0 (weak
+// family-less, known different family, typed/flavoured look-alike) is tail.
+export function isPrimaryPriceTier(stage, multiWord, famBand, qFam) {
+  if (stageBand(stage, multiWord, 'primary') < (multiWord ? 2 : 4)) return false;
+  return qFam ? famBand >= 2 : true;
+}
 
 // --- category intelligence ---------------------------------------------------
 // Different categories value different attributes (milestone §3). Families come

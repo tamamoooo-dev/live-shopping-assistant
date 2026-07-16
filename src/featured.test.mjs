@@ -13,7 +13,7 @@
 import {
   familyCategory, detectSignals, brandId, medianPrice, pricePenalty,
   learnKeyFor, recordChoice, learnedCounts, learnBoost, featuredScore,
-  featuredContext, _setLearnStorage,
+  featuredContext, _setLearnStorage, isPrimaryPriceTier,
 } from './featured.js';
 
 let pass = 0, fail = 0;
@@ -107,6 +107,24 @@ ok('persisted to storage', JSON.parse(mem.get('lsa.featured.learn.v1'))['f:milk'
 // --- deal signal is small and honest ---
 ok('discount adds a small boost', near(scoreOf('موز', 'banana', { discount: 0.3 }), 0.36));
 ok('deal boost capped at 50% discount', near(scoreOf('موز', 'banana', { discount: 0.9 }), 0.6));
+
+// --- THE LOWEST-PRICE CONTRACT (LOCKED — user directive 2026-07-16) ---
+// Genuine matches form ONE price-only tier: no exactness signal (stage 5 vs 4,
+// phrase vs whole-word, family-confirmation strength 3 vs 2) may split it.
+// Do NOT weaken these assertions unless the user explicitly asks.
+ok('single-word: headed (5) and trailing (4) primary are ONE tier',
+  isPrimaryPriceTier(5, false, 3, 'milk') && isPrimaryPriceTier(4, false, 3, 'milk'));
+ok('single-word: weak substring (2) is tail', !isPrimaryPriceTier(2, false, 3, 'milk'));
+ok('single-word: flavour/secondary (1) is tail', !isPrimaryPriceTier(1, false, 3, 'milk'));
+ok('multi-word: all full-coverage stages (5..2) are ONE tier',
+  isPrimaryPriceTier(5, true, 3, 'milk') && isPrimaryPriceTier(2, true, 3, 'milk'));
+ok('multi-word: a missing term (1) is tail', !isPrimaryPriceTier(1, true, 3, 'milk'));
+ok('family bands 3 and 2 are ONE tier (confirmation strength never splits)',
+  isPrimaryPriceTier(4, false, 3, 'strawberry') && isPrimaryPriceTier(4, false, 2, 'strawberry'));
+ok('known different family / look-alike (band 0) is tail', !isPrimaryPriceTier(5, false, 0, 'milk'));
+ok('weak family-less (band 1) is tail under a family query', !isPrimaryPriceTier(4, false, 1, 'milk'));
+ok('family-less query: stage alone decides the tier',
+  isPrimaryPriceTier(4, false, 0, null) && !isPrimaryPriceTier(2, false, 3, null));
 
 // --- storage failure is silent (learning off, never a crash) ---
 _setLearnStorage({ getItem: () => { throw new Error('boom'); }, setItem: () => { throw new Error('boom'); } });
