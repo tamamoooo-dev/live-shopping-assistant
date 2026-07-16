@@ -13,9 +13,12 @@
 > filtered (the V1 frontend never sent `brand=` — root cause of "wrong
 > products on brand pages"), brand-detection precision guards (dept
 > allowlists, neighbor vetoes, fuzzy repair removed), brand identity hero +
-> product-families chips, fresh→frozen read-time refinement. ⚠️ Pending:
-> engine `wrangler deploy` + per-store `/prices/backfill` re-stamp (blocked
-> on a permission prompt at session end), then production verification.
+> product-families chips, fresh→frozen read-time refinement. Engine deployed
+> and production-verified 2026-07-16 (2 rails; frozen fold live —
+> chicken-poultry 436→388, frozen-poultry 32→80; brand pages filtered w/
+> families chips). ⚠️ Only the brand RE-STAMP is pending: the weekly upsert
+> self-heals it at the next ingest cron (Fri 06:00Z), or run the §11 TODO 0
+> backfill for an immediate fix.
 > (Viewer v2 / i18n / brand-knowledge milestones of 2026-07-10..15
 > are in git history; their HISTORY sections are still pending.)
 
@@ -442,13 +445,15 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
-0. **Finish the V1.1 rollout** (blocked on a permission prompt 2026-07-16):
-   from `brochure-engine/`: `npx wrangler deploy`, then rotate
-   `INGEST_SECRET` and run `POST /prices/backfill?store=<id>` per store
-   (paced a few seconds apart) to re-stamp `brand_slug` with the new
-   detection; spot-check `/browse` (2 rails), `/browse/offers?brand=kiri`
-   (families present), `dept=fresh` vs `dept=frozen` (no frozen-marked rows
-   in fresh).
+0. **V1.1 brand re-stamp** (everything else is deployed & verified): the
+   ~130 wrong / 31 stale `brand_slug` stamps in D1 self-heal at the next
+   ingest cron (the weekly upsert re-stamps every re-extracted offer —
+   first fire Fri 2026-07-17 06:00Z). For an immediate fix instead: rotate
+   `INGEST_SECRET` (was permission-blocked 2026-07-16) and run
+   `POST /prices/backfill?store=<id>` per store, paced. Verify with:
+   `SELECT brand_slug, COUNT(*) FROM offers WHERE valid_to >= date('now')
+   AND brand_slug IN ('hana','kdd','puck','galaxy') GROUP BY 1` — hana must
+   be 0, the others should drop vs their 2026-07-16 audit counts (22/62/34).
 1. **Browse Phase 4** (BROWSE-DESIGN.md §11; none is urgent): reintroduce
    **Exceptional Deals** once the history substrate is deep enough to score
    it honestly (deals.js is kept pure+tested for exactly this), brand mining
