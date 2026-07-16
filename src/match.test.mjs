@@ -162,6 +162,7 @@ ok('houseware for water query gates to stage 1', matchStage({ name: 'غلاية 
 ok('bottled water sold as زجاجة stays water', productFamily('زجاجة مياه من اروى') === 'water');
 ok('bottled water w/ size stays water', productFamily('مياه شرب معبأة من أروى، 6 قطع× 1.5 لتر') === 'water');
 ok('Kettle Chips stays chips', productFamily('Kettle Chips Sea Salt 150g') === 'chips');
+ok('water pump -> houseware', productFamily('رويال فورد مضخة ماء قابلة للشحن') === 'houseware');
 ok('air-fryer fries stay potato (للقلاية attached)', productFamily('بطاطس للقلاية الهوائية 1 كجم') === 'potato');
 // multi-word known-different-family cap (the "ماء أروى 1.5 steamer" regression):
 // accidental full token coverage (brand-prefix ارويك + purpose word ماء +
