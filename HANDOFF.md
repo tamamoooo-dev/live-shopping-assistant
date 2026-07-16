@@ -19,7 +19,10 @@
 > collapse — word position never beats price); Best value unchanged. Saved
 > 'discount' rank pref migrates to 'featured'. Mirror side effect: family
 > lexicons gained مشبك/مشابك (care) + مفاتيح/keychain/keyring/ميداليه (toy)
-> in both repos — produce-shaped accessories found live.
+> in both repos — produce-shaped accessories found live. **Engine deployed
+> 2026-07-16** (user-approved; this deploy also closed the §35 TODO -1 —
+> production /prices now answers "Arwa Water 1.5L" with the real record,
+> verified 5.99 SAR @ tamimi).
 > Previous change: **Search Experience
 > Refinement** (HISTORY §35) — the polish milestone, nine tasks, no
 > architecture change. Headliners: **size-aware queries** in BOTH matching
@@ -33,9 +36,8 @@
 > only on explicit counts (`parseSize().src` trust ladder) + a grid-level
 > unit-price outlier guard; Lowest price now orders stage → band → price
 > (the arbitrary top-20 window transform is GONE); third grid sort **Most
-> discounted** (stage → band → discount). ⚠️ Engine deploy was
-> permission-blocked in the build session — run `npx wrangler deploy` from
-> `brochure-engine/` (frontend already compatible either way).
+> discounted** (stage → band → discount). Its engine half
+> deployed 2026-07-16 together with §36 (closed the old TODO -1).
 > Previous change: **Journey Coherence V1**
 > (HISTORY §34) — one interpretation, declared policy: the four hand-rolled
 > gate stacks (Shopping Summary, watch alerts, /prices statistics — plus the
@@ -528,16 +530,6 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
--1. **Deploy the engine** (still pending; permission-blocked AGAIN in the
-   §36 session, 2026-07-16): ships the §35 size-aware query layer AND the
-   §36 accessory lexicon words (مشابك/مفاتيح — until then the engine can
-   still classify produce-shaped accessories as produce in /offers) — run
-   `npx wrangler deploy` from `…\serverless-connector\brochure-engine\`.
-   Until then production /prices and /offers still fail size-carrying
-   queries ("Arwa Water 1.5L"); the deployed frontend degrades gracefully
-   (its own gates are already size-aware). Verify after deploy:
-   `curl "https://brochure-engine.tamamoooo.workers.dev/prices?q=Arwa%20Water%201.5L"`
-   should return variants instead of an empty doc (given arwa data exists).
 0. **V1.1 brand re-stamp** (everything else is deployed & verified): the
    ~130 wrong / 31 stale `brand_slug` stamps in D1 self-heal at the next
    ingest cron (the weekly upsert re-stamps every re-extracted offer —
