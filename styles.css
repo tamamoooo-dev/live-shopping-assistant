@@ -622,18 +622,44 @@ button { font-family: inherit; }
 .summary-conf.conf-medium .conf-dot { background: var(--brand); }
 .summary-conf.conf-low .conf-dot { background: var(--warn, #d97706); }
 
-.summary-overview {
+.summary-hero { margin-top: 12px; }
+/* image + recommendation, side by side (the image makes the pick recognizable) */
+.summary-hero-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 4px;
+}
+.summary-hero-main { min-width: 0; flex: 1; }
+.summary-thumb {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.summary-thumb img { width: 100%; height: 100%; object-fit: contain; }
+/* one muted footer line: coverage · price range · exclusions (tooltip) */
+.summary-meta {
   display: flex;
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 8px;
-  font-size: 13px;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
-.summary-range { margin-left: auto; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-
-.summary-hero { margin-top: 12px; }
+.summary-excluded { margin-left: auto; cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+.summary-cart.is-added { border-color: var(--good, #16a34a); color: var(--good, #16a34a); }
 .summary-kicker {
   display: inline-block;
   font-size: 11px;
@@ -681,9 +707,6 @@ a.summary-name:hover { text-decoration: underline; }
   font-weight: 700;
   color: var(--brand);
 }
-/* look-alikes from a different product family were excluded — quiet trust cue */
-.summary-family-note { margin-top: 6px; font-size: 12px; color: var(--muted); }
-
 .summary-value {
   display: flex;
   align-items: center;
@@ -1179,6 +1202,9 @@ a.summary-name:hover { text-decoration: underline; }
 .card:hover .card-watch, .card:focus-within .card-watch { opacity: 1; }
 .card-watch:hover { transform: scale(1.08); border-color: var(--brand); }
 @media (hover: none) { .card-watch { opacity: 0.85; } } /* touch: always visible */
+/* the card's Add-to-Cart action — same idiom as the watch bell, stacked below it */
+.card-cart { top: 42px; }
+.card-cart.is-added { border-color: var(--good, #16a34a); color: var(--good, #16a34a); opacity: 1; }
 
 /* --- the watch dialog --- */
 .watch-dialog {

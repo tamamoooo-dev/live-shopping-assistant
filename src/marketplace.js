@@ -26,13 +26,10 @@ import { brochureForOffer, storeLabel, storeColor } from './brochure.js';
 import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage } from './match.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.js';
+import { addToCart } from './cart.js';
 import { t, tn } from './i18n.js';
 
 const DEFAULT_VISIBLE = 12;
-// Lowest price is a presentation transform: only the first PRICE_SORT_WINDOW of
-// the engine's ranked list are reordered by price; the rest stay as ranked.
-// Single tunable knob — nothing else about Lowest price depends on the value.
-const PRICE_SORT_WINDOW = 20;
 
 // The card-building primitives (el/money/cardImage/priceRow/storeBadge) and
 // the flyer-offer tap-through are EXPORTED: the Browse page composes its cards
@@ -164,14 +161,20 @@ function entryBand(e, qFam, freshFam) {
   const r = entryRel(e);
   return r >= 75 ? 2 : r >= 45 ? 1 : 0;
 }
-// Two ranking perspectives the user can switch between (milestone objective 1):
-//   • 'price' — lowest total price first (the original behaviour).
-//   • 'value' — best price per comparable unit first (what the comparison engine
-//     already reasons about). Value is only fair WITHIN one unit family, so the
-//     ranking compares per-unit prices only among entries in the pool's dominant
-//     unit (the one shared by the most sized entries); everything else falls back
-//     to price, after the unit-ranked block. Relevance bands still come first, so
-//     a cheap look-alike never outranks the real product either way.
+// Three ranking perspectives the user can switch between:
+//   • 'price'    — lowest total price first.
+//   • 'value'    — best price per comparable unit first (what the comparison
+//     engine already reasons about). Value is only fair WITHIN one unit family,
+//     so the ranking compares per-unit prices only among entries in the pool's
+//     dominant unit (the one shared by the most sized entries); everything else
+//     falls back to price, after the unit-ranked block.
+//   • 'discount' — biggest advertised discount first (the Browse "Biggest
+//     Drops" experience, brought into the search journey); entries without a
+//     real strike-through price follow, ordered by price.
+// Match quality always comes first (stage → family band), so strong matches
+// stay together and a cheap look-alike never outranks the real product in ANY
+// perspective — the transition to related products is driven by match quality,
+// never by an arbitrary numeric window.
 function priceKey(a, b) {
   const pa = entryPrice(a);
   const pb = entryPrice(b);
@@ -191,11 +194,23 @@ function dominantUnit(pool) {
   for (const [unit, c] of counts) if (!top || c > top.c) top = { unit, c };
   return top ? top.unit : null;
 }
-// makeComparator — the SEARCH ENGINE's ordering, the ranked list both views
-// build on. Relevance backbone first (Search-Roadmap stage → family band). In
-// Best value it then orders by best price per comparable unit; otherwise it is
-// pure relevance (… → score). Price is NOT a ranking key here — Lowest price
-// applies it separately as a presentation transform (transformTopPriceWindow).
+// The entry's advertised discount fraction (0..1), or 0 when there is no real
+// strike-through price. Honest by construction: only a "was" price HIGHER than
+// the current price counts — the same gate the engine's Offer contract applies.
+function entryDiscount(e) {
+  if (e._disc === undefined) {
+    const p = entryPrice(e);
+    const old = e.kind === 'online' ? e.it.oldPrice : e.listing.oldPrice;
+    e._disc = p != null && old != null && old > p ? (old - p) / old : 0;
+  }
+  return e._disc;
+}
+// makeComparator — the SEARCH ENGINE's ordering. Relevance backbone first
+// (Search-Roadmap stage → family band) in EVERY perspective — strong matches
+// stay together and related products only begin where match quality genuinely
+// drops. Within a quality group the chosen perspective orders: price ascending
+// (Lowest price), per-unit value (Best value), or discount depth (Most
+// discounted).
 function makeComparator(query, qFam, freshFam, sort, domUnit) {
   return (a, b) => {
     const stage = entryStage(b, query) - entryStage(a, query);
@@ -212,47 +227,55 @@ function makeComparator(query, qFam, freshFam, sort, domUnit) {
       if (bIn) return 1;
       // neither is in the dominant unit family -> fall back to price
     }
-    // Best value's tiebreak is price; the relevance ranking ends on score.
-    return sort === 'value' ? priceKey(a, b) : entryRel(b) - entryRel(a);
+    if (sort === 'discount') {
+      const d = entryDiscount(b) - entryDiscount(a);
+      if (d) return d;
+      return priceKey(a, b); // undiscounted (and ties): cheapest first
+    }
+    return priceKey(a, b); // 'price' and value's fallback: lowest total first
   };
-}
-
-// transformTopPriceWindow — presentation-only. Given the engine's ranked array,
-// stable-sort ONLY its first `window` entries by current price ascending and
-// append the remainder untouched. It knows nothing about HOW the ranking was
-// produced (no stage, band, family, taxonomy or query parsing) — it operates
-// solely on the ranked list and each entry's price. Array.prototype.sort is
-// stable, so equal or missing prices keep the engine's order.
-function priceAscending(a, b) {
-  const pa = entryPrice(a);
-  const pb = entryPrice(b);
-  if (pa == null && pb == null) return 0;
-  if (pa == null) return 1; // no price -> after priced entries
-  if (pb == null) return -1;
-  return pa - pb;
-}
-function transformTopPriceWindow(ranked, window) {
-  const head = ranked.slice(0, window).sort(priceAscending);
-  return head.concat(ranked.slice(window));
 }
 
 // The per-card match-tier badge (UX layer — explains WHY a card sits where it
 // does, without touching ranking). It reads the SAME keys the comparator sorts
 // on: a product of a different identity than the query family (chocolate milk
 // for a "milk" search, ketchup for "tomato") reads "Related" — this is exactly
-// why a cheaper look-alike can appear below a pricier exact product in Lowest
-// price. Otherwise the Search-Roadmap stage decides: all query terms present →
+// why a cheaper look-alike sits below a pricier exact product in every sort.
+// Otherwise the Search-Roadmap stage decides: all query terms present →
 // "Best match", strong-but-partial → "Close match", weaker → "Related".
-function matchBadge(e, query, qFam, freshFam, priceMode) {
-  // Reflects the grouping the current sort uses, so the badge never contradicts
-  // the order. Lowest price groups by stage only, so the badge is purely
-  // stage-based; Best value still groups by family band, so a different-identity
-  // product reads "Related".
-  if (!priceMode && qFam && entryBand(e, qFam, freshFam) <= 0) return { cls: 'related', text: t('market.badge.related') };
+function matchBadge(e, query, qFam, freshFam) {
+  if (qFam && entryBand(e, qFam, freshFam) <= 0) return { cls: 'related', text: t('market.badge.related') };
   const stage = entryStage(e, query);
   if (stage >= 4) return { cls: 'best', text: t('market.badge.best') };
   if (stage === 3) return { cls: 'close', text: t('market.badge.close') };
   return { cls: 'related', text: t('market.badge.related') };
+}
+
+// Entries whose per-unit price is implausible against their unit family's pool
+// median (>6× off, the same OUTLIER_FACTOR the comparison engine uses) — those
+// are size-parse errors, not bargains, and their unit-price label must not be
+// displayed. Needs ≥3 sized entries in a family to judge; below that we can't
+// tell the outlier from the median, so nothing is suppressed.
+function unitOutliers(pool) {
+  const byUnit = new Map();
+  for (const e of pool) {
+    const u = entryUnit(e);
+    if (!u) continue;
+    const arr = byUnit.get(u.unit) || [];
+    arr.push(e);
+    byUnit.set(u.unit, arr);
+  }
+  const bad = new Set();
+  for (const arr of byUnit.values()) {
+    if (arr.length < 3) continue;
+    const values = arr.map((e) => entryUnit(e).value).sort((a, b) => a - b);
+    const median = values[Math.floor(values.length / 2)];
+    for (const e of arr) {
+      const v = entryUnit(e).value;
+      if (v > median * 6 || v < median / 6) bad.add(e);
+    }
+  }
+  return bad;
 }
 
 // D4D lists branch/language variants of the SAME flyer offer (same store, same
@@ -332,7 +355,7 @@ export function priceRow(price, oldPrice, currency, discountLabel, up) {
   return prices;
 }
 
-function onlineCard(store, item, badge) {
+function onlineCard(store, item, badge, up) {
   const a = el('a', 'card');
   // Only navigate when the result carries a real absolute product URL — never
   // send the user to a broken/relative href (a card should always lead exactly
@@ -342,6 +365,39 @@ function onlineCard(store, item, badge) {
     a.href = href;
     a.target = '_blank';
     a.rel = 'noopener';
+  }
+
+  // Add to Cart: one tap puts THIS product on the local shopping list (same
+  // list the flyer viewer's sheet feeds), no page-leaving detour required.
+  if (item.id != null && item.price != null) {
+    const cartBtn = el('button', 'card-watch card-cart', '🛒');
+    cartBtn.type = 'button';
+    cartBtn.title = t('market.addCart');
+    cartBtn.setAttribute('aria-label', t('market.addCartAria', { name: item.name }));
+    cartBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      addToCart({
+        id: `${store.id}:${item.id}`,
+        store: store.id,
+        name: item.name,
+        nameAr: null,
+        price: item.price,
+        oldPrice: item.oldPrice ?? null,
+        currency: item.currency || 'SAR',
+        image: item.image || null,
+        sourceUrl: href,
+        validTo: null,
+      });
+      cartBtn.textContent = '✓';
+      cartBtn.classList.add('is-added');
+      setTimeout(() => {
+        if (!cartBtn.isConnected) return;
+        cartBtn.textContent = '🛒';
+        cartBtn.classList.remove('is-added');
+      }, 1200);
+    });
+    a.appendChild(cartBtn);
   }
 
   // Watch bell: one tap sets a target-price watch on THIS product.
@@ -401,12 +457,12 @@ function onlineCard(store, item, badge) {
   body.appendChild(name);
   const meta = [item.brand, item.size].filter(Boolean).join(' · ');
   if (meta) body.appendChild(el('div', 'card-meta', meta));
-  body.appendChild(priceRow(item.price, item.oldPrice, item.currency, item.discountLabel, unitPrice(item)));
+  body.appendChild(priceRow(item.price, item.oldPrice, item.currency, item.discountLabel, up));
   a.appendChild(body);
   return a;
 }
 
-function flyerCard(listing, badge) {
+function flyerCard(listing, badge, up) {
   const offer = listing.offer;
   const card = el('button', 'card card-flyer');
   card.type = 'button';
@@ -422,7 +478,7 @@ function flyerCard(listing, badge) {
   const name = el('div', 'card-name', displayName);
   name.dir = 'auto';
   body.appendChild(name);
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', listing.up));
+  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up));
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));
@@ -454,7 +510,7 @@ export async function openFlyerOffer(offer) {
 export function createMarketplace(root, stores, query = '', opts = {}) {
   const qFam = queryFamily(query);
   const freshFam = freshProduceIntent(query);
-  let sort = opts.sort === 'value' ? 'value' : 'price';
+  let sort = opts.sort === 'value' || opts.sort === 'discount' ? opts.sort : 'price';
   const onSort = typeof opts.onSort === 'function' ? opts.onSort : () => {};
   // Sources strip: one status chip per selected store (+ its flyer chip slot),
   // plus one chip for this week's flyer offers.
@@ -524,6 +580,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   const SORTS = [
     ['price', t('market.lowestPrice')],
     ['value', t('market.bestValue')],
+    ['discount', t('market.mostDiscounted')],
   ];
   for (const [mode, label] of SORTS) {
     const b = el('button', 'sort-opt', label);
@@ -582,13 +639,18 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   }
 
   function render() {
-    // The search engine produces the ranked list (makeComparator); Best value
-    // uses it directly, Lowest price is a presentation transform over it. The
-    // retailer filter only reduces which entries are shown.
-    const ranked = [...pool].sort(
+    // The search engine produces the ranked list (makeComparator) — quality
+    // groups first, the chosen perspective within them. The retailer filter
+    // only reduces which entries are shown.
+    const ordered = [...pool].sort(
       makeComparator(query, qFam, freshFam, sort, sort === 'value' ? dominantUnit(pool) : null),
     );
-    const ordered = sort === 'value' ? ranked : transformTopPriceWindow(ranked, PRICE_SORT_WINDOW);
+    // Unit-price display guard (never show a misleading unit price): per-unit
+    // values implausibly far off their unit family's pool median are almost
+    // always size-parse errors — suppress the LABEL only (ranking, which uses
+    // the same guard logic in compare.js for the headline, is unaffected here;
+    // a wrongly-parsed card can rank oddly but never advertises a false rate).
+    const upSuppressed = unitOutliers(pool);
     for (const [sid, c] of chips) {
       const has = pool.some((e) => entryStoreId(e) === sid);
       const on = activeStore === sid;
@@ -603,7 +665,12 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     flyerChip.setAttribute('aria-pressed', String(flyersOn));
     const view = activeStore ? ordered.filter((e) => entryMatchesFilter(e, activeStore)) : ordered;
     count.textContent = String(view.length);
-    subnote.textContent = sort === 'value' ? t('market.sortedValue') : t('market.sortedPrice');
+    subnote.textContent =
+      sort === 'value'
+        ? t('market.sortedValue')
+        : sort === 'discount'
+        ? t('market.sortedDiscount')
+        : t('market.sortedPrice');
     subnote.hidden = finished && !view.length;
     body.innerHTML = '';
     if (!view.length) {
@@ -623,8 +690,9 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     const grid = el('div', 'results-grid');
     const visible = expanded ? view : view.slice(0, DEFAULT_VISIBLE);
     for (const e of visible) {
-      const badge = matchBadge(e, query, qFam, freshFam, sort === 'price');
-      grid.appendChild(e.kind === 'online' ? onlineCard(e.store, e.it, badge) : flyerCard(e.listing, badge));
+      const badge = matchBadge(e, query, qFam, freshFam);
+      const up = upSuppressed.has(e) ? null : entryUnit(e);
+      grid.appendChild(e.kind === 'online' ? onlineCard(e.store, e.it, badge, up) : flyerCard(e.listing, badge, up));
     }
     body.appendChild(grid);
     if (view.length > DEFAULT_VISIBLE) {

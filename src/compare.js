@@ -35,7 +35,7 @@ import {
   isRelevant,
   relevance,
   tokenCoverage,
-  tokens,
+  queryTokens,
   expandToken,
   productFamily,
   offerFamily,
@@ -52,8 +52,10 @@ const OUTLIER_FACTOR = 6; // unit prices >6× off the family median are parse no
 // A listing may only COMPETE when it matches (nearly) every query token: a
 // 2-token query demands both ("كيري مربعات" matching only "مربعات" is puff
 // pastry, not Kiri); longer queries tolerate one unmatched descriptor token.
+// Lexical tokens only — a query-named size is a structured filter (match.js
+// querySize), never a word requirement.
 function coversQuery(item, query) {
-  const n = tokens(query).length;
+  const n = queryTokens(query).length;
   if (n < 2) return true;
   const cov = tokenCoverage(item, query);
   return n === 2 ? cov >= 1 : cov >= (n - 1) / n;
@@ -76,7 +78,7 @@ function listingMatchText(l) {
 // discriminating query tokens (the brand "herfy", the cut "breast"). Pure — it
 // only reuses match.js's exported helpers.
 function coveredQueryTokens(text, query) {
-  const qTokens = tokens(query);
+  const qTokens = queryTokens(query);
   const f = normalizeText(text || '');
   const words = f.split(' ').filter(Boolean);
   const wordSet = new Set(words);
@@ -117,6 +119,7 @@ export function onlineListing(t, query) {
     oldPrice: it.oldPrice ?? null,
     currency: it.currency || 'SAR',
     link: it.link || null,
+    image: it.image || null,
     size: it._size,
     up: unitPrice(it),
     rel: it._rel,
@@ -155,6 +158,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     oldPrice: offer.oldPrice ?? null,
     currency: offer.currency || 'SAR',
     link: offer.sourceUrl || null,
+    image: offer.imageUrl || null,
     size,
     up: unitPrice(item),
     rel,
@@ -239,7 +243,7 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
   // family query ("chicken"), whose anchor matches only the one shared token,
   // still keeps every form (no over-gating).
   let identityExcluded = 0;
-  if (listings.length > 1 && tokens(query).length) {
+  if (listings.length > 1 && queryTokens(query).length) {
     const anchor = listings.reduce((best, l) => {
       if (!best) return l;
       if ((l.rel || 0) !== (best.rel || 0)) return (l.rel || 0) > (best.rel || 0) ? l : best;
@@ -414,6 +418,10 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
       low = prices.lowest;
       todaysBest = cheapest.price;
       latestSource = prices.latest || [];
+      // No tracked size is present in today's results — the per-size records
+      // still exist, so surface them as "Other sizes" instead of hiding the
+      // history the engine actually has (each with its own independent low).
+      otherVariants = variants.map((v) => ({ label: v.label, low: v.lowest }));
     }
 
     if (low && low.price != null && todaysBest != null) {

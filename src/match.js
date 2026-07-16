@@ -70,6 +70,11 @@ const SYNONYMS = [
   ['cola', 'كولا'],
   ['tide', 'تايد'],
   ['nutella', 'نوتيلا'],
+  // water brands shoppers search in either script (found via "Arwa Water
+  // 1.5L" — the Arabic flyer names could never match the Latin brand token)
+  ['arwa', 'اروي', 'اروا'],
+  ['nova', 'نوفا'],
+  ['berain', 'بيرين'],
   // fresh produce (bilingual bridges so an Arabic produce query reaches
   // English-named catalogue items and flyer OCR, and vice versa). English
   // words that double as colours/scents ("orange") are deliberately left out.
@@ -504,7 +509,7 @@ export function offerFamily(offer) {
 // coverage before an item may compete: "كيري مربعات" matching only "مربعات"
 // (squares) is a look-alike, not a candidate.
 export function tokenCoverage(item, query) {
-  const qTokens = tokens(query);
+  const qTokens = queryTokens(query);
   if (!qTokens.length) return 1;
   const f = normalizeText(`${item.name || ''} ${item.brand || ''}`);
   const fWords = new Set(f.split(' '));
@@ -640,7 +645,7 @@ export function parseSize(name, sizeField) {
     const b = parseInt(bm[2], 10);
     if (base && a >= 1 && b >= 1 && b <= a && a + b <= 99) {
       const each = num(bm[3]) * base.factor;
-      return { unit: base.unit, each, pack: a + b, total: each * (a + b) };
+      return { unit: base.unit, each, pack: a + b, total: each * (a + b), src: 'measure' };
     }
   }
 
@@ -659,7 +664,7 @@ export function parseSize(name, sizeField) {
       if (base) {
         const each = num(m[f.size]) * base.factor;
         const pack = Math.max(1, Math.round(num(m[f.pack])) || 1);
-        return { unit: base.unit, each, pack, total: each * pack };
+        return { unit: base.unit, each, pack, total: each * pack, src: 'measure' };
       }
     }
   }
@@ -677,22 +682,82 @@ export function parseSize(name, sizeField) {
         new RegExp(`[x×*]\\s*(\\d+)(?!\\s*(?:${UNITS}))${B}`, 'u').exec(hay) ||
         /\b(\d+)\s*(?:pcs|pc|pack|s)\b/.exec(hay);
       const pack = bonus || (pm ? Math.max(1, parseInt(pm[1], 10)) : 1);
-      return { unit: u.base, each, pack, total: each * pack };
+      return { unit: u.base, each, pack, total: each * pack, src: 'measure' };
     }
   }
 
   // A unitless bonus pack ("3+1 مجانًا 4 قطع") is a piece count of a+b — the
   // true total, ahead of any stray count word ("28 عبوة") the OCR left behind.
-  if (bonus) return { unit: 'pcs', each: 1, pack: bonus, total: bonus };
+  if (bonus) return { unit: 'pcs', each: 1, pack: bonus, total: bonus, src: 'count' };
 
-  // Pure count ("30 eggs", "12 pcs").
+  // Pure count ("30 eggs", "12 pcs"). `src` records how trustworthy the count
+  // is: a real packaging count word ("30 حبة", "12 rolls") is a package count
+  // a shopper recognises; a bare "6's" / "12x" / "30 ct" suffix is a weaker
+  // signal — good enough for size comparability, NOT good enough to advertise
+  // a per-piece price on (Task: never display misleading unit prices).
   const cm = COUNT_RE.exec(hay);
   if (cm) {
     const n = parseInt(cm[1], 10);
-    if (n > 0 && n <= 500) return { unit: 'pcs', each: 1, pack: n, total: n };
+    if (n > 0 && n <= 500) {
+      const weak = cm[2] === 's' || cm[2] === 'x' || cm[2] === 'ct' || cm[2] === 'count';
+      return { unit: 'pcs', each: 1, pack: n, total: n, src: weak ? 'count-weak' : 'count' };
+    }
   }
 
-  return { unit: null, each: null, pack: 1, total: null };
+  return { unit: null, each: null, pack: 1, total: null, src: null };
+}
+
+// --- query size intent ----------------------------------------------------------
+// "Arwa Water 1.5L" names a product AND a package size. The size expression is
+// not a lexical token — normalization shreds it ("1.5l" -> "1 5l") and every
+// store spells it differently ("1.5L", "1.5 Ltr", "١٫٥ لتر"), so treating its
+// fragments as mandatory words silently killed history/offers/summary matches
+// for any size-carrying query (the "Water works, Arwa Water 1.5L doesn't" bug).
+// Instead the size is read as a STRUCTURED filter: querySize() returns the size
+// the query names (or null), queryTokens() tokenizes the query with the size
+// expression removed, and matchStage() demotes results whose parsed size
+// contradicts the query's — results with no parseable size are never demoted
+// (refuse to guess). Mirrors engine matching.js — keep in sync (rule 2).
+const SIZE_STRIP_RES = [PACK_BONUS_RE, PACK_RE[0], PACK_RE[1], ...UNIT_TO_BASE.map((u) => u.re), COUNT_RE];
+
+function stripSizeExpressions(hay) {
+  let out = hay;
+  // A plausible bonus pack ("8+2", "8 رول +2") is a size expression too.
+  if (bonusPack(out)) {
+    const m = BONUS_RE.exec(out);
+    if (m) out = out.slice(0, m.index) + ' ' + out.slice(m.index + m[0].length);
+  }
+  for (const re of SIZE_STRIP_RES) {
+    let m;
+    while ((m = re.exec(out))) out = out.slice(0, m.index) + ' ' + out.slice(m.index + m[0].length);
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+// The package size a query explicitly names, or null.
+export function querySize(query) {
+  const sz = parseSize(query, '');
+  return sz && sz.unit ? sz : null;
+}
+
+// The query's LEXICAL tokens: the size expression (when present) is removed
+// before tokenizing, so matching sees only the product words. A query that is
+// ONLY a size keeps its raw tokens (never return an empty interpretation).
+export function queryTokens(query) {
+  if (!querySize(query)) return tokens(query);
+  const lex = tokens(stripSizeExpressions(normSize(query)));
+  return lex.length ? lex : tokens(query);
+}
+
+// Does a parsed size CONTRADICT the query's named size? Only a confident "no":
+// both parsed, and either a different unit family or totals >3% apart (the
+// same tolerance product equivalence uses). Unknown sizes never contradict.
+export function sizeContradicts(itemSize, qSize) {
+  if (!qSize || !qSize.unit || !itemSize || !itemSize.unit) return false;
+  if (itemSize.unit !== qSize.unit) return true;
+  if (itemSize.total == null || qSize.total == null) return false;
+  const hi = Math.max(itemSize.total, qSize.total);
+  return hi > 0 && (hi - Math.min(itemSize.total, qSize.total)) / hi > 0.03;
 }
 
 // Human label for a parsed size, for display in the summary.
@@ -712,13 +777,17 @@ function trimNum(n) {
 }
 
 // Per-unit price for fair comparison: SAR per litre / per kg / per piece.
-// Returns { value, unit } or null when the size is unknown.
+// Returns { value, unit } or null when the size is unknown. TRUST LADDER
+// (never display a misleading unit price): a measured weight/volume is always
+// trustworthy; a per-piece price is shown only when the count came from an
+// explicit packaging count word or bonus notation ("30 حبة", "12 rolls",
+// "10+2") — a bare "6's"/"12x" suffix is too weak to advertise a price on.
 export function unitPrice(item) {
   const sz = item._size || parseSize(item.name, item.size);
   if (!sz.unit || !sz.total || item.price == null) return null;
   if (sz.unit === 'ml') return { value: item.price / (sz.total / 1000), unit: 'L' };
   if (sz.unit === 'g') return { value: item.price / (sz.total / 1000), unit: 'kg' };
-  if (sz.unit === 'pcs') return { value: item.price / sz.total, unit: 'pc' };
+  if (sz.unit === 'pcs' && sz.src !== 'count-weak') return { value: item.price / sz.total, unit: 'pc' };
   return null;
 }
 
@@ -780,7 +849,7 @@ function compoundPenalty(item, qTokens) {
 }
 
 export function relevance(item, query) {
-  const qOriginal = tokens(query);
+  const qOriginal = queryTokens(query);
   const name = fieldScore(item.name, qOriginal);
   const brand = fieldScore(item.brand, qOriginal) * 0.6;
   return Math.max(name, brand) * compoundPenalty(item, qOriginal);
@@ -792,7 +861,7 @@ export function relevance(item, query) {
 // keep an otherwise-unrelated product). Single-token queries are strict; multi-
 // token queries keep items matching the head token.
 export function isRelevant(item, query) {
-  const qOriginal = tokens(query);
+  const qOriginal = queryTokens(query);
   if (!qOriginal.length) return true;
   const f = normalizeText(item.name);
   const fWords = new Set(f.split(' '));
@@ -943,8 +1012,23 @@ function phraseInName(qTokens, nameWords) {
 }
 
 export function matchStage(item, query) {
-  const qTokens = tokens(query);
+  const qTokens = queryTokens(query);
   if (!qTokens.length) return 0;
+  // SIZE CAP: a query-named size ("Arwa Water 1.5L") is a mandatory term in
+  // structured form — a result whose parsed size CONTRADICTS it can never sit
+  // in a primary/full-coverage stage, exactly as a missing word couldn't.
+  // Results with no parseable size are never demoted (refuse to guess).
+  const qSize = querySize(query);
+  if (qSize) {
+    const sz = item._size || parseSize(item.name, item.size);
+    if (sizeContradicts(sz, qSize)) {
+      return rawMatchStage(item, qTokens, query) > 0 ? 1 : 0;
+    }
+  }
+  return rawMatchStage(item, qTokens, query);
+}
+
+function rawMatchStage(item, qTokens, query) {
   const name = normalizeText(item.name);
   const nameWords = name ? name.split(' ') : [];
   const nameSet = new Set(nameWords);
@@ -1062,7 +1146,7 @@ export function stageBand(stage, multiWord, singleWordBand) {
 // surface the counts).
 export function resolveJourneyPool(candidates, query, tierName) {
   const policy = JOURNEY_POLICY[tierName] || JOURNEY_POLICY.summary;
-  const multiWord = tokens(query).length > 1;
+  const multiWord = queryTokens(query).length > 1;
   const out = {
     kept: candidates.slice(),
     targetFamily: null,

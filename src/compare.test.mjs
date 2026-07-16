@@ -414,5 +414,48 @@ const label = (id) => id;
   ok('shared: a coincidental equal price on a different product does not share', c.sharedWith.length === 0);
 }
 
+// --- Search Experience Refinement additions ------------------------------------
+// Task 5: listings carry the product image so the Summary can show the pick.
+{
+  const tagged = [T('panda', 'Almarai Milk 2 L', 11, { image: 'https://img/x.jpg' })];
+  const offers = [
+    { store: 'othaim', name: 'Nadec Milk 2L', nameAr: null, price: 10, currency: 'SAR', sourceUrl: 'https://agg/1', imageUrl: 'https://img/f.jpg' },
+  ];
+  const c = computeComparison('milk', tagged, offers, null, label);
+  ok('image: online listing carries the catalogue image', c.listings.some((l) => l.source === 'online' && l.image === 'https://img/x.jpg'));
+  ok('image: flyer listing carries the D4D crop', c.listings.some((l) => l.source === 'flyer' && l.image === 'https://img/f.jpg'));
+}
+
+// Task 2: when NO tracked size is present in today's results, the per-size
+// records are still surfaced as "Other sizes" instead of disappearing.
+{
+  const tagged = [T('panda', 'White Eggs Tray 12 pcs', 9)]; // untracked size today
+  const prices = {
+    lowest: { price: 5, store: 'lulu' },
+    latest: [{ store: 'lulu', price: 5 }],
+    weeks: 4,
+    variants: [
+      { key: 'pcs:6', sizeUnit: 'pcs', sizeTotal: 6, label: '6 pcs', weeks: 4, lowest: { price: 5, store: 'lulu', observedAt: '2026-01-10' }, latest: [] },
+      { key: 'pcs:30', sizeUnit: 'pcs', sizeTotal: 30, label: '30 pcs', weeks: 4, lowest: { price: 14, store: 'danube', observedAt: '2026-02-10' }, latest: [] },
+    ],
+  };
+  const c = computeComparison('eggs', tagged, [], prices, label);
+  ok('fallback: history still renders on the product-wide low', c.history && !c.history.variant);
+  ok('fallback: tracked sizes surface as Other sizes', c.history.otherVariants.length === 2);
+  ok('fallback: other-size records keep their dates', c.history.otherVariants.every((v) => v.low.observedAt));
+}
+
+// Task 1: a size-carrying query still admits every size SPELLING of that size
+// ("1.5L" vs "1.5 Ltr"), and the identity lock no longer trips on size tokens.
+{
+  const tagged = [
+    T('panda', 'Arwa Water 1.5L', 2.5),
+    T('lulu', 'Arwa Drinking Water 1.5 Ltr', 2.25),
+  ];
+  const c = computeComparison('Arwa Water 1.5L', tagged, [], null, label);
+  ok('size query: both spellings compete', c.offers === 2);
+  ok('size query: the cheaper spelling wins the headline', c.headline.listing.price === 2.25);
+}
+
 console.log(`\ncompare.test: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

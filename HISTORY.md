@@ -3890,3 +3890,89 @@ engine `watchtest` ✅ (mirrored ladder block + 2 end-to-end watch gap tests:
 stage gate picks the lemon at 6 over Clorox at 3, frozen-only فراولة pool →
 no-data), `pricetest` ✅, `offerstest` ✅, browse 57 ✅, reingest ✅,
 hotspots ✅, ops ✅. Engine deployed + frontend pushed 2026-07-16.
+
+## §35 · Search Experience Refinement: the polish milestone (2026-07-16)
+
+**Why.** With matching, ranking, Summary, Price History, Lowest Price, Watch
+and Journey Coherence all mature, users stopped reporting matching problems
+and started noticing EXPERIENCE problems: history that vanished when a query
+got more specific, a Shopping Summary that read like a debugger, no images,
+no cart action from search, a "Lowest price" view that switched to related
+products at an arbitrary count. Nine refinement tasks, no architecture change.
+
+**1 · Size-aware queries (the root-cause fix of the milestone).** "Water"
+showed price history; "Arwa Water 1.5L" showed none — although the exact
+product was tracked. Root cause: a query-named size is destroyed by
+normalization ("1.5L" → tokens `1` + `5l`) and then required as literal
+AND-words by every gate (offerRelevance, nameRelevance, the /offers +
+/prices SQL prefilters, coversQuery, the Summary identity lock) — any size
+spelling difference ("1.5 Ltr", "١٫٥ لتر") killed the match. Fix, in BOTH
+matching mirrors: the size expression is read as a STRUCTURED filter, never
+as lexical tokens — new `querySize(q)` (parseSize over the query) +
+size-stripping `queryTokens(q)` (falls back to raw tokens for size-only
+queries), and a SIZE CAP in `matchStage`: a result whose parsed size
+CONTRADICTS the query's (same-unit >3% apart, or different unit family) can
+never sit above stage 1; results with no parseable size are never demoted
+(refuse to guess). The engine's `getQueryPricesDoc` additionally filters
+sized identities that contradict the query size (unsized stay), so a size
+query yields the PRECISE variant's history — or an honest empty doc, never a
+different package's record. Bonus finding: water-brand transliterations were
+missing entirely (Arabic flyer names could never match "arwa") — added
+arwa/nova/berain to the synonym bridge, both mirrors.
+
+**2 · Other Sizes.** Each tracked size's record now carries its date
+("6 × 1.5L 26.99 SAR · Jul 9") in the Summary's history box, and the
+fallback branch (no tracked size present in today's results) now SURFACES
+the per-size records as Other Sizes instead of dropping them — history the
+engine holds is never invisible again.
+
+**3+4 · Shopping Summary simplification + density.** The card now speaks to
+a shopper: kicker + product IMAGE beside ONE dense scannable line (price ·
+unit price · store · size · flyer badge), name, trust notes. The five
+verbose exclusion paragraphs are gone — replaced by one muted footer line
+(offers · stores · flyers · price range · "N look-alikes set aside") whose
+tooltip carries the per-gate breakdown (stage/family/type/fresh/identity ×
+counts). Honesty preserved (nothing silently dropped), developer voice gone.
+
+**5 · Product images.** compare.js listings now carry `image` (online
+catalogue image / flyer D4D crop); the Summary hero shows a 72px thumb
+(no placeholder when a listing has none — nothing fake).
+
+**6 · Add to Cart.** The Summary header gains "🛒 Add to cart" beside Watch
+price, and every online grid card gains a cart button below its watch bell.
+Cart ids follow the sheet's scheme (flyer: `offer.id`; online:
+`store:productId`), so repeated adds merge into quantities; the cart page's
+label/color fallbacks cover online-only stores (Amazon/Noon/Ninja).
+
+**7 · Unit-price trust ladder.** parseSize now records HOW a count was
+derived (`src`: measure / count / count-weak): a per-piece price is shown
+only for explicit packaging counts ("30 حبة", "12 rolls", bonus packs) —
+bare "6's"/"12x"/"ct" suffixes still parse for size comparability but never
+advertise a SAR/pc. And the grid now applies the comparison engine's own
+median outlier guard (>6× off the unit family's pool median, ≥3 sized
+entries) to CARD unit-price labels — a size-parse error can rank oddly but
+can no longer display a false rate.
+
+**8 · Lowest Price by match quality.** The `PRICE_SORT_WINDOW = 20`
+presentation transform is gone. 'price' is now a first-class comparator
+perspective: stage → family band → price ascending — strong matches stay
+together and related products begin exactly where match quality drops,
+never at an arbitrary index. The match badge no longer special-cases price
+mode (bands group in every sort, so the badge never contradicts the order).
+
+**9 · Most Discounted.** Browse's flagship perspective joins the search
+grid as a third sort ("Most discounted"): stage → band → discount fraction
+(honest: only a real strike-through counts, the Offer contract's gate) →
+price. Persisted like the other modes (`lsa.app.rank`).
+
+**Verified.** Frontend match.test 237 ✅ (+24: query-size stripping, size
+cap, trust ladder), compare.test 80 ✅ (+7: images, fallback Other Sizes,
+size-spelling competition), viewer 100 ✅; engine watchtest ✅ (mirrored
+size-query block), pricetest ✅, offerstest ✅, browse 57 ✅, reingest ✅,
+hotspots ✅. Browser-verified on localhost: dense Summary w/ image + footer
+meta + tooltip, cart flow end-to-end (summary flyer pick + online card →
+badge 2 → cart page groups Noon/Carrefour), three sorts re-rank correctly
+(price ascending in top band; discount 40%→27% descending). ⚠️ Engine
+deploy was permission-blocked in the build session — `npx wrangler deploy`
+from `brochure-engine/` is required before size queries fix /prices +
+/offers in production (frontend is engine-compatible either way).

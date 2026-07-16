@@ -10,7 +10,7 @@ import {
   parseSize, sizeLabel, unitPrice, isRelevant, relevance, groupEquivalents, normalizeText,
   productFamily, queryFamily, tokenCoverage, categoryFamily, offerFamily,
   productType, queryType, freshProduceIntent, isProcessedProduce, isProduceFamily, producePresence,
-  matchStage, queryTokenPresence, resolveJourneyPool,
+  matchStage, queryTokenPresence, resolveJourneyPool, querySize, queryTokens, sizeContradicts,
 } from './match.js';
 
 let pass = 0, fail = 0;
@@ -388,6 +388,37 @@ const cand = (name, stage, extra = {}) => ({
   });
   ok('ladder: alert pool ⊆ summary pool (monotonic strictness)', subset);
 }
+
+// --- size-aware queries (Milestone "Search Experience Refinement" Task 1) ---
+// A query-named size is a STRUCTURED filter, never a lexical token: "Water"
+// finding history while "Arwa Water 1.5L" finds none was the size fragments
+// ("1", "5l") failing the AND-word gates.
+ok('queryTokens strips the size expression', queryTokens('Arwa Water 1.5L').join(' ') === 'arwa water');
+ok('queryTokens strips Arabic-Indic sizes', queryTokens('مياه اروى ١.٥ لتر').join(' ') === 'مياه اروي');
+ok('queryTokens strips count expressions', queryTokens('بيض 30 حبة').join(' ') === 'بيض');
+ok('queryTokens leaves size-less queries alone', queryTokens('حليب المراعي').join(' ') === 'حليب المراعي');
+ok('queryTokens keeps identity digits (no size unit)', queryTokens('Omega 3 fish oil').includes('3'));
+ok('a size-only query keeps its raw tokens', queryTokens('1.5 لتر').length > 0);
+ok('querySize reads the named size', (() => { const s = querySize('Arwa Water 1.5L'); return s && s.unit === 'ml' && s.total === 1500; })());
+ok('querySize is null without a size', querySize('حليب المراعي') === null);
+ok('sizeContradicts: wrong size', sizeContradicts(parseSize('Arwa Water 330ml'), querySize('Arwa Water 1.5L')));
+ok('sizeContradicts: same size, different spelling', !sizeContradicts(parseSize('Arwa Water 1.5 Ltr'), querySize('Arwa Water 1.5L')));
+ok('sizeContradicts: unknown size never contradicts', !sizeContradicts(parseSize('Arwa Water'), querySize('Arwa Water 1.5L')));
+ok('stage: exact size stays primary', matchStage({ name: 'Arwa Drinking Water 1.5 Ltr' }, 'Arwa Water 1.5L') >= 4);
+ok('stage: contradicting size is capped at 1', matchStage({ name: 'Arwa Water 330ml' }, 'Arwa Water 1.5L') === 1);
+ok('stage: size-less result is never demoted', matchStage({ name: 'Arwa Water' }, 'Arwa Water 1.5L') === 5);
+ok('stage: bilingual name matches via the brand bridge', matchStage({ name: 'مياه اروي 1.5 لتر' }, 'Arwa Water 1.5L') >= 4);
+ok('stage: no lexical match stays 0 despite size match', matchStage({ name: 'Nova Water 1.5L' }, 'Arwa 1.5L') === 1 || matchStage({ name: 'Pepsi 1.5L' }, 'Arwa 1.5L') === 0);
+ok('relevance sees lexical tokens only', relevance({ name: 'Arwa Drinking Water 1.5 Ltr', brand: '' }, 'Arwa Water 1.5L') >= 30);
+ok('isRelevant keeps size-spelling variants', isRelevant({ name: 'Arwa Water 1.5 Ltr' }, 'Arwa Water 1.5L'));
+
+// --- unit-price trust ladder (Task 7): per-piece only on explicit counts ---
+ok('count word -> per-piece price shown', unitPrice({ name: 'بيض ابيض 30 حبة', price: 18 }) !== null);
+ok('bonus pack -> per-piece price shown', unitPrice({ name: 'Uno Towels 10+2 Free', price: 12 }) !== null);
+ok("weak 6's suffix -> no per-piece price", unitPrice({ name: "Indomie Noodles 6's", price: 6 }) === null);
+ok('weak x suffix -> no per-piece price', unitPrice({ name: 'Batteries 12x', price: 24 }) === null);
+ok('weak count still parses for comparability', parseSize("Indomie Noodles 6's").total === 6);
+ok('measured sizes unaffected by the ladder', unitPrice({ name: 'Milk 2L', price: 8 }).value === 4);
 
 console.log(`\nmatch.test: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

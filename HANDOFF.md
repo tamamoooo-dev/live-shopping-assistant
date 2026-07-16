@@ -6,19 +6,31 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-16 · Latest change: **Journey Coherence V1**
+> **Last updated:** 2026-07-16 · Latest change: **Search Experience
+> Refinement** (HISTORY §35) — the polish milestone, nine tasks, no
+> architecture change. Headliners: **size-aware queries** in BOTH matching
+> mirrors (a query-named size — "Arwa Water 1.5L" — is a STRUCTURED filter:
+> `querySize` + size-stripping `queryTokens` + a matchStage SIZE CAP;
+> /prices filters contradicting sized identities — fixes "history disappears
+> when the query gets specific"); Shopping Summary redesigned for shoppers
+> (image + one dense price·unit·store·size line, ONE muted footer meta line
+> with a tooltip exclusion breakdown instead of five verbose notes, Add to
+> cart beside Watch); cart buttons on online grid cards; per-piece prices
+> only on explicit counts (`parseSize().src` trust ladder) + a grid-level
+> unit-price outlier guard; Lowest price now orders stage → band → price
+> (the arbitrary top-20 window transform is GONE); third grid sort **Most
+> discounted** (stage → band → discount). ⚠️ Engine deploy was
+> permission-blocked in the build session — run `npx wrangler deploy` from
+> `brochure-engine/` (frontend already compatible either way).
+> Previous change: **Journey Coherence V1**
 > (HISTORY §34) — one interpretation, declared policy: the four hand-rolled
 > gate stacks (Shopping Summary, watch alerts, /prices statistics — plus the
 > grid's implicit one) now run ONE shared gate ladder
 > (`resolveJourneyPool`: stage band → family → type → fresh-produce) in both
 > matching mirrors, with per-feature differences declared ONLY in the
-> `JOURNEY_POLICY` table. Closes the accidental gaps: watches gained the
-> stage + fresh gates (a ليمون watch can no longer alert on "كلوروكس ليمون";
-> a فراولة watch prefers silence over a frozen bag), /prices now KEEPS
-> family-less identities (the "store in the Summary, missing from Price
-> History" bug) and gained the type gate. Invariant, tested in both repos:
-> alert pool ⊆ summary pool for the same candidates.
-> Previous change: **Packaging Intelligence V1**
+> `JOURNEY_POLICY` table; invariant, tested in both repos: alert pool ⊆
+> summary pool for the same candidates.
+> Also recent: **Packaging Intelligence V1**
 > (HISTORY §33) — one package, one interpretation in BOTH matching mirrors:
 > bonus packs ("10+2" = 12) ported to the engine (it was blind to them —
 > mirror drift), packaging count words (rolls/رول، علب، قرص، ظرف…, curated),
@@ -132,6 +144,11 @@ conflicts with this file, this file wins).
    before gradually relaxing to partial matches. No other signal (family band,
    price, relevance score) may ever promote a result past a better stage, and
    the engine never infers intent beyond the user's explicit words.
+   **A query-named size is a STRUCTURED term** (HISTORY §35): `queryTokens`
+   strips the size expression from the lexical tokens (its normalized
+   fragments must never be AND-words), `querySize` reads it, and matchStage
+   CAPS results whose parsed size contradicts it at stage 1 — size-less
+   results are never demoted. In both mirrors, like everything here.
 10. **INTERPRETATION IS SHARED; ONLY DECLARED POLICY DIFFERS** (HISTORY §34).
    Every comparison-shaped feature — Shopping Summary (compare.js), watch
    alerts (monitor.js), /prices statistics (priceHistory.js) — resolves "which
@@ -324,10 +341,10 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`
 | `core.js` | Store-agnostic Core; adaptive strategy memory (localStorage) |
 | `providers/*.js` | Thin per-store strategies calling the connector (`CONNECTOR_BASE`) |
 | `app.js` | Hash router (`#/search` `#/brochures` `#/alerts` `#/cart`), search orchestration, honest filtering (irrelevant dropped + counted), persisted prefs (`lsa.app.rank`, store scope, recents), `OFFERS_FETCH_LIMIT=120`, cart nav badge |
-| `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize`, relevance, `sameProduct` equivalence, `matchStage`/`queryTokenPresence` (Search-Roadmap stages, rule 9 — directional flavour markers: Arabic بنكهة/بطعم/برائحة precede the flavour word, English flavoured/scented follow it), **`JOURNEY_POLICY` + `resolveJourneyPool`** (rule 10 — the shared gate ladder every comparison-shaped feature runs) |
+| `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize` (w/ `src` count-trust marker), **`querySize`/`queryTokens`** (size-aware queries, rule 9), relevance, `sameProduct` equivalence, `matchStage`/`queryTokenPresence` (Search-Roadmap stages + SIZE CAP, rule 9 — directional flavour markers: Arabic بنكهة/بطعم/برائحة precede the flavour word, English flavoured/scented follow it), **`JOURNEY_POLICY` + `resolveJourneyPool`** (rule 10 — the shared gate ladder every comparison-shaped feature runs) |
 | `compare.js` | Comparison engine: bilingual flyer listings, **the SHARED gate ladder at the 'summary' tier** (rules 9+10 — stage band → family → type → fresh, excluded counts surfaced), coverage admission, **product-identity lock** (Summary-only policy: anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
-| `summary.js` | Renders the comparison model (headline, confidence, excluded-counts, history verdict) |
-| `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family); sort order = Roadmap stage (rule 9) → family band → price/value |
+| `summary.js` | Renders the comparison model for SHOPPERS (HISTORY §35): image + dense headline line (price · unit · store · size), Add-to-cart + Watch actions in the header, history verdict w/ dated Other Sizes, ONE muted footer meta line (coverage · range · excluded count w/ tooltip breakdown) |
+| `marketplace.js` | Unified grid (online + flyer cards, store badges, per-card Add-to-Cart + watch bell), sources strip, THREE sort perspectives — Lowest price / Best value / Most discounted — all ordered Roadmap stage (rule 9) → family band → perspective key (price asc / unit value within dominant unit family / discount fraction); card unit-price labels suppressed for >6×-off-median outliers |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (dept tiles + brand pills as EQUAL peers, then Biggest Drops + Lowest Ever rails — V1.1 keeps only these two), listings w/ aisle chips + sorts (discount/price) + store filter + paging; **brand pages** open on an identity hero (deterministic monogram, bilingual name, offers·stores) + engine-fed product-family chips. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
 | `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
@@ -404,6 +421,11 @@ external product images — verify via `preview_eval` DOM inspection; preview
   a D4D change breaks offers ingest cleanly per store (brochures unaffected);
   the fix lives entirely in `offers/d4dOffers.js`. Rapid manual re-ingests
   can rate-limit on D4D (pace runs ~2.5 s; real cron fires are days apart).
+- **Never let a size expression become lexical query tokens.** normalization
+  shreds "1.5L" into `1` + `5l`, and every AND-semantics gate then kills any
+  other spelling of the same size — the "Water has history, Arwa Water 1.5L
+  has none" bug (HISTORY §35). Query-side tokenization MUST go through
+  `queryTokens` (both mirrors), never `normalizeText(q).split()`.
 - **Size parsing:** decimals and Arabic-Indic digits must survive
   normalization (`normSize` is separate from `normalizeText` for this); JS
   `\b` is ASCII-only — Arabic boundaries use a unicode lookahead. Pack forms
@@ -483,6 +505,15 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
+-1. **Deploy the engine for Search Experience Refinement** (HISTORY §35):
+   the size-aware query layer is committed in both repos and fully tested,
+   but the engine deploy was permission-blocked in the build session — run
+   `npx wrangler deploy` from `…\serverless-connector\brochure-engine\`.
+   Until then production /prices and /offers still fail size-carrying
+   queries ("Arwa Water 1.5L"); the deployed frontend degrades gracefully
+   (its own gates are already size-aware). Verify after deploy:
+   `curl "https://brochure-engine.tamamoooo.workers.dev/prices?q=Arwa%20Water%201.5L"`
+   should return variants instead of an empty doc (given arwa data exists).
 0. **V1.1 brand re-stamp** (everything else is deployed & verified): the
    ~130 wrong / 31 stale `brand_slug` stamps in D1 self-heal at the next
    ingest cron (the weekly upsert re-stamps every re-extracted offer —
