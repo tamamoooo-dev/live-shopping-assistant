@@ -538,14 +538,29 @@ const UNIT_TO_BASE = [
   { re: new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(g|gm|gr|grm|gram|grams|جم|جرام|غرام|غ)${B}`, 'u'), base: 'g', factor: 1 },
 ];
 const UNITS = 'l|lt|ltr|liter|litre|ml|kg|g|gm|gr|gram|لتر|مل|كجم|جم|جرام';
-const COUNT_WORDS = 'pcs|pc|pieces|piece|قطعه|قطعة|قطع|حبه|حبة|حبات|عبوات|عبوه|عبوة|اكياس|كيس';
+// Packaging count words: a number followed by one of these IS the unit count of
+// the package ("12 rolls", "30 pcs", "50 قرص"). Curated to container/count
+// nouns that name the WHOLE sellable unit; per-sheet/inner counts (ورقة،
+// منديل, sheets, wipes) stay out — two stores count those differently, and a
+// wrong count is worse than no parse. Longest-first within a shared prefix so
+// the regex alternation never truncates a word (علبه before علب).
+const COUNT_WORDS = 'pcs|pc|pieces|piece|rolls|roll|bags|bag|cans|bottles|tablets|tabs|capsules|sachets|sachet|diapers'
+  + '|قطعه|قطعة|قطع|حبه|حبة|حبات|عبوات|عبوه|عبوة|اكياس|كيس'
+  + '|رولات|رول|لفات|لفه|علبه|علب|قوارير|قاروره|اقراص|قرص|كبسولات|كبسوله|اظرف|ظرف|حفاضات|حفاضه|حفاض';
 const PACK_RE = [
   // "6 x 200 ml" and "24 قطعة × 125مل" (an optional count word between the
   // pack number and the ×) — pack first, size second.
   new RegExp(`(\\d+)\\s*(?:${COUNT_WORDS})?\\s*[x×*]\\s*(\\d+(?:[.,]\\d+)?)\\s*(${UNITS})${B}`, 'u'),
   new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${UNITS})${B}\\s*[x×*]\\s*(\\d+)`, 'u'), // 200 ml x 6
 ];
-const COUNT_RE = new RegExp(`(\\d+)\\s*(pcs|pc|pieces|piece|ct|count|s|x|حبه|حبة|حبات|قطعه|قطعة|عبوات|عبوه|عبوة|اكياس|كيس)${B}`, 'u');
+// Bonus pack WITH a per-item size ("9+3 × 200 مل" = 12 × 200 ml). Must be
+// tried before PACK_RE, which would otherwise read only the free part
+// ("3 × 200 مل"). Same plausibility rule as bonusPack below.
+const PACK_BONUS_RE = new RegExp(
+  `(\\d+)\\s*(?:(?:${COUNT_WORDS})\\s*)?\\+\\s*(\\d+)\\s*(?:${COUNT_WORDS})?\\s*[x×*]\\s*(\\d+(?:[.,]\\d+)?)\\s*(${UNITS})${B}`,
+  'u',
+);
+const COUNT_RE = new RegExp(`(\\d+)\\s*(${COUNT_WORDS}|ct|count|s|x)${B}`, 'u');
 
 function num(x) {
   return parseFloat(String(x).replace(',', '.'));
@@ -567,6 +582,10 @@ function normSize(s) {
     // Farsi yeh/kaf from flyer OCR — unit/count words (كيلو، كيس، ليتر…) must match
     .replace(/ی/g, 'ي')
     .replace(/ک/g, 'ك')
+    // hamza/taa-marbuta fold so count words match all spellings ("أكياس" ->
+    // "اكياس", "قطعة" -> "قطعه") — no unit token contains either letter
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
     // Keep '+' too: grocery packs use bonus notation ("10+2", "8+2" = buy 10
     // get 2 free), whose TRUE unit count is the sum. parseSize reads it below.
     .replace(/[^\p{L}\p{N}\s.,x×*+]/gu, ' ')
@@ -605,6 +624,19 @@ function bonusPack(hay) {
 export function parseSize(name, sizeField) {
   const hay = normSize(`${name || ''} ${sizeField || ''}`);
   const bonus = bonusPack(hay); // total units of a "buy a get b free" pack, or null
+
+  // Bonus pack with an explicit per-item size ("9+3 × 200 مل" = 12 × 200 ml)
+  // — before the plain pack forms, which would only see "3 × 200 مل".
+  const bm = PACK_BONUS_RE.exec(hay);
+  if (bm) {
+    const base = unitFor(bm[4]);
+    const a = parseInt(bm[1], 10);
+    const b = parseInt(bm[2], 10);
+    if (base && a >= 1 && b >= 1 && b <= a && a + b <= 99) {
+      const each = num(bm[3]) * base.factor;
+      return { unit: base.unit, each, pack: a + b, total: each * (a + b) };
+    }
+  }
 
   // Pack forms first (they carry both count and unit).
   // PACK_RE[0] = "6 x 200 ml": [1]=pack, [2]=size, [3]=unit

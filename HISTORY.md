@@ -3755,3 +3755,61 @@ new guards, frozen SQL modes, families facet); all engine + frontend suites
 green; UI verified in-browser against the production engine (simplified
 floor; Kiri brand page = hero + only Kiri cards). Production re-stamp =
 `POST /prices/backfill` after engine deploy (heals identity+brand in place).
+
+## §33 · Packaging Intelligence V1: one package, one interpretation (2026-07-16)
+
+**Why.** Packaging is part of a product's identity: "Uno Kitchen Towels
+10 + 2 Free · 39.95" and "Uno Kitchen Towels 12 Rolls · 39.95" are the SAME
+package, and every feature (unit price, comparison, summary, best buy, price
+history, watches, matching) must reach that conclusion identically. Two gaps
+broke this:
+
+1. **Mirror drift (the worst kind — HANDOFF rule 2):** the frontend
+   `match.js` had bonus-pack parsing ("10+2" → 12 units; `+` preserved in
+   `normSize`) since the earlier bonus milestone, but the engine
+   `matching.js` never got it — its `normSize` stripped `+`, so the engine
+   parsed the same offer text to a DIFFERENT package than the frontend
+   showed. Engine-side consumers (price-history `deriveIdentity` sizeKey,
+   `/prices` variant buckets, watch `sizeComparable` gates) were all blind
+   to bonus packs.
+2. **Missing count vocabulary in BOTH mirrors:** "12 Rolls"/"١٢ رول" parsed
+   to nothing (unit null) — rolls, علب, قرص, ظرف, كبسولة, bags, cans,
+   bottles, tablets, sachets, diapers weren't count words. So Store B's "12
+   Rolls" had no size, no unit price, and could never group with Store A's
+   "10+2".
+
+**What changed (both mirrors, identical blocks):**
+- Engine `matching.js` gains the full bonus-pack port: `+` survives
+  `normSize`, `bonusPack()` (a+b plausibility: b ≤ a, a+b ≤ 99, so "Omega
+  3+6+9" stays untouched), bonus wins over stray OCR count debris, bonus ×
+  unit-size ("9+3" beside "1 لتر" = 12 L), unitless bonus → pcs.
+- NEW in both: `PACK_BONUS_RE` — a bonus pack with an ADJACENT explicit size
+  ("9+3 × 200 مل") previously fell into the plain pack regex which read only
+  the free part ("3 × 200 مل" → pack 3); now parses as pack 12.
+- NEW in both: curated packaging COUNT WORDS — EN rolls/roll, bags/bag,
+  cans, bottles, tablets/tabs, capsules, sachets, diapers; AR رولات/رول،
+  لفات/لفه، علبه/علب، قوارير/قاروره، اقراص/قرص، كبسولات/كبسوله، اظرف/ظرف،
+  حفاضات/حفاض. Curation rule: only nouns that name the WHOLE sellable unit;
+  per-sheet/inner counts (ورقة، منديل, sheets, wipes) deliberately stay OUT
+  — stores count those inconsistently and a wrong count is worse than no
+  parse (§10 conservatism). Count words also multiply sizes now ("6 cans ×
+  330ml" = 1980 ml, previously 330 ml).
+- `normSize` folds hamza (أ→ا) and taa-marbuta (ة→ه) — "أكياس"/"قطعة" now
+  hit the lexicon — and the engine copy gains the Persian-digit fold (۰-۹)
+  the frontend already had. No unit token contains either letter.
+
+**Effect.** Both notations of a package now produce one `parseSize` result
+(`pcs:12` for the Uno example) everywhere: identical unit price, equivalence
+grouping (brand+size, type gate unaffected — a missing type never blocks),
+same `/prices` variant bucket (`unit:total`), and watch comparability.
+Identity note: engine sizeKeys change for bonus/count-word offers, so those
+D1 identities re-derive at the next ingest (Fri 2026-07-17 cron re-stamps
+`offers.identity`; old rows age out via the 365-day prune). By design this
+only SPLITS series (fresh start under the correct package), never mixes two
+products' histories.
+
+**Verified:** frontend `match.test.mjs` 186 ✅ (17 new packaging tests incl.
+the two-store Uno equivalence + unit-price parity), `compare.test.mjs` 73 ✅,
+viewer 100 ✅; engine `watchtest` (matching+monitor) ✅ with 14 mirrored
+packaging assertions, `pricetest` ✅, `offerstest` ✅, browse 57 ✅,
+reingest ✅, hotspots ✅. Engine deployed + frontend pushed 2026-07-16.

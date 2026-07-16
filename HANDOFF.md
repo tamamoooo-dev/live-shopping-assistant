@@ -6,7 +6,14 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-16 · Latest change: **Browse V1.1** (HISTORY §32,
+> **Last updated:** 2026-07-16 · Latest change: **Packaging Intelligence V1**
+> (HISTORY §33) — one package, one interpretation in BOTH matching mirrors:
+> bonus packs ("10+2" = 12) ported to the engine (it was blind to them —
+> mirror drift), packaging count words (rolls/رول، علب، قرص، ظرف…, curated),
+> hamza/ة folds in `normSize`; "10+2 Free" ≡ "12 Rolls" now yields the same
+> unit price, equivalence group, and /prices variant everywhere. Engine
+> identities for bonus/count-word offers re-derive at the Fri cron.
+> Previous change: **Browse V1.1** (HISTORY §32,
 > BROWSE-DESIGN.md Rev 3) — quality refinement from real production usage:
 > rails reduced to Biggest Drops + Lowest Ever (Exceptional Deals/Ending
 > Soon/New This Week removed as a product decision), brand pages actually
@@ -376,7 +383,14 @@ external product images — verify via `preview_eval` DOM inspection; preview
 - **Size parsing:** decimals and Arabic-Indic digits must survive
   normalization (`normSize` is separate from `normalizeText` for this); JS
   `\b` is ASCII-only — Arabic boundaries use a unicode lookahead. Pack forms
-  ("6 × 200 ml", "24 قطعة × 125مل") have dedicated tests in both mirrors.
+  ("6 × 200 ml", "24 قطعة × 125مل"), bonus packs ("10+2" = 12 units; "9+3 ×
+  200 مل" = 12 × 200 ml — HISTORY §33), and packaging count words ("12
+  Rolls", "٥٠ قرص", "6 cans × 330ml") have dedicated tests in both mirrors.
+  COUNT_WORDS is curated to nouns naming the WHOLE sellable unit — never add
+  per-sheet/inner counts (ورقة، منديل, sheets, wipes): stores count those
+  inconsistently and a wrong count corrupts unit price + equivalence, which
+  is worse than no parse. `normSize` folds hamza/ة (and Farsi glyphs), so
+  new Arabic count words go in canonical form (ا، ه).
 - **Family / type / category / synonym lexicons are curated, conservative.**
   Failure mode must stay "not excluded", never "wrongly excluded": only map a
   D4D category to exactly one family; a name with no type keyword gates

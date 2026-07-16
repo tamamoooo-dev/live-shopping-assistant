@@ -40,6 +40,27 @@ ok('bonus with unit 9+3 × 1L -> 12000 ml', (() => { const s = parseSize('عصي
 ok('bonus 6+2 free 250 ml -> 2000 ml', (() => { const s = parseSize('Cola 6+2 free 250 ml'); return s.total === 2000; })());
 ok('bonus with word between: 8 رول +2 -> 10 pcs', (() => { const s = parseSize('مناديل فاين 40 ورقة (8 رول +2 مجانا)'); return s.unit === 'pcs' && s.total === 10; })());
 ok('non-bonus digits not read as a pack: Omega 3+6+9', (() => { const s = parseSize('Omega 3+6+9 Fish Oil'); return s.total !== 9 && s.total !== 15; })());
+ok('bonus with size adjacent: 9+3 × 200 مل -> 2400 ml', (() => { const s = parseSize('عصير 9+3 × 200 مل'); return s.unit === 'ml' && s.pack === 12 && s.total === 2400; })());
+ok('implausible bonus×size falls back to plain pack: 1+2 x 200ml', (() => { const s = parseSize('Promo 1+2 x 200ml'); return s.total === 400; })());
+// --- packaging count words (rolls/boxes/tablets/…): the package's TRUE unit
+// count, so "10+2 Free" and "12 Rolls" reach ONE interpretation (12 pcs).
+ok('rolls count: 12 Rolls -> 12 pcs', (() => { const s = parseSize('Uno Kitchen Towels 12 Rolls'); return s.unit === 'pcs' && s.total === 12; })());
+ok('arabic rolls count: ١٢ رول', (() => { const s = parseSize('أونو مناديل مطبخ ١٢ رول'); return s.unit === 'pcs' && s.total === 12; })());
+ok('arabic لفه count: 12 لفة', (() => { const s = parseSize('مناديل تواليت 12 لفة'); return s.unit === 'pcs' && s.total === 12; })());
+ok('tea sachets: 100 ظرف', (() => { const s = parseSize('شاي ليبتون 100 ظرف'); return s.unit === 'pcs' && s.total === 100; })());
+ok('dishwasher tablets: 50 قرص', (() => { const s = parseSize('فيري بلاتينم 50 قرص'); return s.unit === 'pcs' && s.total === 50; })());
+ok('EN tablets: 30 tablets', (() => { const s = parseSize('Finish Powerball 30 Tablets'); return s.unit === 'pcs' && s.total === 30; })());
+ok('cans pack multiplies: 6 cans x 330ml -> 1980', (() => { const s = parseSize('Pepsi 6 cans x 330ml'); return s.unit === 'ml' && s.total === 1980; })());
+ok('hamza count word folds: 10 أكياس', (() => { const s = parseSize('شاي 10 أكياس'); return s.unit === 'pcs' && s.total === 10; })());
+ok('tea bags EN: 100 bags', (() => { const s = parseSize('Lipton Tea 100 Bags'); return s.unit === 'pcs' && s.total === 100; })());
+ok('boxes AR: 6 علب', (() => { const s = parseSize('تونة ريو ماري 6 علب'); return s.unit === 'pcs' && s.total === 6; })());
+ok('inner sheet counts stay unparsed (no wrong count)', parseSize('مناديل ورقية 500 منديل').unit === null);
+// The milestone example: two stores, one package interpretation.
+ok('ONE interpretation: 10+2 Free ≡ 12 Rolls', (() => {
+  const a = parseSize('Uno Kitchen Towels 10+2 Free');
+  const b = parseSize('Uno Kitchen Towels 12 Rolls');
+  return a.unit === b.unit && a.total === b.total && a.total === 12;
+})());
 ok('sizeLabel', sizeLabel(parseSize('Milk 2 L')) === '2 L');
 
 // --- unit price ---
@@ -77,6 +98,18 @@ const almarai1L = groups.find((g) => g.items.length === 2);
 ok('same brand+size groups across stores', !!almarai1L);
 ok('different size NOT merged', !groups.some((g) => g.items.length === 2 && g.items.some((i) => i.it.price === 12.5)));
 ok('different brand NOT merged', !groups.some((g) => g.items.some((i) => i.it.brand === 'Almarai') && g.items.some((i) => i.it.brand === 'Nadec')));
+// Packaging Intelligence milestone: "10+2 Free" and "12 Rolls" are the SAME
+// package — they must group as equivalents and carry the same unit price.
+{
+  const uno = groupEquivalents([
+    { store: { id: 'a' }, it: { name: 'Uno Kitchen Towels 10+2 Free', brand: 'Uno', price: 39.95 } },
+    { store: { id: 'b' }, it: { name: 'Uno Kitchen Towels 12 Rolls', brand: 'Uno', price: 39.95 } },
+  ]);
+  ok('bonus pack and explicit count group as one product', uno.some((g) => g.items.length === 2));
+  const upA = unitPrice({ name: 'Uno Kitchen Towels 10+2 Free', price: 39.95 });
+  const upB = unitPrice({ name: 'Uno Kitchen Towels 12 Rolls', price: 39.95 });
+  ok('identical unit price across notations', upA && upB && near(upA.value, upB.value) && upA.unit === upB.unit);
+}
 
 // --- normalization ---
 ok('normalize folds alef/diacritics', normalizeText('أَلبان') === normalizeText('البان'));
