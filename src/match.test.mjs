@@ -10,7 +10,7 @@ import {
   parseSize, sizeLabel, unitPrice, isRelevant, relevance, groupEquivalents, normalizeText,
   productFamily, queryFamily, tokenCoverage, categoryFamily, offerFamily,
   productType, queryType, freshProduceIntent, isProcessedProduce, isProduceFamily, producePresence,
-  matchStage, queryTokenPresence,
+  matchStage, queryTokenPresence, resolveJourneyPool,
 } from './match.js';
 
 let pass = 0, fail = 0;
@@ -278,6 +278,105 @@ ok('presence: standalone word is primary', queryTokenPresence('فراولة طا
 ok('presence: بال-attached is secondary', queryTokenPresence('مصاصات بالفراولة', 'فراولة') === 'secondary');
 ok('presence: absent token is null', queryTokenPresence('حليب المراعي 2 لتر', 'فراولة') === null);
 ok('presence: primary mention anywhere beats a secondary one', queryTokenPresence('فراولة مع شوكولاتة بالفراولة', 'فراولة') === 'primary');
+
+// --- resolveJourneyPool — the shared gate ladder + the declared policy table
+// (HISTORY §34). Candidates carry { stage, family, type, text }; tiers differ
+// ONLY in what JOURNEY_POLICY declares. Mirrored in the engine's dev.mjs
+// selftestMatching — keep in sync (HANDOFF rule 2).
+const cand = (name, stage, extra = {}) => ({
+  name,
+  stage,
+  family: extra.family !== undefined ? extra.family : productFamily(name),
+  type: extra.type !== undefined ? extra.type : productType(name),
+  text: name,
+  ...extra,
+});
+{
+  // Stage gate: summary gates single-word queries on the EXACT best stage…
+  const lemons = [cand('ليمون اصفر', 5), cand('كلوروكس ليمون', 4)];
+  const sum = resolveJourneyPool(lemons, 'ليمون', 'summary');
+  ok('ladder: summary single-word exact stage (5 beats 4)', sum.kept.length === 1 && sum.kept[0].name === 'ليمون اصفر' && sum.stageExcluded === 1);
+  // …while history treats stages 5 and 4 as ONE primary band (word position
+  // must never split a price series).
+  const hist = resolveJourneyPool(lemons, 'ليمون', 'history');
+  ok('ladder: history bands stages 5+4 together', hist.kept.length === 2 && hist.stageExcluded === 0);
+  // Both still gate the secondary stages out when a primary band exists.
+  const withFlavour = [...lemons, cand('حليب بنكهة الليمون', 1, { family: 'milk' })];
+  ok('ladder: history still drops secondary stages', resolveJourneyPool(withFlavour, 'ليمون', 'history').kept.length === 2);
+}
+{
+  // Family gate: known-different family drops, family-less stays (all tiers).
+  const pool = [cand('حليب المراعي 2 لتر', 4), cand('زبادي نادك', 4), cand('منتج بدون عائلة', 4, { family: null })];
+  for (const tier of ['summary', 'alert', 'history']) {
+    const r = resolveJourneyPool(pool, 'حليب', tier);
+    ok(`ladder: ${tier} family gate drops yogurt, keeps family-less`,
+      r.kept.length === 2 && r.familyExcluded === 1 && r.kept.some((c) => c.family === null));
+  }
+  // neverEmpty: a gate that would empty the pool un-applies for summary and
+  // history, but an emptied ALERT pool is the answer (silence over a wrong
+  // product).
+  const allWrong = [cand('زبادي نادك', 4)];
+  ok('ladder: summary never empties (family gate un-applies)', resolveJourneyPool(allWrong, 'حليب', 'summary').kept.length === 1);
+  ok('ladder: history never empties', resolveJourneyPool(allWrong, 'حليب', 'history').kept.length === 1);
+  ok('ladder: alert prefers silence', resolveJourneyPool(allWrong, 'حليب', 'alert').kept.length === 0);
+}
+{
+  // Dominant-family fallback for brand-only queries: summary and alert infer;
+  // history never does.
+  const pool = [
+    cand('كيري جبنة مربعات', 3, { family: 'cheese' }),
+    cand('كيري جبنة قابلة للدهن', 3, { family: 'cheese' }),
+    cand('كيري بسكويت', 3, { family: 'biscuit' }),
+  ];
+  ok('ladder: summary infers the dominant family', resolveJourneyPool(pool, 'كيري', 'summary').targetFamily === 'cheese');
+  ok('ladder: alert infers the dominant family too (subset invariant)', resolveJourneyPool(pool, 'كيري', 'alert').targetFamily === 'cheese');
+  ok('ladder: history never infers an unnamed family', resolveJourneyPool(pool, 'كيري', 'history').targetFamily === null);
+}
+{
+  // Type gate: a query-named form excludes known different forms, all tiers.
+  const pool = [cand('Herfy Chicken Nuggets 750g', 2), cand('Herfy Chicken Roll', 2), cand('Chicken Pieces', 2, { type: null })];
+  for (const tier of ['summary', 'alert', 'history']) {
+    const r = resolveJourneyPool(pool, 'chicken nuggets', tier);
+    ok(`ladder: ${tier} type gate drops the roll, keeps type-less`, r.kept.length === 2 && r.typeExcluded === 1);
+  }
+}
+{
+  // Fresh-produce gate: processed/flavoured/formed candidates never drive a
+  // bare produce query, in every tier — the WATCH and HISTORY now obey the
+  // same fresh semantics as the Summary (the accidental gap this milestone
+  // closes).
+  const pool = [
+    cand('فراولة طازجة 250 جم', 5),
+    cand('مونتانا فراولة مجمدة 1 كجم', 5),
+    cand('مصاصات بالفراولة', 5, { family: null }),
+  ];
+  for (const tier of ['summary', 'alert', 'history']) {
+    const r = resolveJourneyPool(pool, 'فراولة', tier);
+    ok(`ladder: ${tier} fresh gate keeps only the fresh punnet`, r.kept.length === 1 && r.kept[0].name === 'فراولة طازجة 250 جم');
+  }
+  // Naming the processing in the query disables the gate.
+  const frozen = resolveJourneyPool(pool.slice(0, 2), 'فراولة مجمدة', 'summary');
+  ok('ladder: naming the processing disables the fresh gate', frozen.freshExcluded === 0);
+}
+{
+  // THE SUBSET INVARIANT — for the same candidates, the alert tier's pool is
+  // always a subset of the summary tier's pool (an unattended alert may only
+  // ever act on something the Summary would recommend).
+  const pools = [
+    [cand('ليمون اصفر', 5), cand('كلوروكس ليمون', 4), cand('عصير ليمون', 1, { family: 'juice' })],
+    [cand('حليب المراعي 2 لتر', 4), cand('زبادي نادك', 4)],
+    [cand('زبادي نادك', 4)],
+    [cand('فراولة طازجة', 5), cand('مونتانا فراولة', 5)],
+    [cand('كيري جبنة مربعات', 3, { family: 'cheese' }), cand('كيري بسكويت', 3, { family: 'biscuit' })],
+  ];
+  const queries = ['ليمون', 'حليب', 'حليب', 'فراولة', 'كيري'];
+  let subset = true;
+  pools.forEach((p, i) => {
+    const s = new Set(resolveJourneyPool(p, queries[i], 'summary').kept);
+    for (const c of resolveJourneyPool(p, queries[i], 'alert').kept) if (!s.has(c)) subset = false;
+  });
+  ok('ladder: alert pool ⊆ summary pool (monotonic strictness)', subset);
+}
 
 console.log(`\nmatch.test: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

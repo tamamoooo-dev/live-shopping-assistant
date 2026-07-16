@@ -6,14 +6,25 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-16 · Latest change: **Packaging Intelligence V1**
+> **Last updated:** 2026-07-16 · Latest change: **Journey Coherence V1**
+> (HISTORY §34) — one interpretation, declared policy: the four hand-rolled
+> gate stacks (Shopping Summary, watch alerts, /prices statistics — plus the
+> grid's implicit one) now run ONE shared gate ladder
+> (`resolveJourneyPool`: stage band → family → type → fresh-produce) in both
+> matching mirrors, with per-feature differences declared ONLY in the
+> `JOURNEY_POLICY` table. Closes the accidental gaps: watches gained the
+> stage + fresh gates (a ليمون watch can no longer alert on "كلوروكس ليمون";
+> a فراولة watch prefers silence over a frozen bag), /prices now KEEPS
+> family-less identities (the "store in the Summary, missing from Price
+> History" bug) and gained the type gate. Invariant, tested in both repos:
+> alert pool ⊆ summary pool for the same candidates.
+> Previous change: **Packaging Intelligence V1**
 > (HISTORY §33) — one package, one interpretation in BOTH matching mirrors:
 > bonus packs ("10+2" = 12) ported to the engine (it was blind to them —
 > mirror drift), packaging count words (rolls/رول، علب، قرص، ظرف…, curated),
 > hamza/ة folds in `normSize`; "10+2 Free" ≡ "12 Rolls" now yields the same
-> unit price, equivalence group, and /prices variant everywhere. Engine
-> identities for bonus/count-word offers re-derive at the Fri cron.
-> Previous change: **Browse V1.1** (HISTORY §32,
+> unit price, equivalence group, and /prices variant everywhere.
+> Also recent: **Browse V1.1** (HISTORY §32,
 > BROWSE-DESIGN.md Rev 3) — quality refinement from real production usage:
 > rails reduced to Biggest Drops + Lowest Ever (Exceptional Deals/Ending
 > Soon/New This Week removed as a product decision), brand pages actually
@@ -90,8 +101,9 @@ conflicts with this file, this file wins).
 2. **THE MATCHING MIRRORS.** Frontend `src/match.js` ↔ engine
    `brochure-engine/src/matching.js` duplicate the bilingual matching layer:
    normalization, synonyms, brand transliterations, product families,
-   product types (FORM), size/pack parsing. **Any change to one MUST be made
-   in both**, same for their tests.
+   product types (FORM), size/pack parsing, and (since HISTORY §34) the
+   shared journey gate ladder (`JOURNEY_POLICY` + `resolveJourneyPool`).
+   **Any change to one MUST be made in both**, same for their tests.
 3. **Core/framework stay store-agnostic.** Store knowledge lives only in
    provider files/config. New online store = provider file in BOTH repos +
    registration (connector `src/index.js`; frontend `src/app.js` STORES).
@@ -119,12 +131,19 @@ conflicts with this file, this file wins).
    every query term is mandatory (exact phrase > all whole-word > all matched)
    before gradually relaxing to partial matches. No other signal (family band,
    price, relevance score) may ever promote a result past a better stage, and
-   the engine never infers intent beyond the user's explicit words. **The
-   Shopping Summary obeys the same stages** (compare.js STAGE GATE): it never
-   summarizes or recommends a listing below the pool's best band — single word
-   gates on the exact stage; multi word treats all full-coverage stages (5..2,
-   name-layout refinements) as one band so word order never hides a cheaper
-   genuine product from the comparison.
+   the engine never infers intent beyond the user's explicit words.
+10. **INTERPRETATION IS SHARED; ONLY DECLARED POLICY DIFFERS** (HISTORY §34).
+   Every comparison-shaped feature — Shopping Summary (compare.js), watch
+   alerts (monitor.js), /prices statistics (priceHistory.js) — resolves "which
+   candidates ARE the queried product" through the mirrors' ONE gate ladder,
+   `resolveJourneyPool` (stage band → family → type → fresh-produce). Feature
+   differences live ONLY in the `JOURNEY_POLICY` table (summary/alert/
+   history tiers: single-word stage banding, dominant-family fallback,
+   neverEmpty) plus alert-only extras declared in monitor.js (floor 50, size
+   ±25%, flyer name-tier). Tested invariant: alert pool ⊆ summary pool.
+   Never add a gate or tweak a threshold in ONE consumer — extend the ladder
+   or the table (in BOTH mirrors), or you are re-creating the pre-§34
+   accidental divergence this rule exists to prevent.
 
 ## 4. Online search stores (7 providers, both repos)
 
@@ -235,10 +254,11 @@ one `price_identities` row per product (refreshed in place; `weeks_seen`
 depth counter) + a `price_history` point only on first sighting or a price
 CHANGE, keyed `(identity, valid_from)` so re-ingests converge. `GET
 /prices?q=` (legacy `product=` accepted as q) derives everything at read
-time: matching-mirror relevance, then the rule-9 gate (single word = the
-PRIMARY band, stages ≥4 — stage 5 vs 4 is only word position, famRank
-excludes the "كلوروكس ليمون" class; multi word = full-coverage band ≥2), then
-best famRank; grouped per size variant, each with lowest-ever
+time: matching-mirror relevance, then the SHARED gate ladder (rule 10,
+`resolveJourneyPool` at the 'history' tier: single-word stages 5+4 are ONE
+band — word position never splits a series — family/type/fresh gates same as
+the Summary, family-less identities KEPT, no family inference for brand-only
+queries); grouped per size variant, each with lowest-ever
 (price/where/when), highest, latest-per-store, `weeks` depth, `firstSeen`,
 `trend`. Under 2 weeks of depth the frontend verdict says **"history is
 building"** instead of claiming a record. Guarded `POST
@@ -248,8 +268,12 @@ identities unseen >365 days are pruned with their points.
 
 **Price monitoring** (`monitor.js`): watches are `product` (provider + stable
 result id, re-found by id/link match) or `grocery` (sweeps all 7 connector
-stores + current flyer offers in D1). Trust gates: relevance floor 50,
-reference-size comparability ±25%, family gate, type gate. Alerts fire on a
+stores + current flyer offers in D1, then resolves the pool through the
+SHARED gate ladder at the 'alert' tier — rule 10: stage band, family, type,
+fresh-produce, same interpretation as the Shopping Summary; an emptied pool
+means SILENCE, never a wrong product). Alert-only extras (declared in
+monitor.js, only ever narrowing): relevance floor 50, reference-size
+comparability ±25%, flyer NAME-tier matches only. Alerts fire on a
 downward **crossing** of the target (re-arms above); no-data never re-arms.
 Cap: 24 active watches, checked daily in SELF-fan-out batches of 3. Watch API
 is open but validated+capped (single-user posture). Push = optional
@@ -300,8 +324,8 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`
 | `core.js` | Store-agnostic Core; adaptive strategy memory (localStorage) |
 | `providers/*.js` | Thin per-store strategies calling the connector (`CONNECTOR_BASE`) |
 | `app.js` | Hash router (`#/search` `#/brochures` `#/alerts` `#/cart`), search orchestration, honest filtering (irrelevant dropped + counted), persisted prefs (`lsa.app.rank`, store scope, recents), `OFFERS_FETCH_LIMIT=120`, cart nav badge |
-| `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize`, relevance, `sameProduct` equivalence, `matchStage`/`queryTokenPresence` (Search-Roadmap stages, rule 9 — directional flavour markers: Arabic بنكهة/بطعم/برائحة precede the flavour word, English flavoured/scented follow it) |
-| `compare.js` | Comparison engine: bilingual flyer listings, **Search-Roadmap STAGE GATE first** (rule 9 — the summary only reasons over the grid's best match band), then family/type/coverage gates, **product-identity lock** (anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
+| `match.js` | **Matching mirror** (rule 2): normalize, synonyms, families (3 tiers: derived > base > produce — fresh-produce nouns are flavour/ingredient modifiers, so "حليب فراولة"/"Strawberry Milk" stay milk), types, `parseSize`, relevance, `sameProduct` equivalence, `matchStage`/`queryTokenPresence` (Search-Roadmap stages, rule 9 — directional flavour markers: Arabic بنكهة/بطعم/برائحة precede the flavour word, English flavoured/scented follow it), **`JOURNEY_POLICY` + `resolveJourneyPool`** (rule 10 — the shared gate ladder every comparison-shaped feature runs) |
+| `compare.js` | Comparison engine: bilingual flyer listings, **the SHARED gate ladder at the 'summary' tier** (rules 9+10 — stage band → family → type → fresh, excluded counts surfaced), coverage admission, **product-identity lock** (Summary-only policy: anchor = highest-relevance listing; others must cover ⊇ its matched query tokens), best-value w/ median outlier guard, per-variant history verdict |
 | `summary.js` | Renders the comparison model (headline, confidence, excluded-counts, history verdict) |
 | `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family); sort order = Roadmap stage (rule 9) → family band → price/value |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
@@ -468,21 +492,29 @@ external product images — verify via `preview_eval` DOM inspection; preview
    `SELECT brand_slug, COUNT(*) FROM offers WHERE valid_to >= date('now')
    AND brand_slug IN ('hana','kdd','puck','galaxy') GROUP BY 1` — hana must
    be 0, the others should drop vs their 2026-07-16 audit counts (22/62/34).
-1. **Browse Phase 4** (BROWSE-DESIGN.md §11; none is urgent): reintroduce
+1. **Journey Coherence V2** (HISTORY §34 follow-ups, in this order): (a)
+   harvest ONLINE price observations into price history from the daily watch
+   sweep — the sweep already fetches all 7 stores, so it closes "a Search
+   lowest never becomes the historical lowest" at zero extra subrequests;
+   (b) carry the Summary's anchor identity (covered tokens + variant) into a
+   watch at creation so the monitor re-finds THE product the user saw;
+   (c) surface `OFFERS_FETCH_LIMIT` truncation in the Summary ("comparison
+   covers N of M offers") so a store can never silently vanish.
+2. **Browse Phase 4** (BROWSE-DESIGN.md §11; none is urgent): reintroduce
    **Exceptional Deals** once the history substrate is deep enough to score
    it honestly (deals.js is kept pure+tested for exactly this), brand mining
    (observed tier), shelf (family) refinements, finer product families
    inside brands, For-you / In-season rails, collections, cart intelligence,
    per-deal "why exceptional" explainer sheet.
-2. **Optional:** enable phone push — `npx wrangler secret put NTFY_TOPIC`.
-2. **Amazon durability:** configure PA-API secrets, or keep accepting
+3. **Optional:** enable phone push — `npx wrangler secret put NTFY_TOPIC`.
+4. **Amazon durability:** configure PA-API secrets, or keep accepting
    best-effort.
-3. **README.md / CHANGELOG.md are badly stale** (still "Panda Live Search
+5. **README.md / CHANGELOG.md are badly stale** (still "Panda Live Search
    v1.0.0") — refresh them; this file is the only current doc.
-4. **`deriveNames` quality** (engine): some OCR-derived offer names are still
+6. **`deriveNames` quality** (engine): some OCR-derived offer names are still
    rough; improving the deriver self-heals on the next weekly upsert AND
    converges price-history identities (better names = fewer series splits).
-5. **Best-effort store monitoring:** notice when Amazon/Noon silently stop
+7. **Best-effort store monitoring:** notice when Amazon/Noon silently stop
    returning results (both are fragile to upstream markup changes).
 
 ---

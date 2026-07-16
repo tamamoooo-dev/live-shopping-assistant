@@ -38,15 +38,11 @@ import {
   tokens,
   expandToken,
   productFamily,
-  queryFamily,
   offerFamily,
   productType,
-  queryType,
-  freshProduceIntent,
-  isProcessedProduce,
-  producePresence,
   normalizeText,
   matchStage,
+  resolveJourneyPool,
 } from './match.js';
 
 const REL_FLOOR = 30; // ignore weak/look-alike matches when picking the best
@@ -64,14 +60,13 @@ function coversQuery(item, query) {
 }
 
 // The full text a listing was matched over — the SAME text that admitted it to
-// the pool, so the identity lock never contradicts the relevance gate. Flyer
-// OCR is bilingual and the product word often lands in only one language (the
-// EN display name may be a flavour line while the AR name carries "بيض"), so a
-// flyer is judged over BOTH derived names, exactly as flyerListing's probe does;
-// online listings use their name + brand.
+// the pool, so the gate ladder and the identity lock never contradict the
+// relevance gate. Set by the listing builders (`text`): flyer OCR is bilingual
+// and the product word often lands in only one language, so a flyer is judged
+// over BOTH derived names, exactly as flyerListing's probe does; online
+// listings use their name + brand.
 function listingMatchText(l) {
-  if (l.source === 'flyer' && l.offer) return `${l.offer.name || ''} ${l.offer.nameAr || ''}`;
-  return `${l.name || ''} ${l.brand || ''}`;
+  return l.text || '';
 }
 
 // WHICH query tokens a text actually matches (as a Set of token indices), with
@@ -128,6 +123,7 @@ export function onlineListing(t, query) {
     stage: matchStage(it, query),
     family: productFamily(it.name),
     type: productType(it.name),
+    text: `${it.name || ''} ${it.brand || ''}`,
     it,
   };
 }
@@ -169,6 +165,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     // yields nothing, fall back to the aggregator's own category (offerFamily).
     family: offerFamily(offer),
     type: productType(`${offer.name || ''} ${offer.nameAr || ''}`),
+    text: `${offer.name || ''} ${offer.nameAr || ''}`,
     offer,
   };
 }
@@ -219,96 +216,17 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
   }
   if (!all.length) return null;
 
-  // STAGE GATE (Search Roadmap, HANDOFF rule 9) — the summary must reason over
-  // the SAME products the grid ranks first: only listings in the BEST match
-  // band present may compete or be recommended. Single word: the exact stage —
-  // a trailing-token match ("كلوروكس ليمون") must never drive a ليمون
-  // comparison while true lemon products (stage 5) exist. Multi word: every
-  // FULL-coverage stage (5..2 — phrase/whole-word/strong/substring are layout
-  // refinements of "every term matched") is ONE band, so a genuine product
-  // whose name merely orders the words differently still competes on price;
-  // the relaxation stages (1, 0 — missing terms) stay below and never enter a
-  // comparison a full match exists for. Excluded listings still render in the
-  // grid; the count is surfaced, never silent.
-  const multiWord = tokens(query).length > 1;
-  const stageBand = (l) => {
-    const s = l.stage || 0;
-    return multiWord && s >= 2 ? 2 : s;
-  };
-  const maxBand = all.reduce((m, l) => Math.max(m, stageBand(l)), 0);
-  const staged = all.filter((l) => stageBand(l) === maxBand);
-  const stageExcluded = all.length - staged.length;
-
-  // FAMILY GATE — products from different families must not compete, however
-  // similar their names ("نادك منزوع الدسم" must never offer yogurt as the
-  // cheaper alternative to milk). The target family is the one the query names
-  // ("حليب" -> milk); a family-less query (brand-only, "كيري") falls back to
-  // the dominant family across the matches. Listings of a KNOWN different
-  // family are excluded from the comparison (they still render in the results
-  // list — they are real matches, just not comparable); family-less listings
-  // stay (we refuse to guess a mismatch).
-  const targetFamily = (() => {
-    const qf = queryFamily(query);
-    if (qf) return qf;
-    const counts = new Map();
-    let familied = 0;
-    for (const l of staged) {
-      if (!l.family) continue;
-      familied += 1;
-      counts.set(l.family, (counts.get(l.family) || 0) + 1);
-    }
-    let top = null;
-    for (const [f, c] of counts) if (!top || c > top.c) top = { f, c };
-    return top && top.c >= 2 && top.c / familied > 0.5 ? top.f : null;
-  })();
-  let listings = targetFamily ? staged.filter((l) => !l.family || l.family === targetFamily) : staged;
-  if (!listings.length) listings = staged; // never let the gate empty the comparison
-  const familyExcluded = staged.length - listings.length;
-
-  // TYPE GATE — the second product attribute. When the query names a product
-  // FORM ("chicken nuggets" -> nuggets), listings of a KNOWN different form
-  // ("chicken roll" -> roll) share the family but are not the same product, so
-  // they must not drive the comparison. Type-less listings stay (we never guess
-  // a mismatch); they still render in the results grid — just not the summary.
-  const targetType = queryType(query);
-  let typeExcluded = 0;
-  if (targetType) {
-    const typed = listings.filter((l) => {
-      const t = l.type !== undefined ? l.type : productType(l.name);
-      return !t || t === targetType;
-    });
-    if (typed.length) {
-      typeExcluded = listings.length - typed.length;
-      listings = typed;
-    }
-  }
-
-  // FRESH-PRODUCE GATE — a bare produce query ("فراولة") names the FRESH
-  // product, so the "lowest price" claim must be for fresh strawberries: a
-  // listing that carries a FORM word ("رول فراولة" is a cake roll the family
-  // lexicon can't see), a processing marker (frozen/canned/peeled), or that
-  // mentions the produce only as a FLAVOUR ("مصاصات بالفراولة" — the بال
-  // prefix means "with", i.e. flavoured by construction, even when the head
-  // noun escaped the lexicon) must not drive the comparison. Naming the
-  // form/processing in the query ("فراولة مجمدة") disables the gate; excluded
-  // listings still render in the grid — real matches, just not the fresh
-  // product. This also keeps the flavoured junk out of the per-unit value
-  // pool, where its high SAR/kg prices made the outlier guard reject genuine
-  // fresh-produce bargains as "implausible".
-  const freshFam = freshProduceIntent(query);
-  let freshExcluded = 0;
-  if (freshFam && (!targetFamily || targetFamily === freshFam)) {
-    const fresh = listings.filter((l) => {
-      const text = listingMatchText(l);
-      const t = l.type !== undefined ? l.type : productType(text);
-      if (t || isProcessedProduce(text)) return false;
-      return producePresence(text, freshFam) !== 'flavored';
-    });
-    if (fresh.length) {
-      freshExcluded = listings.length - fresh.length;
-      listings = fresh;
-    }
-  }
+  // THE SHARED GATE LADDER (match.js resolveJourneyPool, HISTORY §34) — the
+  // summary must reason over the SAME products the grid ranks first: stage
+  // band → family → type → fresh-produce, at the 'summary' tier of the
+  // declared JOURNEY_POLICY table. The engine's price alerts and price-history
+  // statistics run the SAME ladder through the matching mirror, so every
+  // comparison-shaped feature interprets the pool identically; the per-gate
+  // WHYs live on the ladder itself. Excluded listings still render in the
+  // grid — the counts are surfaced, never silent.
+  const pool = resolveJourneyPool(all, query, 'summary');
+  let listings = pool.kept;
+  const { targetFamily, stageExcluded, familyExcluded, typeExcluded, freshExcluded } = pool;
 
   // PRODUCT-IDENTITY LOCK — the Shopping Summary must compare prices for the
   // SAME product the Grid identifies, never re-pick a cheaper look-alike. The

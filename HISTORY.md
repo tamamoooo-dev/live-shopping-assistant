@@ -3813,3 +3813,80 @@ the two-store Uno equivalence + unit-price parity), `compare.test.mjs` 73 ✅,
 viewer 100 ✅; engine `watchtest` (matching+monitor) ✅ with 14 mirrored
 packaging assertions, `pricetest` ✅, `offerstest` ✅, browse 57 ✅,
 reingest ✅, hotspots ✅. Engine deployed + frontend pushed 2026-07-16.
+
+## §34 · Journey Coherence V1: one interpretation, declared policy (2026-07-16)
+
+**The problem (as the user framed it).** Super Search is becoming a Shopping
+Intelligence platform, and its features — Search, Shopping Summary, Lowest
+Price, Price History, Watch Price — are one shopping journey, not five
+products. Yet they could disagree about the same product: a product visible
+in Search vanished from the Summary for reasons no other feature shared; a
+watch could alert on a product the Summary would refuse to recommend; a store
+present in the Summary was missing from Price History. Root cause analysis
+(this session) found the divergence was ARCHITECTURAL, not incidental: the
+system has no product entity (identity is a judgment recomputed from text at
+read time — correctly so, see below), and each feature had grown its own
+hand-rolled gate stack at its own birth date: compare.js (rel≥30, exact-stage
+single-word band, keeps family-less listings), priceHistory.js (stage band
+≥4, DROPPED family-less identities below the best famRank), monitor.js
+(rel≥50, NO stage gate, NO fresh-produce gate). Four stacks over identical
+mirror primitives; nobody could tell which differences were policy and which
+were drift.
+
+**The decision.** The separation that matters is INTERPRETATION vs POLICY,
+not feature vs feature. We explicitly REJECTED introducing a materialized
+product entity / catalog: with per-flyer-extraction ids and drifting OCR
+names, a stored entity is a cached guess needing lifecycle management
+(split/merge/heal — the brand_slug re-stamp pain in miniature, §32), while
+the existing derive-at-read model heals retroactively by construction. The
+coherence fix is to evolve the derived model: share the interpretive
+judgment, declare the policy differences.
+
+**What was built (both matching mirrors, rule 2).**
+- `JOURNEY_POLICY` — the declared per-feature policy table. Three tiers:
+  `summary` (exact single-word stage band, dominant-family fallback for
+  brand-only queries, neverEmpty), `alert` (same as summary except an emptied
+  pool means SILENCE — an unattended alert prefers no answer over a wrong
+  product), `history` (single-word stages 5+4 are ONE band — word position
+  must never split a price series; NO family inference for brand-only
+  queries — statistics don't guess; neverEmpty).
+- `resolveJourneyPool(candidates, query, tier)` — the ONE gate ladder: stage
+  band → family (known-different drops, family-less STAYS) → type →
+  fresh-produce, with per-gate excluded COUNTS (honesty rule 6). Candidates
+  carry `{ stage, family, type, text }` — the interpretation over the same
+  text that admitted them.
+- compare.js: the four inline gate blocks became one `resolveJourneyPool`
+  call at the 'summary' tier. Behavior byte-identical (compare.test.mjs 73
+  passed unchanged); the product-identity lock stays as declared
+  Summary-only policy.
+- monitor.js: evaluateGrocery now pools ALL passing candidates (online +
+  flyer) and resolves at the 'alert' tier — the watch GAINED the stage gate
+  and the fresh-produce gate it had accidentally never received (it predates
+  the Search Roadmap §26). A ليمون watch can no longer alert on "كلوروكس
+  ليمون" while true lemons exist; a bare فراولة watch is a FRESH-strawberry
+  watch and stays silent over a frozen-only pool. Alert-only extras (floor
+  50, size ±25%, flyer name-tier) are declared in monitor.js and only narrow.
+- priceHistory.js: rankIdentity's famRank collapse replaced by the ladder at
+  the 'history' tier. FIX: family-less identities are now KEPT in the
+  statistics exactly as the Summary keeps family-less listings — dropping
+  them was the "store visible in the Summary, missing from Price History"
+  bug. The type gate now applies to history too. /offers ranking and the
+  grid are display tiers (rank, never drop) — unchanged.
+
+**The invariant (tested in both repos).** For the same candidates, the alert
+tier's pool is a SUBSET of the summary tier's pool — a watch may only ever
+act on something the Summary would recommend. Cross-feature agreement is now
+a testable property, not a discipline.
+
+**Deliberately NOT done (scoped follow-ups, HANDOFF §11):** harvesting
+online price observations into history via the daily watch sweep (closes
+"a Search lowest never becomes the historical lowest" — zero extra
+subrequests); carrying the Summary's anchor identity into watches at
+creation; surfacing OFFERS_FETCH_LIMIT truncation in the Summary.
+
+**Verified:** frontend `match.test.mjs` 206 ✅ (20 new ladder tests incl.
+the subset invariant), `compare.test.mjs` 73 ✅ unchanged, viewer 100 ✅;
+engine `watchtest` ✅ (mirrored ladder block + 2 end-to-end watch gap tests:
+stage gate picks the lemon at 6 over Clorox at 3, frozen-only فراولة pool →
+no-data), `pricetest` ✅, `offerstest` ✅, browse 57 ✅, reingest ✅,
+hotspots ✅, ops ✅. Engine deployed + frontend pushed 2026-07-16.
