@@ -152,6 +152,27 @@ ok('apple vinegar -> vinegar', productFamily('خل التفاح العضوي') =
 ok('strawberry soap -> care', productFamily('صابون فراولة') === 'care');
 ok('banana hair clips -> care (accessory, never produce)', productFamily('مشابك شعر موز') === 'care');
 ok('banana keychain -> toy (accessory, never produce)', productFamily('سلسلة مفاتيح لطيفة بتصميم موز') === 'toy');
+// housewares: the vessel/appliance is the product, the drink word is its purpose
+ok('food steamer w/ water tank -> houseware', productFamily('جهاز طهي بالبخار مع خزان ماء 1.5 لتر') === 'houseware');
+ok('water jug -> houseware', productFamily('طقم ابريق ماء زجاجي بغطاء سعة 1.5 لتر') === 'houseware');
+ok('kettle (AR) -> houseware', productFamily('تيفال غلاية ماء 1.7 لتر') === 'houseware');
+ok('hot-water bag -> houseware', productFamily('قربة ماء ساخن مع غطاء') === 'houseware');
+ok('houseware for water query gates to stage 1', matchStage({ name: 'غلاية ماء كهربائية', brand: '' }, 'ماء') === 1);
+// false-positive locks: genuine consumables must NEVER classify houseware
+ok('bottled water sold as زجاجة stays water', productFamily('زجاجة مياه من اروى') === 'water');
+ok('bottled water w/ size stays water', productFamily('مياه شرب معبأة من أروى، 6 قطع× 1.5 لتر') === 'water');
+ok('Kettle Chips stays chips', productFamily('Kettle Chips Sea Salt 150g') === 'chips');
+ok('air-fryer fries stay potato (للقلاية attached)', productFamily('بطاطس للقلاية الهوائية 1 كجم') === 'potato');
+// multi-word known-different-family cap (the "ماء أروى 1.5 steamer" regression):
+// accidental full token coverage (brand-prefix ارويك + purpose word ماء +
+// capacity digits) must never outrank genuine matches when the family is
+// KNOWN different; genuine full matches and unknown families are untouched.
+ok('steamer capped to stage 1 for ماء أروى 1.5',
+  matchStage({ name: 'جهاز طهي الطعام بالبخار متعدد الوظائف من ارويك مع خزان ماء 1.5 لتر', brand: '' }, 'ماء أروى 1.5') === 1);
+ok('genuine Arwa water keeps its full-coverage stage',
+  matchStage({ name: 'مياه شرب معبأة من أروى، 6 قطع× 1.5 لتر', brand: '' }, 'ماء أروى 1.5') >= 4);
+ok('family-less full match not demoted by the cap',
+  matchStage({ name: 'اروي كلاسيك 1.5', brand: '' }, 'اروي كلاسيك 1.5') === 5);
 ok('cherry tomatoes stay tomato (EN cherry unmapped)', productFamily('Cherry Tomatoes 250g') === 'tomato');
 ok('pickled cucumber -> pickle', productFamily('مخلل خيار') === 'pickle');
 ok('orange soda -> soda', productFamily('فانتا برتقال 330 مل') === 'soda');

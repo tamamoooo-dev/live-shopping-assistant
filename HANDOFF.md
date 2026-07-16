@@ -165,6 +165,12 @@ conflicts with this file, this file wins).
    fragments must never be AND-words), `querySize` reads it, and matchStage
    CAPS results whose parsed size contradicts it at stage 1 — size-less
    results are never demoted. In both mirrors, like everything here.
+   **A KNOWN different family caps the stage at 1 in BOTH query shapes**
+   (single-word since the Roadmap; multi-word since HISTORY §36's steamer
+   fix): full token coverage can be accidental ("ماء أروى 1.5" fully
+   matches a food steamer via brand-prefix ارويك + purpose-word ماء +
+   capacity digits) — family evidence beats coverage; unknown families are
+   never demoted.
    **Stage GRANULARITY is per-perspective** (HISTORY §36): Featured and Best
    value compare exact stages; the grid's Lowest-price perspective compares
    at the 'primary' stageBand (5+4 one band single-word, full-coverage one

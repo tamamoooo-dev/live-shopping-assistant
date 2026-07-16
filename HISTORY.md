@@ -4053,3 +4053,29 @@ sort labels/subnotes updated EN+AR ("Featured"/"المختارة"). Tests:
 `src/featured.test.mjs` (48 assertions, hermetic storage) + one new family
 assertion per mirror suite; all suites green (frontend 239/80/48, engine
 watchtest/offerstest/pricetest).
+
+**Post-ship regression fix (same day): the "ماء أروى 1.5 food steamer".**
+A multi-function food steamer ranked as a nearby match for "ماء أروى 1.5".
+Root cause was TWO gate holes, not Featured (which only reordered what the
+gates admitted): (a) appliances/vessels had NO family — "غلاية ماء",
+"ابريق ماء", "قربة ماء ساخن" and the steamer's "خزان ماء" all classified as
+family WATER (the purpose word was the only lexicon hit), placing hardware
+in the query family's TOP band; (b) the steamer reached stage 3 because
+token coverage was accidental — brand ارويك prefix-matches اروي, ماء is its
+purpose word, and the bare "1.5" (unparseable as a size, no unit) shreds
+into mandatory tokens 1+5 that match its capacity — and the multi-word
+stage path had no known-different-family demotion, while the single-word
+path has had one all along ("عصير ليمون" → stage 1). Fixes, in BOTH
+mirrors: a new **houseware** DERIVED family (steamer/blender/jug/غلايه/
+قلايه/ابريق/قربه/جهاز/ماكينه/قدر/مقلاه/… — curated to words that never
+name a consumable; deliberately excluded: زجاجه/bottle — genuine bottled
+water is sold as "زجاجة مياه من اروى" — kettle (Kettle Chips), فلتر/filter
+(قهوة فلتر), mixer, microwave, ترمس (lupin)), and the **multi-word
+known-different-family cap** in rawMatchStage — full token coverage over a
+KNOWN different family caps at stage 1, exactly like the single-word rule;
+unknown families are never demoted. Live-verified: the steamer fell stage
+3 → 1 + bottom band and out of the Featured median pool; all three
+perspectives lead with genuine Arwa 1.5L; jugs/kettles/hot-water bags all
+classify houseware while every real water (incl. "زجاجة مياه من اروى")
+keeps its family. Tests: 4 new frontend assertions + 4 engine (steamer cap,
+genuine-water non-demotion, زجاجة/Kettle-Chips false-positive locks).
