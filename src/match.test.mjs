@@ -279,6 +279,17 @@ ok('presence: بال-attached is secondary', queryTokenPresence('مصاصات ب
 ok('presence: absent token is null', queryTokenPresence('حليب المراعي 2 لتر', 'فراولة') === null);
 ok('presence: primary mention anywhere beats a secondary one', queryTokenPresence('فراولة مع شوكولاتة بالفراولة', 'فراولة') === 'primary');
 
+// --- beverage + substitute look-alikes (found in production 2026-07-16) ---
+// "Lemon Lime Drink" is a beverage (the English mirror of مشروب), and a
+// "lemon substitute" names what it replaces — neither is fresh produce.
+ok('lemon lime drink classifies as beverage, not produce', productFamily('Lemon Lime Drink') === 'syrup');
+ok('lemon drink is a secondary stage for ليمون', matchStage({ name: 'Lemon Carbonated Soft Drink Can' }, 'ليمون') === 1);
+ok('lemon substitute is not lemon produce', productFamily('Maqadir Lemon Substitute 1L') !== 'lemon');
+ok('lemon substitute is a secondary stage for ليمون', matchStage({ name: 'Maqadir Lemon Substitute 1L' }, 'ليمون') === 1);
+ok('بديل الليمون is not lemon produce', productFamily('مقادير بديل الليمون 1 لتر') !== 'lemon');
+ok('بديل الليمون is a secondary stage for ليمون', matchStage({ name: 'مقادير بديل الليمون 1 لتر' }, 'ليمون') === 1);
+ok('milk drink mirrors مشروب حليب (beverage, not milk)', productFamily('Almarai Milk Drink 200ml') === 'syrup');
+
 // --- resolveJourneyPool — the shared gate ladder + the declared policy table
 // (HISTORY §34). Candidates carry { stage, family, type, text }; tiers differ
 // ONLY in what JOURNEY_POLICY declares. Mirrored in the engine's dev.mjs
