@@ -3675,3 +3675,83 @@ but `/browse` stayed edge-cached for 1h with no invalidation. The guarded
 write paths (ingest, backfill) now purge the cached summary (per-colo,
 best-effort); browser-side `max-age` staleness (≤1h) remains by design.
 Sharp-edge notes added to HANDOFF §10.
+
+## §32 · Browse V1.1: quality refinement from real production usage (2026-07-16)
+
+**The brief (user, day one of production):** Browse V1's architecture stays;
+this is NOT a redesign. (1) Simplify — remove Exceptional Deals, Ending Soon,
+New This Week ("I prefer fewer, stronger browsing experiences over many
+average ones… Trust is more important than feature count"); keep Departments,
+Brands, Biggest Drops, Lowest Price. (2) Brand experience — audit correctness
+first (precision/recall on real data), then make brand pages feel like
+visiting a brand. (3) Frozen products were appearing inside Fresh Food.
+
+**Audit method:** exported all 7,947 current offers from production D1,
+re-derived brands with the live `brands.js` instrumented per match path
+(exact vs repair), folded categories through the mapping, and scanned
+fresh-aisle rows for frozen name markers. Scripts in the session scratchpad;
+findings below are counted, not estimated.
+
+**Finding 1 — the brand pages were never filtered at all.** The V1 frontend's
+`browseOffers()` whitelist in `brochure.js` omitted `brand`, so every
+`#/browse/brand/<slug>` page silently requested the GLOBAL discount-sorted
+listing. This — not detection quality — was the main "products that clearly
+do not belong to that brand" experience. One-word fix, now locked by a ⚠️
+comment naming the failure.
+
+**Finding 2 — detection precision (1,911 branded rows, ~110 provably wrong):**
+- 2-char keys from split names: "كي دي دي" (KDD) indexed كي and دي → every
+  LED-screen name ("ال اي دي") became KDD (13/22 wrong); "اب" from كلوس اب
+  claimed 7up rows. Fix: minimum key length 3.
+- The fuzzy trailing-junk prefix repair was measured NET HARMFUL (~40 wrong
+  vs ~16 right): comforter→Comfort, فيريرو (Ferrero)→Fairy, برينس (Royal
+  Prince)→Berain, اوريون (Orion)→Oreo, هناء (Hanaa — a different company)→
+  Hana. Removed entirely; exact/article/doubled-letter repair stay.
+- Same-word-different-world: Galaxy (Samsung phones, Galaxy rice), بوك
+  (MacBook), Himalayan (salt/rice), Nova (mandarin variety), Rainbow
+  (UK lollies), Montana, Comfort (bedding), فاين (Jade Vine fashion).
+  Fix: optional per-brand `depts` allowlist checked against the offer's
+  canonical department; unknown context (`more`) = stay silent.
+- Ordinary-language collisions: "الوزن الصافي" (net weight) → Al Safi;
+  "كيري جولد" (Kerrygold) → Kiri; شاي ربيع (Rabea tea) + "زهور الربيع"
+  scents → Al Rabie. Fix: `noStrip` (never index bare صافي/ربيع) +
+  VETO_PREV/VETO_NEXT neighbor-word guards.
+- KB corrections/additions: hana→hanaa (هناء canned foods; the water brand
+  entry only ever mis-tagged), dari, samsung, bestway (+ واي/بيست added to
+  GENERIC so the split Arabic name can't tag wifi rows).
+Re-derivation impact on production rows: 1,750 kept · 130 wrong stamps
+dropped · 31 corrected (galaxy→samsung, hana→hanaa, →dari) · 130 gained —
+same 1,911 total, far more precise. Detection now takes the offer's
+source/category for context; ingest and the backfill healer pass them.
+
+**Finding 3 — Frozen-in-Fresh:** 49 current rows in fresh aisles carry
+frozen markers, 48 of them frozen chicken D4D files under
+`fresh-chicken-poultry`. Fix: read-time fresh→frozen refinement
+(`mapping.FRESH_TO_FROZEN` + مجمد/frozen marker) applied consistently in
+THREE places that must never disagree: cards (`refineAisle`), tile counts
+(categoryCounts gains a `frozen_marked` split), and the dept/aisle SQL
+prefilters (include-groups gain a `frozen: exclude|only` mode) — so a
+frozen-marked "fresh" row lists under Frozen, counts under Frozen, and is
+excluded from Fresh, with exact pagination. The reverse direction is
+deliberately not applied ("freshly frozen" is marketing, not a category).
+
+**Simplification:** engine RAIL_IDS → `['drops','lowest-ever']`; the three
+removed rails also 400 on `/browse/offers?rail=` (explicit, never silent).
+`deals.js` stays pure+tested — Exceptional Deals returns as the flagship
+when the history substrate is deep enough to score it honestly. Frontend
+rails/sorts reduced to match (sorts: Biggest discount / Lowest price).
+
+**Brand experience:** brand pages open on the BRAND, not a filter — identity
+hero (deterministic monogram avatar, hue hashed from the slug, zero hosted
+assets; bilingual name; "{offers} offers · {stores} stores this week"), then
+engine-computed **product families** (the brand's live offers folded per
+canonical aisle, `families` on the first `/browse/offers?brand=` page)
+as one-tap filter chips, then the discount-first grid. Families surface the
+user's "Kiri → Spread/Triangles/Slices" idea at the honest granularity the
+data supports today (canonical aisles); finer families are Phase 4.
+
+**Verified:** 57 browse tests (taxonomy/mapping/deals/brands/API incl. the
+new guards, frozen SQL modes, families facet); all engine + frontend suites
+green; UI verified in-browser against the production engine (simplified
+floor; Kiri brand page = hero + only Kiri cards). Production re-stamp =
+`POST /prices/backfill` after engine deploy (heals identity+brand in place).

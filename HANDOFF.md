@@ -6,12 +6,17 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-16 · Latest change: the **Browse pillar is LIVE
-> in production** (HISTORY §31, BROWSE-DESIGN.md Rev 2) — D1 migration
-> applied, engine deployed, back catalog backfilled (34.2k identities /
-> 8.8k brands stamped), API + frontend verified end-to-end including the
-> card → viewer → product-sheet tap-through. Everything is committed AND
-> pushed. (Viewer v2 / i18n / brand-knowledge milestones of 2026-07-10..15
+> **Last updated:** 2026-07-16 · Latest change: **Browse V1.1** (HISTORY §32,
+> BROWSE-DESIGN.md Rev 3) — quality refinement from real production usage:
+> rails reduced to Biggest Drops + Lowest Ever (Exceptional Deals/Ending
+> Soon/New This Week removed as a product decision), brand pages actually
+> filtered (the V1 frontend never sent `brand=` — root cause of "wrong
+> products on brand pages"), brand-detection precision guards (dept
+> allowlists, neighbor vetoes, fuzzy repair removed), brand identity hero +
+> product-families chips, fresh→frozen read-time refinement. ⚠️ Pending:
+> engine `wrangler deploy` + per-store `/prices/backfill` re-stamp (blocked
+> on a permission prompt at session end), then production verification.
+> (Viewer v2 / i18n / brand-knowledge milestones of 2026-07-10..15
 > are in git history; their HISTORY sections are still pending.)
 
 ---
@@ -248,17 +253,25 @@ non-current AND expired >28 days (row marked `pruned_at`); ≤250 KV deletes +
 **D1 tables:** `brochures`, `price_points`, `offers`, `watches`, `alerts`
 (canonical `schema.sql`; past deltas in `migrate-*.sql`, already applied).
 
-**Browse** (engine `src/browse/`, BROWSE-DESIGN.md): read-only views over the
-offers+history substrate, speaking ONLY canonical ids. `taxonomy.js` (11
-depts / ~70 aisles, bilingual, OURS) + `mapping.js` (per-source category →
-aisle; unmapped ⇒ visible `other`, read-time so fixes apply retroactively) +
-`brands.js` (canonical brand KB ~95 entries + OCR-repair detection, ported
-from the viewer's split; NOT part of the matching mirrors) + `deals.js`
-(Exceptional Deals scoring — history signals outweigh advertised discount,
-qualify ≥50, pure+tested). Ingest stamps two derived columns on offers:
+**Browse** (engine `src/browse/`, BROWSE-DESIGN.md Rev 3): read-only views
+over the offers+history substrate, speaking ONLY canonical ids. `taxonomy.js`
+(11 depts / ~70 aisles, bilingual, OURS) + `mapping.js` (per-source category →
+aisle; unmapped ⇒ visible `other`, read-time so fixes apply retroactively;
+plus the **fresh→frozen refinement**: `FRESH_TO_FROZEN` + the مجمد/frozen
+name marker reroute D4D's frozen-filed-as-fresh rows, applied identically in
+cards, tile counts, and the SQL prefilters' `frozen: exclude|only` include
+modes) + `brands.js` (canonical brand KB ~100 entries + OCR-repair detection;
+V1.1 precision guards: per-brand `depts` allowlists, VETO_PREV/VETO_NEXT
+neighbor words, `noStrip`, min key length 3, NO fuzzy prefix repair —
+detection takes the offer's source/category for context; failure mode is
+"no brand", never "wrong brand") + `deals.js` (deal scoring, pure+tested —
+kept for Exceptional Deals' future return; V1.1 ships only the Biggest
+Drops + Lowest Ever rails, RAIL_IDS is the law). A brand listing's first
+page carries `brand` + `families` (live offers per canonical aisle,
+`browseStore.brandFacets`). Ingest stamps two derived columns on offers:
 `identity` (deriveIdentity — the history join) and `brand_slug` (detectBrand);
-`/prices/backfill` heals pre-column rows. Tests:
-`node src/browse/browse.test.mjs`.
+`/prices/backfill` heals pre-column rows AND re-stamps after brand-knowledge
+changes. Tests: `node src/browse/browse.test.mjs`.
 
 **API:** public reads `GET /` (health), `/brochures[?store=&region=]`,
 `/brochures/history`, `/brochures/hotspots?id=`, `/asset/<key>`,
@@ -282,7 +295,7 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`
 | `summary.js` | Renders the comparison model (headline, confidence, excluded-counts, history verdict) |
 | `marketplace.js` | Unified grid (online + flyer cards, store badges), sources strip, Lowest price / Best value sort toggle (value = per-unit within dominant unit family); sort order = Roadmap stage (rule 9) → family band → price/value |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
-| `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (Exceptional Deals first, dept tiles + brand pills as EQUAL peers, rails), listings w/ aisle chips + sorts + store filter + paging. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
+| `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (dept tiles + brand pills as EQUAL peers, then Biggest Drops + Lowest Ever rails — V1.1 keeps only these two), listings w/ aisle chips + sorts (discount/price) + store filter + paging; **brand pages** open on an identity hero (deterministic monogram, bilingual name, offers·stores) + engine-fed product-family chips. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
 | `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
 | `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). Sheet hero + cart thumbnail are **SELF-HOSTED crops** from the STORED page image via the tapped spot's bbox (`cropFromPage`: canvas + `crossOrigin` on the CORS-open /asset → data-URL); D4D's CDN crop (`offer.imageUrl`) is only a fallback when no geometry is at hand (similar-strip, marketplace). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
@@ -418,14 +431,30 @@ external product images — verify via `preview_eval` DOM inspection; preview
 - **Per-store /prices/backfill calls can transiently fail** with an HTML
   error page when hammered back-to-back (seen 2026-07-16: 7 of 18 stores);
   idempotent — re-run the failed stores with a few seconds' pacing.
+- **`browseOffers()` in `brochure.js` whitelists its query params.** A param
+  missing from that list is SILENTLY dropped — that's how Browse V1 shipped
+  brand pages that showed the global listing (`brand` wasn't whitelisted).
+  Adding a `/browse/offers` param = add it to that list, same commit.
+- **The frozen-marker test exists twice by design** (JS regex in
+  `browse/mapping.js` + `FROZEN_MARK_SQL` in `storage/browseStore.js`); they
+  MUST classify identically or cards/counts/filters drift. Change both or
+  neither.
 
 ## 11. Open TODOs (priority order)
 
-1. **Browse Phase 4** (BROWSE-DESIGN.md §11; none is urgent): brand mining
-   (observed tier), shelf (family) refinements, For-you / In-season rails,
-   collections, cart intelligence, per-deal "why exceptional" explainer
-   sheet (badges already carry the signals; a tap-through explanation view
-   would deepen trust — user request 2026-07-16).
+0. **Finish the V1.1 rollout** (blocked on a permission prompt 2026-07-16):
+   from `brochure-engine/`: `npx wrangler deploy`, then rotate
+   `INGEST_SECRET` and run `POST /prices/backfill?store=<id>` per store
+   (paced a few seconds apart) to re-stamp `brand_slug` with the new
+   detection; spot-check `/browse` (2 rails), `/browse/offers?brand=kiri`
+   (families present), `dept=fresh` vs `dept=frozen` (no frozen-marked rows
+   in fresh).
+1. **Browse Phase 4** (BROWSE-DESIGN.md §11; none is urgent): reintroduce
+   **Exceptional Deals** once the history substrate is deep enough to score
+   it honestly (deals.js is kept pure+tested for exactly this), brand mining
+   (observed tier), shelf (family) refinements, finer product families
+   inside brands, For-you / In-season rails, collections, cart intelligence,
+   per-deal "why exceptional" explainer sheet.
 2. **Optional:** enable phone push — `npx wrangler secret put NTFY_TOPIC`.
 2. **Amazon durability:** configure PA-API secrets, or keep accepting
    best-effort.

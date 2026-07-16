@@ -371,9 +371,9 @@ export async function brochureForOffer(offer) {
 
 // --- Browse (the product-discovery pillar, BROWSE-DESIGN.md) -------------------
 // GET /browse — the market floor in one payload: canonical departments/aisles
-// with live-offer counts plus the rails (Exceptional Deals first). Cached for
-// the page session (the substrate changes 3×/week; the engine edge-caches it
-// too). GET /browse/offers — the universal listing behind every Browse node.
+// with live-offer counts plus the rails (Biggest Drops, Lowest Ever). Cached
+// for the page session (the substrate changes 3×/week; the engine edge-caches
+// it too). GET /browse/offers — the universal listing behind every Browse node.
 // Both best-effort like every engine read: null just means "Browse is resting".
 let browseSummaryPromise = null;
 export function loadBrowseSummary() {
@@ -386,12 +386,14 @@ export function loadBrowseSummary() {
   return browseSummaryPromise;
 }
 
-// params: { dept?, aisle?, rail?, store?, sort?, limit?, offset? } — canonical
-// ids only (the engine owns the provider-category mapping).
+// params: { dept?, aisle?, brand?, rail?, store?, sort?, limit?, offset? } —
+// canonical ids only (the engine owns the provider-category mapping).
+// ⚠️ `brand` MUST stay in the whitelist below: its omission was the Browse V1
+// bug where every brand page silently showed the GLOBAL listing (V1.1 audit).
 const browseOffersCache = new Map();
 export function browseOffers(params = {}) {
   const qs = new URLSearchParams();
-  for (const k of ['dept', 'aisle', 'rail', 'store', 'sort', 'limit', 'offset']) {
+  for (const k of ['dept', 'aisle', 'brand', 'rail', 'store', 'sort', 'limit', 'offset']) {
     if (params[k] != null && params[k] !== '') qs.set(k, params[k]);
   }
   const key = qs.toString();

@@ -3,12 +3,14 @@
 // over the engine's canonical Browse API (brochure.js — rule 7) and the
 // marketplace's exported card primitives (ONE card idiom, ONE tap-through):
 //
-//   #/browse                → the market floor: Exceptional Deals, department
-//                             tiles, brand row, rails
+//   #/browse                → the market floor: department tiles, brand row,
+//                             Biggest Drops + Lowest Ever rails (V1.1 keeps
+//                             only the rails that earn their place)
 //   #/browse/dept/<id>      → a department (aisle chips + listing)
 //   #/browse/aisle/<id>     → one aisle's listing
 //   #/browse/brands         → every brand with live offers (A–Z of the market)
-//   #/browse/brand/<slug>   → one brand's listing (canonical, bilingual)
+//   #/browse/brand/<slug>   → a BRAND PAGE: identity hero, product families
+//                             (canonical aisles inside the brand), listing
 //   #/browse/rail/<id>      → a rail's full "see all" listing
 //
 // Every engine read is best-effort: an unreachable engine renders a calm
@@ -19,8 +21,8 @@ import { loadBrowseSummary, browseOffers, storeLabel, storeColor, cleanOfferName
 import { el, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort } from './marketplace.js';
 import { t, getLang } from './i18n.js';
 
-const RAILS = ['exceptional', 'drops', 'lowest-ever', 'ending-soon', 'new-this-week'];
-const SORTS = ['discount', 'price', 'newest', 'ending'];
+const RAILS = ['drops', 'lowest-ever'];
+const SORTS = ['discount', 'price'];
 const PAGE_SIZE = 24;
 
 // Department tile icons — presentation only (the taxonomy stays pure data).
@@ -172,12 +174,7 @@ async function renderHome(host, token) {
 
   const rails = new Map((summary.rails || []).map((r) => [r.id, r]));
 
-  // 1. The flagship: Exceptional Deals, first thing under the header.
-  const exceptional = rails.get('exceptional');
-  if (exceptional) slot.appendChild(railBlock(exceptional));
-
-  // 2. Departments — the walk-the-market entry point (brands join in M3 as a
-  //    peer row, per the design's equal-entry-points rule).
+  // 1. Departments — the walk-the-market entry point.
   const deptSection = el('section', 'browse-depts');
   deptSection.appendChild(el('h2', null, t('browse.departments')));
   const grid = el('div', 'browse-dept-grid');
@@ -194,7 +191,7 @@ async function renderHome(host, token) {
   deptSection.appendChild(grid);
   slot.appendChild(deptSection);
 
-  // 3. Brands — the EQUAL entry point (design §4): a peer section right beside
+  // 2. Brands — the EQUAL entry point (design §4): a peer section right beside
   //    departments, never a filter hidden inside them.
   const brands = summary.brands || [];
   if (brands.length) {
@@ -211,17 +208,33 @@ async function renderHome(host, token) {
     slot.appendChild(brandSection);
   }
 
-  // 4. The remaining rails, in the design's order.
+  // 3. The rails: Biggest Drops, then Lowest Ever.
   for (const id of RAILS) {
-    if (id === 'exceptional') continue;
     const rail = rails.get(id);
     if (rail) slot.appendChild(railBlock(rail));
   }
 }
 
+// A brand's visual identity without hosting any assets: a monogram avatar in
+// a deterministic hue derived from the slug (stable across sessions/pages).
+function brandHue(slug) {
+  let h = 0;
+  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) % 360;
+  return h;
+}
+
+function brandMonogram(slug, name, small = false) {
+  const m = el('span', 'browse-brand-monogram' + (small ? ' is-small' : ''));
+  m.textContent = (name || slug).trim().charAt(0).toUpperCase();
+  m.style.background = `hsl(${brandHue(slug)} 62% 42%)`;
+  m.setAttribute('aria-hidden', 'true');
+  return m;
+}
+
 function brandPill(brand) {
   const pill = el('a', 'browse-brand-pill');
   pill.href = `#/browse/brand/${brand.slug}`;
+  pill.appendChild(brandMonogram(brand.slug, nodeName(brand), true));
   const name = el('span', 'browse-brand-name', nodeName(brand));
   name.dir = 'auto';
   pill.appendChild(name);
@@ -265,9 +278,10 @@ async function renderListing(host, route, token) {
 
   let title = railTitle(route.id);
   let dept = null;
+  let brandInfo = null; // the summary's { slug, en, ar, offers, stores } entry
   if (route.view === 'brand') {
-    const brand = ((summary && summary.brands) || []).find((b) => b.slug === route.id);
-    title = brand ? nodeName(brand) : route.id;
+    brandInfo = ((summary && summary.brands) || []).find((b) => b.slug === route.id) || null;
+    title = brandInfo ? nodeName(brandInfo) : route.id;
   }
   if (route.view === 'dept' || route.view === 'aisle') {
     for (const d of (summary && summary.departments) || []) {
@@ -288,10 +302,30 @@ async function renderListing(host, route, token) {
   const back = el('a', 'browse-back', `‹ ${t('browse.back')}`);
   back.href = '#/browse';
   head.appendChild(back);
-  const h1 = el('h1', null, title);
-  h1.dir = 'auto';
-  head.appendChild(h1);
+  if (route.view !== 'brand') {
+    const h1 = el('h1', null, title);
+    h1.dir = 'auto';
+    head.appendChild(h1);
+  }
   host.appendChild(head);
+
+  // A brand page opens on the brand, not on a filter: identity hero (monogram
+  // + bilingual name + live footprint), then its product families below.
+  if (route.view === 'brand') {
+    const hero = el('div', 'browse-brand-hero');
+    hero.appendChild(brandMonogram(route.id, title));
+    const meta = el('div', 'browse-brand-meta');
+    const h1 = el('h1', null, title);
+    h1.dir = 'auto';
+    meta.appendChild(h1);
+    if (brandInfo) {
+      meta.appendChild(
+        el('p', 'browse-brand-stats', t('browse.brandStats', { offers: brandInfo.offers, stores: brandInfo.stores })),
+      );
+    }
+    hero.appendChild(meta);
+    host.appendChild(hero);
+  }
 
   // Aisle chips: a department page offers its aisles as one-tap refinements;
   // an aisle page shows its siblings (with itself active) for lateral moves.
@@ -344,6 +378,42 @@ async function renderListing(host, route, token) {
   controls.appendChild(storeSel);
   host.appendChild(controls);
 
+  // Product families inside a brand (canonical aisles with live-offer counts,
+  // engine-provided on the first page): tap a family to focus the grid on it.
+  // Rendered once — the facet is brand-wide and does not change with filters.
+  let aisleFilter = '';
+  let familySlot = null;
+  if (route.view === 'brand') {
+    familySlot = el('div', 'browse-brand-families');
+    host.insertBefore(familySlot, controls);
+  }
+  function renderFamilies(families) {
+    if (!familySlot || familySlot.childNodes.length || !families || families.length < 2) return;
+    familySlot.appendChild(el('h2', 'browse-family-label', t('browse.brandFamilies')));
+    const chipRow = el('div', 'browse-chiprow');
+    const chips = [];
+    const select = (chip, id) => {
+      aisleFilter = id;
+      for (const c of chips) c.classList.toggle('is-active', c === chip);
+      reload();
+    };
+    const allChip = el('button', 'quick-chip is-active', t('browse.allAisle'));
+    allChip.type = 'button';
+    allChip.addEventListener('click', () => select(allChip, ''));
+    chips.push(allChip);
+    chipRow.appendChild(allChip);
+    for (const fam of families) {
+      const chip = el('button', 'quick-chip');
+      chip.type = 'button';
+      chip.textContent = `${nodeName(fam)} · ${fam.offers}`;
+      chip.dir = 'auto';
+      chip.addEventListener('click', () => select(chip, fam.id));
+      chips.push(chip);
+      chipRow.appendChild(chip);
+    }
+    familySlot.appendChild(chipRow);
+  }
+
   const gridSlot = el('div', 'browse-slot');
   host.appendChild(gridSlot);
 
@@ -352,6 +422,7 @@ async function renderListing(host, route, token) {
     ...(route.view === 'dept' ? { dept: route.id } : {}),
     ...(route.view === 'aisle' ? { aisle: route.id } : {}),
     ...(route.view === 'brand' ? { brand: route.id } : {}),
+    ...(route.view === 'brand' && aisleFilter ? { aisle: aisleFilter } : {}),
     ...(route.view === 'rail' ? { rail: route.id } : {}),
     ...(route.view !== 'rail' ? { sort } : {}),
     ...(storeFilter ? { store: storeFilter } : {}),
@@ -362,6 +433,7 @@ async function renderListing(host, route, token) {
   async function fill(grid, moreBtn) {
     const data = await browseOffers(params());
     if (renderToken !== token) return;
+    if (data && data.families) renderFamilies(data.families);
     if (!data && offset === 0) {
       gridSlot.innerHTML = '';
       gridSlot.appendChild(emptyBlock(t('browse.unavailable')));

@@ -1,15 +1,42 @@
 # Browse — Design Document
 
-> **Status:** Rev 2 — approved, implemented, and **LIVE IN PRODUCTION**
-> (2026-07-16; verification record in HISTORY §31). This document is now the
-> architecture reference for the shipped system. Phase 4 (§11 — brand
-> mining, shelf refinements, For-you/In-season rails, collections, per-deal
-> "why exceptional" explainer) is the open roadmap. Standing principles for
+> **Status:** Rev 3 (V1.1) — LIVE IN PRODUCTION. Rev 2 shipped the pillar
+> (2026-07-16; HISTORY §31); Rev 3 is the same-day **quality refinement from
+> real production usage** (HISTORY §33). Phase 4 (§11 — brand mining, shelf
+> refinements, For-you/In-season rails, collections, per-deal "why
+> exceptional" explainer) is the open roadmap. Standing principles for
 > all future Browse work: canonical knowledge stays provider-independent
 > (Provider → Mapping → Canonical → Browse); new knowledge modules
 > (packaging, attributes, brand relationships) follow the §5 extension shape;
 > reuse over duplication, always. Search is frozen (HANDOFF rule 9) — Browse
 > changes nothing about Search, ranking, or matching.
+>
+> **Rev 3 changes (V1.1, 2026-07-16 — an intentional PRODUCT simplification,
+> not a redesign):**
+> (1) **Rails reduced to the two that earn their place**: Biggest Drops and
+> Lowest Ever. Exceptional Deals / Ending Soon / New This Week are REMOVED
+> from the API and UI — the substrate's history isn't deep enough yet to
+> deliver Exceptional Deals at trustworthy quality, and showing an experience
+> that only *appears* intelligent costs trust (`deals.js` stays pure+tested;
+> the rail returns when the data can back it). Dept/aisle sorts reduced to
+> Biggest discount / Lowest price for the same reason.
+> (2) **Brand correctness** (production audit): the V1 frontend never sent
+> `brand=` to the engine (missing from the `browseOffers` whitelist) — every
+> brand page showed the GLOBAL listing; fixed. Plus detection precision:
+> fuzzy prefix repair removed (measured net harmful), 2-char keys banned,
+> per-brand department guards / neighbor-word vetoes / noStrip added
+> (brands.js), hana→hanaa corrected, dari/samsung/bestway added. 130 wrong
+> stamps dropped, 31 corrected, 130 gained on re-stamp.
+> (3) **Brand pages became brand experiences**: identity hero (deterministic
+> monogram, bilingual name, offers·stores footprint) + **product families**
+> (the brand's live offers folded per canonical aisle, engine-computed
+> `families` on the first `/browse/offers?brand=` page) as one-tap filters.
+> (4) **Fresh→frozen refinement**: D4D files frozen goods under fresh
+> categories (48 of 49 audited rows were frozen chicken in
+> `fresh-chicken-poultry`); a name-based marker (مجمد/frozen) now reroutes
+> those rows to the frozen counterpart aisle at read time, applied
+> consistently in cards, tile counts, and the SQL prefilters
+> (mapping.FRESH_TO_FROZEN + browseStore frozen modes).
 >
 > **Rev 2 changes (review):** (1) provider-independent canonical taxonomy —
 > Provider → Mapping → Canonical Knowledge → Browse; D4D is one mapped source,
@@ -375,19 +402,21 @@ machine-extraction disclaimer. With ~8k live offers this typically surfaces
 a few dozen genuinely exceptional deals — a finite, checkable daily list,
 not an infinite feed.
 
-**Rails catalogue** (each shows its honesty line):
+**Rails catalogue** (each shows its honesty line). **Rev 3: only the first
+two SHIP** — the rest is the catalogue of designed-but-not-shipped rails
+(Exceptional Deals waits for deeper history; the others for a proven need):
 
-| Rail | Formula | Why it's honest |
-|---|---|---|
-| **Exceptional Deals** | §7.5 score ≥ 50, top N | every badge is a verifiable signal; history-backed signals outweigh advertised ones |
-| Biggest drops | max (old_price−price)/old_price, old_price required | 93% of offers carry a real strike price; sanity gate already enforces old>new |
-| Lowest ever | current price = min(price_history) AND weeks_seen ≥ 4 | depth stated on the badge ("lowest in 14 weeks") |
-| Ending soon | valid_to within 48h | real dates from JSON-LD, no fake urgency |
-| New this week | identity first_seen = this ISO week | new-to-the-MARKET, labeled as such |
-| In many stores | same shelf+brand+size live in ≥3 stores | breadth = market-wide promotion, replaces fake "popular" |
-| Back on offer | identity reappeared after ≥4 weeks absence | pure derivation |
-| In season now | aisle's share of live offers ≥ 2× its own 8-week average | stores merchandise the season for us; no calendar KB |
-| For you (client-side) | user's cart/watch/recent-search terms matched against live offers with the existing frontend matcher | private, localStorage-only, zero backend |
+| Rail | Ships? | Formula | Why it's honest |
+|---|---|---|---|
+| Biggest drops | **live** | max (old_price−price)/old_price, old_price required | 93% of offers carry a real strike price; sanity gate already enforces old>new |
+| Lowest ever | **live** | current price = min(price_history) AND weeks_seen ≥ 4 | depth stated on the badge ("lowest in 14 weeks") |
+| Exceptional Deals | Rev 3: removed until the history is deep enough | §7.5 score ≥ 50, top N | every badge is a verifiable signal; history-backed signals outweigh advertised ones |
+| Ending soon | Rev 3: removed (weak value in practice) | valid_to within 48h | real dates from JSON-LD, no fake urgency |
+| New this week | Rev 3: removed (weak value in practice) | identity first_seen = this ISO week | new-to-the-MARKET, labeled as such |
+| In many stores | backlog | same shelf+brand+size live in ≥3 stores | breadth = market-wide promotion, replaces fake "popular" |
+| Back on offer | backlog | identity reappeared after ≥4 weeks absence | pure derivation |
+| In season now | backlog | aisle's share of live offers ≥ 2× its own 8-week average | stores merchandise the season for us; no calendar KB |
+| For you (client-side) | backlog | user's cart/watch/recent-search terms matched against live offers with the existing frontend matcher | private, localStorage-only, zero backend |
 
 ### 7.6 Collections (Rev 2 — lightweight, optional)
 
@@ -418,31 +447,37 @@ Brochures, Alerts, Cart. Sub-routes: `#/browse/dept/<id>`,
 `#/browse/rail/<id>`, `#/browse/store/<id>`. Hash-router, no build step,
 same as today.
 
-**Browse home ("the market floor"):**
+**Browse home ("the market floor") — Rev 3 shipped shape:**
 1. Header: "سوق هذا الأسبوع · This week's market — 8,032 offers · 18 stores"
    (live numbers = trust + freshness).
-2. **Exceptional Deals** — the flagship rail, first thing under the header
-   (the daily-routine hook: "what's genuinely worth it today").
-3. **Department tiles** (11, two rows, icon + live count) and a **Brands
+2. **Department tiles** (11, two rows, icon + live count) and a **Brands
    tile row** (top brands by live-offer count + "All brands A–Z / أ–ي") —
    rendered as PEERS at the same visual level. This is the brief's
    "Departments or Brands, both equally visible", literally.
-4. Rails, one horizontal scroller each (Biggest drops, Lowest ever, Ending
-   soon, In season now, For you, New this week…). Streaming-platform idiom:
-   rails give deal-first serendipity without an infinite feed — this is a
+3. Two rails, one horizontal scroller each: **Biggest drops** and **Lowest
+   ever**. Fewer, stronger experiences beat many average ones — this is a
    decision tool, not a dopamine feed; every rail is finite with "see all".
+   (Exceptional Deals returns here as the flagship once the price-history
+   substrate is deep enough to score it at trustworthy quality — the V1
+   version only *appeared* intelligent, and trust outranks feature count.)
 
 **Department page:** aisle chip bar (sticky) + shelf refinements where
 families exist; the same card grid; store filter chip; sort control
 (discount default). **Shelf page** ("Cheese"): brand facet chips derived
 from the live result set (tap Kiri → brand+shelf intersection).
 
-**Brand page:** identity header (bilingual name, live counts), families
-spanned as chips (Herfy → Frozen · Bakery · Sauces…), best-deal-per-store
-strip, current offers grid, price-history highlights, and an explicit
-**bridge to Search** ("search Kiri across online stores →" — one tap into
-the existing Search with the query prefilled). Browse and Search stay
-independent; a link is not a dependency.
+**Brand page (Rev 3 — shipped):** identity hero (deterministic monogram
+avatar — hue hashed from the slug, zero hosted assets — bilingual name,
+"{offers} offers · {stores} stores this week" from the summary), then
+**product families**: the brand's live offers folded per canonical aisle
+(engine-computed `families` on the first `/browse/offers?brand=` response),
+rendered as one-tap filter chips with counts (Almarai → Milk & Laban ·
+Cheese & Cream · Juices…), then the offers grid (discount-first) with the
+usual sort/store controls. Families give the "visiting a brand" structure
+without hiding the deals behind an extra tap. Backlog: best-deal-per-store
+strip, price-history highlights, an explicit **bridge to Search** ("search
+Kiri across online stores →"). Browse and Search stay independent; a link
+is not a dependency.
 
 **Card & sheet (pure reuse — Rev 2, corrected against the current code):**
 Browse cards are the marketplace's flyer-card idiom (crop image, store
