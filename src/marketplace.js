@@ -76,6 +76,13 @@ function entryPrice(e) {
 function entryStoreId(e) {
   return e.kind === 'online' ? e.store.id : e.listing.store && e.listing.store.id;
 }
+// The view-filter also has one cross-store selector: this week's flyer offers.
+// It reuses the exact same activeStore/toggle/render path as the store chips,
+// keyed by this sentinel instead of a store id.
+const FLYERS_FILTER = '__flyers__';
+function entryMatchesFilter(e, filter) {
+  return filter === FLYERS_FILTER ? e.kind === 'flyer' : entryStoreId(e) === filter;
+}
 // The entry's per-unit price ({ value, unit }) or null — the basis of the
 // "Best value" ranking. Cached per entry (parseSize is not free).
 function entryUnit(e) {
@@ -485,6 +492,18 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   flyerChip.appendChild(el('span', 'src-name', t('market.weeklyFlyers')));
   const flyerState = el('span', 'src-state', '…');
   flyerChip.appendChild(flyerState);
+  // Interactive filter, consistent with the store chips: toggles the view to
+  // this week's flyer offers only. Reachable by keyboard.
+  flyerChip.setAttribute('role', 'button');
+  flyerChip.tabIndex = 0;
+  flyerChip.setAttribute('aria-pressed', 'false');
+  flyerChip.addEventListener('click', () => toggleStoreFilter(FLYERS_FILTER));
+  flyerChip.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      toggleStoreFilter(FLYERS_FILTER);
+    }
+  });
   strip.appendChild(flyerChip);
   root.appendChild(strip);
 
@@ -556,7 +575,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   // Toggle the retailer view-filter. Selecting the already-active store clears
   // it (back to all). Stores that contributed no entries aren't selectable.
   function toggleStoreFilter(id) {
-    if (activeStore !== id && !pool.some((e) => entryStoreId(e) === id)) return;
+    if (activeStore !== id && !pool.some((e) => entryMatchesFilter(e, id))) return;
     activeStore = activeStore === id ? null : id;
     expanded = false; // a freshly-scoped list starts collapsed
     render();
@@ -577,7 +596,12 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       c.chip.classList.toggle('is-active', on);
       c.chip.setAttribute('aria-pressed', String(on));
     }
-    const view = activeStore ? ordered.filter((e) => entryStoreId(e) === activeStore) : ordered;
+    const hasFlyers = pool.some((e) => e.kind === 'flyer');
+    const flyersOn = activeStore === FLYERS_FILTER;
+    flyerChip.classList.toggle('is-filterable', hasFlyers);
+    flyerChip.classList.toggle('is-active', flyersOn);
+    flyerChip.setAttribute('aria-pressed', String(flyersOn));
+    const view = activeStore ? ordered.filter((e) => entryMatchesFilter(e, activeStore)) : ordered;
     count.textContent = String(view.length);
     subnote.textContent = sort === 'value' ? t('market.sortedValue') : t('market.sortedPrice');
     subnote.hidden = finished && !view.length;

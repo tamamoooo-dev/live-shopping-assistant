@@ -14,7 +14,7 @@
 import { searchOffers, storeLabel, storeColor, cleanOfferName, pricesForQuery } from '../brochure.js';
 import { addToCart, inCart } from '../cart.js';
 import { openWatchDialog } from '../alertsPage.js';
-import { isRelevant, relevance } from '../match.js';
+import { isRelevant, relevance, productFamily, productType } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 import { structureOfferName } from './productName.js';
 import { t, tn } from '../i18n.js';
@@ -251,6 +251,16 @@ export function createSheet(host, ctx) {
       const real = document.elementFromPoint(e.clientX, e.clientY);
       const control = real && real.closest('button, a');
       if (control && control !== el && el.contains(control)) control.click();
+    });
+    // Product image: a single tap enlarges it in place, a second tap restores
+    // it — no long-press (which summoned the iOS share menu) and no pinch. One
+    // delegated handler covers both the captured tap (retargeted to `el`, hit
+    // via elementFromPoint) and a direct click (e.target is the box itself).
+    el.addEventListener('click', (e) => {
+      if (justDragged) return;
+      const hit = e.target === el ? document.elementFromPoint(e.clientX, e.clientY) : e.target;
+      const box = hit && hit.closest && hit.closest('.ps-imgbox');
+      if (box && el.contains(box)) box.classList.toggle('is-enlarged');
     });
   }
   let justDragged = false;
@@ -554,9 +564,34 @@ export function createSheet(host, ctx) {
     if (!sheet) return;
     const box = sheet.querySelector('.ps-related');
     const strip = sheet.querySelector('.ps-rel-strip');
-    if (!data || !box || !strip) return;
-    const rel = (data.offers || []).filter((o) => o.id !== offer.id).slice(0, 10);
-    if (!rel.length) return;
+    if (!box || !strip) return;
+    // Confidence gate (quality over quantity): a "similar" product must share
+    // the anchor's product FAMILY and must not be a different TYPE/form (never
+    // put chicken nuggets under a chicken roll). A family we can't determine on
+    // either side is not confident enough — show nothing rather than a weak
+    // look-alike. Below threshold the strip says "No similar products".
+    const anchorName = `${offer.name || ''} ${offer.nameAr || ''}`;
+    const anchorFamily = productFamily(anchorName);
+    const anchorType = productType(anchorName);
+    const rel = ((data && data.offers) || [])
+      .filter((o) => o.id !== offer.id)
+      .filter((o) => {
+        const name = `${o.name || ''} ${o.nameAr || ''}`;
+        const fam = productFamily(name);
+        if (!anchorFamily || !fam || fam !== anchorFamily) return false;
+        const typ = productType(name);
+        if (anchorType && typ && anchorType !== typ) return false;
+        return true;
+      })
+      .slice(0, 10);
+    box.hidden = false;
+    if (!rel.length) {
+      const empty = document.createElement('p');
+      empty.className = 'ps-rel-empty';
+      empty.textContent = t('sheet.noSimilar');
+      strip.replaceChildren(empty);
+      return;
+    }
     strip.replaceChildren(
       ...rel.map((o) => {
         const card = document.createElement('button');
@@ -571,7 +606,6 @@ export function createSheet(host, ctx) {
         return card;
       }),
     );
-    box.hidden = false;
   }
 
   return { open, close, isOpen, setDetent };

@@ -253,7 +253,7 @@ function watchRow(w, onDelete) {
   return row;
 }
 
-function alertRow(a, watchById) {
+function alertRow(a, watchById, onDelete) {
   const row = el('div', 'alert-row');
   if (!a.seen) row.classList.add('is-unseen');
   const w = watchById.get(a.watchId);
@@ -290,6 +290,19 @@ function alertRow(a, watchById) {
     side.appendChild(go);
   }
   row.appendChild(side);
+
+  // A completed alert is deletable with the SAME action as an active watch
+  // (the engine's DELETE /watches removes the watch and its alerts together).
+  // Only offered when we know which watch produced it.
+  if (a.watchId && typeof onDelete === 'function') {
+    const label = w ? w.label || w.query : a.name || t('alerts.watchedProduct');
+    const del = el('button', 'watch-delete', '✕');
+    del.type = 'button';
+    del.title = t('alerts.deleteAlert');
+    del.setAttribute('aria-label', t('alerts.deleteAlertItem', { label }));
+    del.addEventListener('click', () => onDelete(a, row));
+    row.appendChild(del);
+  }
   return row;
 }
 
@@ -347,7 +360,15 @@ export async function initAlertsPage(force = false) {
     root.appendChild(el('p', 'alerts-empty', t('alerts.noAlerts')));
   } else {
     const list = el('div', 'alert-list');
-    for (const a of alertData.alerts) list.appendChild(alertRow(a, watchById));
+    const onAlertDelete = async (alert, row) => {
+      row.classList.add('is-deleting');
+      const okDel = await deleteWatch(alert.watchId);
+      // Deleting the watch cascades to its alerts (and drops it from the
+      // Watches list), so repaint both sections to stay consistent.
+      if (okDel) initAlertsPage(true);
+      else row.classList.remove('is-deleting');
+    };
+    for (const a of alertData.alerts) list.appendChild(alertRow(a, watchById, onAlertDelete));
     root.appendChild(list);
   }
 

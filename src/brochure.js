@@ -322,14 +322,51 @@ export function searchOffers(query, limit = 24) {
   return offersCache.get(key);
 }
 
-// The held brochure a flyer offer belongs to (same engine store + edition), so
-// a click can open the in-app viewer instead of leaving the app. Null when the
-// edition isn't held/current — the caller falls back to the offer's sourceUrl.
+// The held brochure a flyer offer belongs to, so a click can open the in-app
+// viewer instead of leaving the app. A store may publish several concurrent
+// flyer editions at once (Panda has one; Nesto has many), and the /offers feed
+// carries a mix of edition strings — some exact, some the aggregator's own
+// flyerRef, and some null when the engine couldn't stamp an edition. Matching on
+// exact `edition` alone therefore works for Panda but fails for most Nesto
+// offers, dropping the user to the external D4D page. Resolve best-effort,
+// strongest signal first, so an offer never leaves the app when its store has a
+// current internal brochure. Null only when the store has none held.
 export async function brochureForOffer(offer) {
-  if (!offer || !offer.store || !offer.edition) return null;
+  if (!offer || !offer.store) return null;
   const byStore = await loadBrochures();
   const list = byStore[`${offer.store}:${offer.region || REGION}`] || [];
-  return list.find((b) => b.edition === offer.edition) || null;
+  if (!list.length) return null;
+
+  // 1. Exact edition — the precise flyer this offer was extracted from.
+  if (offer.edition) {
+    const exact = list.find((b) => b.edition === offer.edition);
+    if (exact) return exact;
+  }
+
+  // 2. Same aggregator flyer by flyerRef: the engine names a store's extra
+  //    concurrent flyers "<week>-<flyerRef>" (e.g. "2026-W29-745866").
+  if (offer.flyerRef) {
+    const suffix = `-${offer.flyerRef}`;
+    const byFlyer = list.find((b) => b.edition && b.edition.endsWith(suffix));
+    if (byFlyer) return byFlyer;
+  }
+
+  // 3. The brochure whose page set actually contains the offer's page — the
+  //    authoritative page↔brochure link, robust to a null/stale edition.
+  if (offer.pageRef != null) {
+    const ref = String(offer.pageRef);
+    for (const b of list) {
+      const data = await loadBrochurePages(b).catch(() => null);
+      if (data && Array.isArray(data.pageIds) && data.pageIds.includes(ref)) return b;
+    }
+  }
+
+  // 4. Never leave the app when the store has a current internal brochure: fall
+  //    back to its best current one (opens at page 1) rather than external D4D.
+  const internal = (await orderBrochures(list)).find(
+    (b) => b.sourceType === 'images' || b.sourceType === 'pdf',
+  );
+  return internal || null;
 }
 
 // --- Browse (the product-discovery pillar, BROWSE-DESIGN.md) -------------------

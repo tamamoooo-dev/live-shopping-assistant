@@ -32,6 +32,14 @@ ok('OCR Farsi yeh in unit: 2 لیتر', parseSize('حليب 2 لیتر').total =
 ok('count 30 pcs', (() => { const s = parseSize('Eggs 30 pcs'); return s.unit === 'pcs' && s.total === 30; })());
 ok('arabic count-word pack: 24 قطعة × 125مل', (() => { const s = parseSize('حليب كامل الدسم، 24 قطعة × 125مل'); return s.pack === 24 && s.each === 125 && s.total === 3000; })());
 ok('size × digits never doubles as multiplier', (() => { const s = parseSize('حليب × 125مل'); return s.pack === 1 && s.total === 125; })());
+// --- bonus packs ("buy a, get b free": true count is a+b, prefer over OCR debris) ---
+ok('bonus 8+2 -> 10 pcs', (() => { const s = parseSize('فاين مناديل سوبر 8+2 مجاناً 10 قطع', '10 حبة'); return s.unit === 'pcs' && s.total === 10; })());
+ok('bonus 3+1 -> 4 pcs (over placeholder size)', (() => { const s = parseSize('كلينكس 3+1 مجانًا 4 قطع', '1 حبة'); return s.total === 4; })());
+ok('bonus beats OCR count debris: 10+2 -> 12 not 28', (() => { const s = parseSize('أونو مناديل 12×28 عبوة 10+2 مجانًا 12 قطعة', '12 حبة'); return s.total === 12; })());
+ok('bonus with unit 9+3 × 1L -> 12000 ml', (() => { const s = parseSize('عصير برتقال 9+3', '1 لتر'); return s.unit === 'ml' && s.pack === 12 && s.total === 12000; })());
+ok('bonus 6+2 free 250 ml -> 2000 ml', (() => { const s = parseSize('Cola 6+2 free 250 ml'); return s.total === 2000; })());
+ok('bonus with word between: 8 رول +2 -> 10 pcs', (() => { const s = parseSize('مناديل فاين 40 ورقة (8 رول +2 مجانا)'); return s.unit === 'pcs' && s.total === 10; })());
+ok('non-bonus digits not read as a pack: Omega 3+6+9', (() => { const s = parseSize('Omega 3+6+9 Fish Oil'); return s.total !== 9 && s.total !== 15; })());
 ok('sizeLabel', sizeLabel(parseSize('Milk 2 L')) === '2 L');
 
 // --- unit price ---

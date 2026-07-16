@@ -148,6 +148,8 @@ const STRINGS = {
     'alerts.firstCheck': 'first check tonight',
     'alerts.stopWatching': 'Stop watching',
     'alerts.stopWatchingItem': 'Stop watching {label}',
+    'alerts.deleteAlert': 'Delete alert',
+    'alerts.deleteAlertItem': 'Delete alert for {label}',
     'alerts.watchedProduct': 'Watched product',
     'alerts.hit': '{label} hit {price}',
     'alerts.targetWas': 'target was {price}',
@@ -323,6 +325,7 @@ const STRINGS = {
     'sheet.note': 'Flyer price, machine-extracted — the printed flyer prevails.',
     'sheet.verify': 'Verify ↗',
     'sheet.similar': 'Similar offers this week',
+    'sheet.noSimilar': 'No similar products',
     'sheet.addToList': 'Add to list',
     'sheet.watch': 'Watch',
     'sheet.watchAria': 'Watch this price',
@@ -394,7 +397,7 @@ const STRINGS = {
     'search.storesInline.other': '{count} متاجر',
 
     // Home / empty landing
-    'home.heroTitle': 'عمّاذا تبحث؟',
+    'home.heroTitle': 'عن ماذا تبحث؟',
     'home.heroLead':
       'أسعار مباشرة من <strong>7 متاجر سعودية</strong> إضافةً إلى نشرات هذا الأسبوع — في مكان واحد، بالعربية أو الإنجليزية.',
     'home.recentTitle': 'عمليات البحث الأخيرة',
@@ -476,6 +479,8 @@ const STRINGS = {
     'alerts.firstCheck': 'أول فحص الليلة',
     'alerts.stopWatching': 'إيقاف المتابعة',
     'alerts.stopWatchingItem': 'إيقاف متابعة {label}',
+    'alerts.deleteAlert': 'حذف التنبيه',
+    'alerts.deleteAlertItem': 'حذف تنبيه {label}',
     'alerts.watchedProduct': 'منتج متابَع',
     'alerts.hit': '{label} بلغ {price}',
     'alerts.targetWas': 'كان المستهدف {price}',
@@ -649,6 +654,7 @@ const STRINGS = {
     'sheet.note': 'سعر النشرة، مُستخرج آليًا — النشرة المطبوعة هي المعتمدة.',
     'sheet.verify': 'تحقّق ↗',
     'sheet.similar': 'عروض مشابهة هذا الأسبوع',
+    'sheet.noSimilar': 'لا توجد منتجات مشابهة',
     'sheet.addToList': 'أضف إلى القائمة',
     'sheet.watch': 'متابعة',
     'sheet.watchAria': 'متابعة هذا السعر',

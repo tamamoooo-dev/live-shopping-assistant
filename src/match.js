@@ -567,7 +567,9 @@ function normSize(s) {
     // Farsi yeh/kaf from flyer OCR — unit/count words (كيلو، كيس، ليتر…) must match
     .replace(/ی/g, 'ي')
     .replace(/ک/g, 'ك')
-    .replace(/[^\p{L}\p{N}\s.,x×*]/gu, ' ')
+    // Keep '+' too: grocery packs use bonus notation ("10+2", "8+2" = buy 10
+    // get 2 free), whose TRUE unit count is the sum. parseSize reads it below.
+    .replace(/[^\p{L}\p{N}\s.,x×*+]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -582,8 +584,27 @@ function unitFor(tok) {
   return null;
 }
 
+// Bonus-pack notation "a+b" (buy a, get b free) — the TRUE quantity is a+b, and
+// per-unit pricing must divide by that total, never by `a` alone or by a stray
+// OCR count elsewhere in the name ("…10+2 مجانًا 12 قطعة" is 12, not 28). Only
+// accept a plausible bonus (the free part never exceeds the paid part, small
+// integers), so product-name digits like "Omega 3+6+9" are left untouched.
+// The paid and free counts may sit adjacent ("10+2") or be separated by one
+// packaging word ("8 رول +2 مجانا" = 8 rolls + 2 free). One interposed word
+// only, so distant numbers ("40 ورقة (8 رول +2…") can't pair by accident.
+const BONUS_RE = /(\d+)\s*(?:[\p{L}]+\s*)?\+\s*(\d+)/u;
+function bonusPack(hay) {
+  const m = BONUS_RE.exec(hay);
+  if (!m) return null;
+  const a = parseInt(m[1], 10);
+  const b = parseInt(m[2], 10);
+  if (!(a >= 1 && b >= 1 && b <= a && a + b <= 99)) return null;
+  return a + b;
+}
+
 export function parseSize(name, sizeField) {
   const hay = normSize(`${name || ''} ${sizeField || ''}`);
+  const bonus = bonusPack(hay); // total units of a "buy a get b free" pack, or null
 
   // Pack forms first (they carry both count and unit).
   // PACK_RE[0] = "6 x 200 ml": [1]=pack, [2]=size, [3]=unit
@@ -613,13 +634,18 @@ export function parseSize(name, sizeField) {
       // A trailing "x6" / "6's" pack multiplier if present — but never the
       // size's own "× 125ml" digits (a unit right after the number means the
       // × introduced the SIZE, not a multiplier; the pack forms above own that).
+      // A bonus pack ("9+3" beside "1 لتر" = 12 × 1 L) wins over both.
       const pm =
         new RegExp(`[x×*]\\s*(\\d+)(?!\\s*(?:${UNITS}))${B}`, 'u').exec(hay) ||
         /\b(\d+)\s*(?:pcs|pc|pack|s)\b/.exec(hay);
-      const pack = pm ? Math.max(1, parseInt(pm[1], 10)) : 1;
+      const pack = bonus || (pm ? Math.max(1, parseInt(pm[1], 10)) : 1);
       return { unit: u.base, each, pack, total: each * pack };
     }
   }
+
+  // A unitless bonus pack ("3+1 مجانًا 4 قطع") is a piece count of a+b — the
+  // true total, ahead of any stray count word ("28 عبوة") the OCR left behind.
+  if (bonus) return { unit: 'pcs', each: 1, pack: bonus, total: bonus };
 
   // Pure count ("30 eggs", "12 pcs").
   const cm = COUNT_RE.exec(hay);
