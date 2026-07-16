@@ -464,10 +464,44 @@ function onlineCard(store, item, badge, up) {
 
 function flyerCard(listing, badge, up) {
   const offer = listing.offer;
-  const card = el('button', 'card card-flyer');
-  card.type = 'button';
+  // A div with button semantics, NOT a <button>: the card carries its own
+  // Add-to-Cart <button> and buttons cannot nest. Same keyboard contract.
+  const card = el('div', 'card card-flyer');
+  card.setAttribute('role', 'button');
+  card.tabIndex = 0;
   const displayName = listing.name;
   card.title = t('market.flyerCardTitle', { name: displayName });
+
+  // Add to Cart — the same one-tap gesture online cards have (consistent
+  // regardless of source). Same id as the viewer sheet's add (offer.id), so
+  // quantities merge whichever path added the product.
+  const cartBtn = el('button', 'card-watch card-cart', '🛒');
+  cartBtn.type = 'button';
+  cartBtn.title = t('market.addCart');
+  cartBtn.setAttribute('aria-label', t('market.addCartAria', { name: displayName }));
+  cartBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    addToCart({
+      id: offer.id,
+      store: offer.store,
+      name: offer.name || null,
+      nameAr: offer.nameAr || null,
+      price: offer.price,
+      oldPrice: offer.oldPrice ?? null,
+      currency: offer.currency || 'SAR',
+      image: offer.imageUrl || null,
+      sourceUrl: offer.sourceUrl || null,
+      validTo: offer.validTo || null,
+    });
+    cartBtn.textContent = '✓';
+    cartBtn.classList.add('is-added');
+    setTimeout(() => {
+      if (!cartBtn.isConnected) return;
+      cartBtn.textContent = '🛒';
+      cartBtn.classList.remove('is-added');
+    }, 1200);
+  });
+  card.appendChild(cartBtn);
 
   card.appendChild(cardImage(offer.imageUrl, displayName));
 
@@ -482,6 +516,12 @@ function flyerCard(listing, badge, up) {
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));
+  card.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openFlyerOffer(offer);
+    }
+  });
   return card;
 }
 

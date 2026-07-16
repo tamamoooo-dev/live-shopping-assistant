@@ -3976,3 +3976,15 @@ badge 2 → cart page groups Noon/Carrefour), three sorts re-rank correctly
 deploy was permission-blocked in the build session — `npx wrangler deploy`
 from `brochure-engine/` is required before size queries fix /prices +
 /offers in production (frontend is engine-compatible either way).
+
+**Production polish addendum (same day).** Three user notes after first use:
+(1) the non-headline "Same product · N stores" row was a truncated teaser —
+now a DISCLOSURE: tap expands every store with its price, cheapest tagged,
+each row linking to that store's product page; (2) Add to Cart was
+online-only — flyer cards now carry the same cart button (same `offer.id`
+as the viewer sheet, so adds merge; the card root became a
+`div[role=button]` because buttons cannot nest); (3) the third sort option
+overflowed narrow screens — `.market-head` wraps and ≤560px the sort
+toggle becomes a full-width three-segment row (verified at 375×812: no
+horizontal overflow, flyer-cart adds without opening the viewer, card tap
+still opens it, disclosure expands 4 linked store rows).

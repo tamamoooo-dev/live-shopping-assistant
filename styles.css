@@ -707,16 +707,34 @@ a.summary-name:hover { text-decoration: underline; }
   font-weight: 700;
   color: var(--brand);
 }
+/* "Same product · N stores" — a disclosure: tap to expand every store+price */
 .summary-value {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
   font-size: 13.5px;
   font-variant-numeric: tabular-nums;
 }
+.summary-value-toggle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  color: var(--text);
+}
+.summary-value-chevron { margin-left: auto; color: var(--muted); transition: transform 0.15s ease; }
+.summary-value-toggle.is-open .summary-value-chevron { transform: rotate(180deg); }
+.summary-value-list { margin-top: 6px; }
+.summary-value-list a.sh-row { text-decoration: none; color: inherit; }
+.summary-value-list a.sh-row:hover .sh-store { text-decoration: underline; }
 .summary-value-tag {
   font-size: 11px;
   font-weight: 800;
@@ -1029,7 +1047,8 @@ a.summary-name:hover { text-decoration: underline; }
 .market-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  flex-wrap: wrap; /* three sort options: the toggle drops to its own line instead of overflowing */
+  gap: 8px 10px;
   margin-bottom: 10px;
 }
 .market-title { font-size: 17px; font-weight: 800; letter-spacing: -0.2px; }
@@ -1067,6 +1086,24 @@ a.summary-name:hover { text-decoration: underline; }
   transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 .sort-opt:hover { color: var(--text); }
+/* narrow screens: the toggle becomes a full-width segmented row — three equal
+   segments, never horizontal overflow */
+@media (max-width: 560px) {
+  .sort-toggle {
+    flex-basis: 100%;
+    margin-left: 0;
+    display: flex;
+  }
+  .sort-opt {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 5px 4px;
+    font-size: 12px;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 .sort-opt.is-active {
   color: var(--brand);
   background: var(--surface);
@@ -1202,8 +1239,10 @@ a.summary-name:hover { text-decoration: underline; }
 .card:hover .card-watch, .card:focus-within .card-watch { opacity: 1; }
 .card-watch:hover { transform: scale(1.08); border-color: var(--brand); }
 @media (hover: none) { .card-watch { opacity: 0.85; } } /* touch: always visible */
-/* the card's Add-to-Cart action — same idiom as the watch bell, stacked below it */
+/* the card's Add-to-Cart action — same idiom as the watch bell, stacked below
+   it; flyer cards carry no bell, so their cart takes the first slot */
 .card-cart { top: 42px; }
+.card-flyer .card-cart { top: 8px; }
 .card-cart.is-added { border-color: var(--good, #16a34a); color: var(--good, #16a34a); opacity: 1; }
 
 /* --- the watch dialog --- */

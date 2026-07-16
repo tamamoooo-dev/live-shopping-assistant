@@ -225,17 +225,50 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   }
 
   // A verified same-product group that ISN'T the headline still helps ("the
-  // exact same 2L milk is at these stores"), shown compactly.
+  // exact same 2L milk is at these stores") — as a DISCLOSURE: the collapsed
+  // row names the product, one tap expands every store with its price (each
+  // row links to that store's product page), cheapest first. Actionable, not
+  // a truncated teaser.
   if (s.equivalent && !(h.it && s.equivalent.sorted.some((i) => i.it === h.it))) {
     const g = s.equivalent;
-    const row2 = el('div', 'summary-value');
-    row2.appendChild(el('span', 'summary-value-tag', t('summary.sameProductTag', { stores: g.stores })));
-    const best = g.sorted[0];
+    const box = el('div', 'summary-value');
+    const toggle = el('button', 'summary-value-toggle');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.title = t('summary.sameProductShow');
+    toggle.appendChild(el('span', 'summary-value-tag', t('summary.sameProductTag', { stores: g.stores })));
     const nm = el('span', 'summary-value-name');
     nm.dir = 'auto';
-    nm.textContent = `${best.it.name} — ${g.sorted.map((i) => `${i.store.label} ${money(i.it.price)}`).slice(0, 3).join(' · ')}`;
-    row2.appendChild(nm);
-    wrap.appendChild(row2);
+    nm.textContent = g.sorted[0].it.name;
+    toggle.appendChild(nm);
+    toggle.appendChild(el('span', 'summary-value-chevron', '▾'));
+    box.appendChild(toggle);
+    const list = el('div', 'summary-value-list');
+    list.hidden = true;
+    g.sorted.forEach((i, idx) => {
+      const link = typeof i.it.link === 'string' && /^https?:\/\//.test(i.it.link) ? i.it.link : null;
+      const row2 = document.createElement(link ? 'a' : 'div');
+      row2.className = 'sh-row';
+      if (link) {
+        row2.href = link;
+        row2.target = '_blank';
+        row2.rel = 'noopener';
+      }
+      row2.appendChild(el('span', 'sh-store', i.store.label));
+      row2.appendChild(el('span', 'sh-price', money(i.it.price)));
+      if (idx === 0) {
+        const tag = el('span', 'sh-delta is-best', t('summary.cheapestTag'));
+        row2.appendChild(tag);
+      }
+      list.appendChild(row2);
+    });
+    box.appendChild(list);
+    toggle.addEventListener('click', () => {
+      list.hidden = !list.hidden;
+      toggle.setAttribute('aria-expanded', String(!list.hidden));
+      toggle.classList.toggle('is-open', !list.hidden);
+    });
+    wrap.appendChild(box);
   }
 
   // Price History verdict
