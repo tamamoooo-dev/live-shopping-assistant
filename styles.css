@@ -1243,6 +1243,8 @@ a.summary-name:hover { text-decoration: underline; }
    it; flyer cards carry no bell, so their cart takes the first slot */
 .card-cart { top: 42px; }
 .card-flyer .card-cart { top: 8px; }
+/* Browse cards DO carry a bell, so their cart returns to the second slot */
+.browse-card .card-cart { top: 42px; }
 .card-cart.is-added { border-color: var(--good, #16a34a); color: var(--good, #16a34a); opacity: 1; }
 
 /* --- the watch dialog --- */
