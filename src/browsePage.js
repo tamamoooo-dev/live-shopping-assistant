@@ -298,11 +298,38 @@ function brandMonogram(slug, name, small = false) {
   return m;
 }
 
+// Brands we ship a real logo for (icons/brands/<slug>.png). Every other brand —
+// and any image that fails to load — degrades to the deterministic monogram, so
+// a tile is never broken or blank.
+const BRAND_LOGOS = new Set([
+  'alalali', 'alsafi', 'almarai', 'americana', 'anchor', 'aquafina', 'ariel',
+  'barbican', 'berain', 'california-garden', 'clorox', 'closeup', 'colgate',
+  'deemah', 'dettol', 'doux', 'dove', 'downy', 'fairy', 'fine', 'galaxy',
+  'garnier', 'geepas', 'gillette', 'goody', 'halwani', 'head-shoulders', 'heinz',
+  'herfy', 'himalaya', 'huggies', 'indomie', 'johnsons', 'kinder', 'kitkat',
+  'kleenex', 'knorr', 'lays', 'lifebuoy', 'lipton', 'loacker', 'lurpak', 'lux',
+  'maggi', 'nadec', 'nescafe', 'nestle', 'nido', 'nivea', 'nutella', 'oreo',
+  'pampers', 'pantene', 'pepsi', 'persil', 'president', 'puck', 'quaker', 'sadia',
+  'samsung', 'sanita', 'seara', 'sensodyne', 'signal', 'snickers', 'sunbulah',
+  'sunsilk', 'tang', 'tanmiah', 'tide', 'twix', 'ulker', 'vaseline', 'veet', 'vimto',
+]);
+
+function brandIcon(slug, name, small = false) {
+  if (!BRAND_LOGOS.has(slug)) return brandMonogram(slug, name, small);
+  const img = el('img', 'browse-brand-logo' + (small ? ' is-small' : ''));
+  img.src = `./icons/brands/${slug}.png`;
+  img.alt = name || slug;
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.addEventListener('error', () => img.replaceWith(brandMonogram(slug, name, small)), { once: true });
+  return img;
+}
+
 function brandPill(brand) {
   const pill = el('a', 'browse-brand-pill');
   pill.href = `#/browse/brand/${brand.slug}`;
   const icon = el('span', 'browse-brand-icon');
-  icon.appendChild(brandMonogram(brand.slug, nodeName(brand)));
+  icon.appendChild(brandIcon(brand.slug, nodeName(brand)));
   icon.appendChild(el('span', 'browse-brand-count', String(brand.offers)));
   pill.appendChild(icon);
   const name = el('span', 'browse-brand-name', nodeName(brand));
@@ -389,7 +416,7 @@ async function renderListing(host, route, token) {
   // + bilingual name + live footprint), then its product families below.
   if (route.view === 'brand') {
     const hero = el('div', 'browse-brand-hero');
-    hero.appendChild(brandMonogram(route.id, title));
+    hero.appendChild(brandIcon(route.id, title));
     const meta = el('div', 'browse-brand-meta');
     const h1 = el('h1', null, title);
     h1.dir = 'auto';

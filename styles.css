@@ -2479,10 +2479,12 @@ a.watch-name:hover { text-decoration: underline; }
    It shrinks with its column (a 5-across grid on a 320px phone) but never
    grows past the 52px the brand hero uses. */
 .browse-brand-icon { position: relative; display: block; width: 100%; max-width: 52px; }
-.browse-brand-icon .browse-brand-monogram {
+.browse-brand-icon .browse-brand-monogram,
+.browse-brand-icon .browse-brand-logo {
   width: 100%; height: auto; aspect-ratio: 1; font-size: 22px;
 }
-.browse-brand-pill:hover .browse-brand-monogram { box-shadow: var(--shadow); }
+.browse-brand-pill:hover .browse-brand-monogram,
+.browse-brand-pill:hover .browse-brand-logo { box-shadow: var(--shadow); }
 .browse-brand-name {
   width: 100%; text-align: center; line-height: 1.25;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
@@ -2506,6 +2508,16 @@ a.watch-name:hover { text-decoration: underline; }
 }
 .browse-brand-monogram.is-small {
   width: 20px; height: 20px; border-radius: 7px; font-size: 11px;
+}
+/* Real brand logo: same footprint as the monogram, on a clean surface tile so
+   transparent marks read on any theme; the image is contained, never cropped. */
+.browse-brand-logo {
+  display: inline-flex; width: 52px; height: 52px; border-radius: 16px;
+  flex: 0 0 auto; object-fit: contain; padding: 7px; box-sizing: border-box;
+  background: #fff; box-shadow: var(--shadow-sm);
+}
+.browse-brand-logo.is-small {
+  width: 20px; height: 20px; border-radius: 7px; padding: 2px;
 }
 .browse-brand-hero {
   display: flex; align-items: center; gap: 14px; margin: 2px 2px 14px;
