@@ -132,7 +132,24 @@ export function createSheet(host, ctx) {
     if (closeBtn) closeBtn.focus({ preventScroll: true });
   }
 
+  /* --- image lightbox (floats above the card, over the brochure) ------------- */
+  let lightbox = null;
+  function openLightbox(src, alt) {
+    if (lightbox) return closeLightbox(); // second tap on the image restores it
+    lightbox = document.createElement('div');
+    lightbox.className = 'ps-lightbox';
+    lightbox.innerHTML = `<img class="ps-lightbox-img" src="${esc(src)}" alt="${esc(alt || '')}">`;
+    lightbox.addEventListener('click', closeLightbox);
+    host.appendChild(lightbox);
+  }
+  function closeLightbox() {
+    if (!lightbox) return;
+    lightbox.remove();
+    lightbox = null;
+  }
+
   function close() {
+    closeLightbox();
     if (!sheet) return;
     const el = sheet;
     const sc = scrim;
@@ -252,15 +269,18 @@ export function createSheet(host, ctx) {
       const control = real && real.closest('button, a');
       if (control && control !== el && el.contains(control)) control.click();
     });
-    // Product image: a single tap enlarges it in place, a second tap restores
-    // it — no long-press (which summoned the iOS share menu) and no pinch. One
-    // delegated handler covers both the captured tap (retargeted to `el`, hit
-    // via elementFromPoint) and a direct click (e.target is the box itself).
+    // Product image: a single tap enlarges it in a lightbox floating ABOVE the
+    // card (covering the brochure), a second tap restores it — no long-press
+    // (which summoned the iOS share menu) and no pinch. One delegated handler
+    // covers both the captured tap (retargeted to `el`, hit via elementFromPoint)
+    // and a direct click (e.target is the box itself).
     el.addEventListener('click', (e) => {
       if (justDragged) return;
       const hit = e.target === el ? document.elementFromPoint(e.clientX, e.clientY) : e.target;
       const box = hit && hit.closest && hit.closest('.ps-imgbox');
-      if (box && el.contains(box)) box.classList.toggle('is-enlarged');
+      if (!box || !el.contains(box)) return;
+      const img = box.querySelector('.ps-img');
+      if (img && img.getAttribute('src')) openLightbox(img.getAttribute('src'), img.getAttribute('alt'));
     });
   }
   let justDragged = false;
@@ -271,6 +291,7 @@ export function createSheet(host, ctx) {
 
   /* --- rendering -------------------------------------------------------------------- */
   function render(entry) {
+    closeLightbox(); // a stale enlarged image must not linger over a new card
     const offer = entry.offer;
     const discount =
       offer.oldPrice && offer.oldPrice > offer.price

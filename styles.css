@@ -2164,20 +2164,34 @@ a.watch-name:hover { text-decoration: underline; }
   place-items: center;
 }
 .ps-sheet-v2 .ps-imgbox .ps-img { width: 100%; height: 100%; object-fit: cover; }
-/* Single tap enlarges the product image, tap again restores. The tap is
-   handled in JS (sheet.js); here we suppress the iOS long-press share menu and
-   define the enlarged state. transition:none is deliberate — an instant swap. */
+/* Single tap enlarges the product image in a lightbox that floats ABOVE the
+   card, covering the brochure; tap again restores. The tap is handled in JS
+   (sheet.js); here we suppress the iOS long-press share menu and define the
+   overlay. */
 .ps-imgbox { cursor: zoom-in; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-.ps-imgbox.is-enlarged { cursor: zoom-out; }
 .ps-img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
-.ps-sheet-v2 .ps-imgbox.is-enlarged {
-  flex-basis: 100%;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  max-height: 58vh;
+/* Lightbox: appended to the viewer host, sits above scrim(15) and sheet(20). */
+.ps-lightbox {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 9, 22, 0.82);
+  cursor: zoom-out;
+  animation: fade-up 0.16s ease both;
 }
-.ps-sheet-v2 .ps-imgbox.is-enlarged .ps-img { object-fit: contain; }
+.ps-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  -webkit-user-drag: none;
+  user-select: none;
+}
 .ps-headline { min-width: 0; flex: 1; }
 .ps-sheet-v2 .ps-name { margin: 2px 0 2px; font-size: 16.5px; line-height: 1.3; }
 .ps-sheet-v2 .ps-name-ar { margin: 0 0 2px; font-size: 13.5px; color: var(--muted); }
