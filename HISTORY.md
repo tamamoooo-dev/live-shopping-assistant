@@ -4102,3 +4102,89 @@ price-ascending run (1.25 → …), brand-led and milk-led names interleaved
 purely by price. Locked tests in featured.test.mjs; rule 9 records the
 directive. Future sessions: do NOT reorder this perspective as part of any
 search improvement.
+
+## §37 · Local Profile: the app remembers this browser (2026-07-17)
+
+**The milestone:** every browser gets one silent local profile so the app
+always remembers the same user on return. Not an account, not auth, not
+cloud — a stable local identity that all user-specific data belongs to.
+
+**Implementation (deliberately tiny):** new `src/profile.js` +
+one boot line in `app.js` (`initProfile()`).
+- `lsa.profile.v1` in localStorage (the app's existing persistence layer,
+  same key family as everything else): `{ v, id, createdAt, lastSeenAt }`.
+  Created automatically on first open (`crypto.randomUUID`, fallback for
+  old WebViews); reloaded and visit-stamped on every return. Never shown,
+  no UI.
+- **Adoption, not migration:** one browser = one profile, so the profile
+  simply owns every user `lsa.*` key already there — cart (`lsa.cart.v1`),
+  Featured learning (`lsa.featured.learn.v1`), language (`lsa.lang`),
+  store scope / rank / recents (`lsa.app.*`), strategy winners. No key
+  renames, no data movement, zero behaviour change for existing users.
+  Price watches persist in the engine and re-appear on their own; viewer
+  position stays sessionStorage per-tab by design (paper-flyer UX, not
+  profile data).
+- **Future personalization** goes through `profileGet/profileSet` —
+  one JSON value per name under `lsa.profile.data.*` — instead of new
+  ad-hoc keys.
+- Degrades like `createMemory`: storage blocked (Safari private mode) →
+  session-only in-memory profile, corrupt record → healed with a fresh
+  one; the app never breaks over storage.
+
+**Verified:** `node src/profile.test.mjs` (15 hermetic tests: creation,
+same-id-on-return, corrupt-record healing, blocked-storage degradation,
+data-slot round-trips) + live in the browser: first load created the
+profile beside the untouched existing `lsa.*` keys; reload returned the
+SAME id with an updated `lastSeenAt`; console clean.
+
+## §38 · Fresh Food heals: the produce-vanishing SQL bug + the processed-frozen leak (2026-07-17)
+
+**The complaint:** open Browse → Fresh Food and you meet frozen nuggets,
+hotdogs and breaded burgers — not a single fruit or vegetable, though the
+tiles promised 104 + 56. Two independent engine bugs, one visible symptom.
+
+**Root cause 1 — SQL three-valued logic ate all the produce.** The fresh-
+aisle prefilter appended `AND NOT (o.name LIKE '%frozen%' OR o.name_ar
+LIKE …)`. With a NULL name column that expression is NULL, `NOT NULL` is
+NULL, and SQLite drops the row silently. Every produce row has a NULL name
+side (flyer tiles OCR one language), so listings showed 0 fruits, 0
+vegetables, 3/48 fish, 9/116 meat — while the JS tile fold (`${name||''}`)
+counted them all. The tiles and listings were built to "classify
+identically"; NULL was the one input where the twins disagreed.
+
+**Root cause 2 — frozen food that never says frozen.** D4D files nuggets,
+franks, strips, breaded burgers and popcorn chicken under its FRESH
+categories, and the §32 refinement only matched literal مجمد/frozen — which
+industrial packs never print. 242 of 486 fresh-chicken rows were frozen
+products wearing a fresh badge; they were also exactly the name-rich rows
+that SURVIVED bug 1. The department was, by construction, a frozen-food
+shelf labeled الطازج.
+
+**The fix (engine-only, frontend untouched):**
+- `mapping.js` now defines the mark as TERM LISTS — `FROZEN_MARK_TERMS` +
+  `PROCESSED_MARK_TERMS` (ناجت، نقانق، برجر، ستربس، بوب كورن، بقسماط،
+  تمبورا، زينج، بروست، فرايز، كرات لحم، سيخ كباب…) gated by
+  `FRESH_GUARD_TERMS` (طازج/بوتشر — a butcher's fresh patties stay fresh;
+  the guard never overrides a literal مجمد). Ambiguous butcher terms stayed
+  OUT by discipline: فيليه، تندر، شرايح، مسحب، اسكالوب (production FP:
+  fresh beef stroganoff per kilo), bare كباب (fresh كفته kebab is real).
+- `browseStore.js` GENERATES the SQL twin from those same exported lists
+  over `(ifnull(o.name,'') || ' ' || ifnull(o.name_ar,''))` — NULL-safe and
+  drift-proof by construction: one source of truth, two renderings.
+
+**Verified before deploy (the user's condition):** 65 browse tests incl.
+new NULL/processed/guard/e2e cases; a 1,136-row production simulation (all
+11 fresh+frozen categories via read-only D1): 188 movers, every one an
+industrial frozen brand (Sadia/Seara/Americana/Al Kabeer/Doux/Sunbulah/
+Herfy…), 0 produce movers, deli/meat/fish and every frozen aisle
+byte-identical; and the generated SQL ran against production D1 classified
+all 1,136 rows EXACTLY as the JS did. Two false positives found by eyeball
+in the first term draft (اسكالوب stroganoff, بوتشر burger) were fixed by
+narrowing terms/widening the guard — that eyeball pass is the step that
+earned the deploy.
+
+**Production after deploy:** fruits aisle 0 → 91 cards, vegetables 0 → 47;
+chicken-poultry tile 432 → 244, frozen-poultry 86 → 274; dept=fresh's first
+page is lemons, mandarins, gourds, garlic — every other department's tile
+count unchanged to the digit. (`/browse` is edge-cached 1h, so tiles lag
+listings by up to an hour after any such deploy.)

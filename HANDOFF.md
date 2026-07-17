@@ -341,10 +341,14 @@ non-current AND expired >28 days (row marked `pruned_at`); ≤250 KV deletes +
 over the offers+history substrate, speaking ONLY canonical ids. `taxonomy.js`
 (11 depts / ~70 aisles, bilingual, OURS) + `mapping.js` (per-source category →
 aisle; unmapped ⇒ visible `other`, read-time so fixes apply retroactively;
-plus the **fresh→frozen refinement**: `FRESH_TO_FROZEN` + the مجمد/frozen
-name marker reroute D4D's frozen-filed-as-fresh rows, applied identically in
-cards, tile counts, and the SQL prefilters' `frozen: exclude|only` include
-modes) + `brands.js` (canonical brand KB ~100 entries + OCR-repair detection;
+plus the **fresh→frozen refinement**: `FRESH_TO_FROZEN` + the frozen mark —
+مجمد/frozen words OR a processed-form term (`PROCESSED_MARK_TERMS`: ناجت/
+نقانق/برجر/ستربس/بوب كورن/بقسماط/… gated by `FRESH_GUARD_TERMS` طازج/بوتشر) —
+reroute D4D's frozen-filed-as-fresh rows, applied identically in cards, tile
+counts, and the SQL prefilters' `frozen: exclude|only` include modes; the SQL
+twin is GENERATED from the same exported term lists over a NULL-coalesced
+name pair — never hand-write it, and never compare NULLable columns in a
+NOT-context (the §38 produce-vanishing bug)) + `brands.js` (canonical brand KB ~100 entries + OCR-repair detection;
 V1.1 precision guards: per-brand `depts` allowlists, VETO_PREV/VETO_NEXT
 neighbor words, `noStrip`, min key length 3, NO fuzzy prefix repair —
 detection takes the offer's source/category for context; failure mode is
@@ -386,10 +390,11 @@ guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
 | `cartPage.js` | Cart page: per-store groups + subtotals, qty steppers, View flyer (re-opens viewer on the item's page) |
 | `alertsPage.js` | Alerts page + shared watch dialog + nav badge |
+| `profile.js` | Local profile (`lsa.profile.v1`): silent per-browser identity created at boot, owns ALL user `lsa.*` data (adopted in place, no key renames); `profileGet/profileSet` JSON slots (`lsa.profile.data.*`) for future personalization |
 | `server.js` (root) | Zero-dependency local static server → http://localhost:5173 |
 
 Tests: `node src/match.test.mjs`, `node src/compare.test.mjs`,
-`node src/featured.test.mjs` (pure, offline).
+`node src/featured.test.mjs`, `node src/profile.test.mjs` (pure, offline).
 Cross-page coupling is one `supersearch:search-store` CustomEvent. Theme is
 CSS-variable driven (`--brand` blue `#2563eb`, light+dark).
 
