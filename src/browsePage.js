@@ -269,7 +269,8 @@ async function renderHome(host, token) {
     bHead.appendChild(all);
     brandSection.appendChild(bHead);
     const row = el('div', 'browse-brand-row');
-    for (const brand of brands.slice(0, 14)) row.appendChild(brandPill(brand));
+    // 10, not 14: two clean rows of the 5-across icon grid (the phone layout).
+    for (const brand of brands.slice(0, 10)) row.appendChild(brandPill(brand));
     brandSection.appendChild(row);
     slot.appendChild(brandSection);
   }
@@ -300,12 +301,21 @@ function brandMonogram(slug, name, small = false) {
 function brandPill(brand) {
   const pill = el('a', 'browse-brand-pill');
   pill.href = `#/browse/brand/${brand.slug}`;
-  pill.appendChild(brandMonogram(brand.slug, nodeName(brand), true));
+  const icon = el('span', 'browse-brand-icon');
+  icon.appendChild(brandMonogram(brand.slug, nodeName(brand)));
+  icon.appendChild(el('span', 'browse-brand-count', String(brand.offers)));
+  pill.appendChild(icon);
   const name = el('span', 'browse-brand-name', nodeName(brand));
   name.dir = 'auto';
   pill.appendChild(name);
-  pill.appendChild(el('span', 'browse-brand-count', String(brand.offers)));
   return pill;
+}
+
+// A–Z by the name the shopper actually sees (locale-aware: Arabic collates in
+// Arabic, English in English) — a copy, never a sort of the cached summary.
+function brandsAtoZ(brands) {
+  const lang = getLang();
+  return brands.slice().sort((a, b) => nodeName(a).localeCompare(nodeName(b), lang, { sensitivity: 'base' }));
 }
 
 /* --- the all-brands index ------------------------------------------------------------ */
@@ -330,7 +340,7 @@ async function renderBrandsIndex(host, token) {
     return;
   }
   const row = el('div', 'browse-brand-row browse-brand-grid');
-  for (const brand of brands) row.appendChild(brandPill(brand));
+  for (const brand of brandsAtoZ(brands)) row.appendChild(brandPill(brand));
   slot.appendChild(row);
 }
 
