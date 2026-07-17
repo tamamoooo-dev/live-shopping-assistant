@@ -17,6 +17,7 @@
 //                                             weeks, firstSeen, trend } (derived, stage-gated)
 
 import { t } from './i18n.js';
+import { getProfile } from './profile.js';
 
 const ENGINE_BASE = 'https://brochure-engine.tamamoooo.workers.dev';
 
@@ -416,10 +417,17 @@ export function browseOffers(params = {}) {
 // query (kind 'grocery': checked across ALL sources — online stores + flyer
 // offers) and the engine's daily cron writes an alert when the price crosses
 // down to the target. These are thin, never-throwing clients for that API.
+//
+// PROFILE-SCOPED (Local Profile milestone): every call carries this browser's
+// local profile id, so each browser only ever sees — and can only ever delete —
+// its own watches and alerts. The engine enforces the scope and the per-profile
+// watch limit; this client just always sends the id.
+
+const profileId = () => getProfile().id;
 
 export async function listWatches() {
   try {
-    const r = await fetch(`${ENGINE_BASE}/watches`);
+    const r = await fetch(`${ENGINE_BASE}/watches?profile=${encodeURIComponent(profileId())}`);
     if (!r.ok) return null;
     const j = await r.json();
     return j && Array.isArray(j.watches) ? j : null;
@@ -435,7 +443,7 @@ export async function createWatch(body) {
     const r = await fetch(`${ENGINE_BASE}/watches`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, profileId: profileId() }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return { error: j.error || `HTTP ${r.status}` };
@@ -447,7 +455,10 @@ export async function createWatch(body) {
 
 export async function deleteWatch(id) {
   try {
-    const r = await fetch(`${ENGINE_BASE}/watches?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const r = await fetch(
+      `${ENGINE_BASE}/watches?id=${encodeURIComponent(id)}&profile=${encodeURIComponent(profileId())}`,
+      { method: 'DELETE' },
+    );
     return r.ok;
   } catch {
     return false;
@@ -456,7 +467,7 @@ export async function deleteWatch(id) {
 
 export async function listAlerts(limit = 50) {
   try {
-    const r = await fetch(`${ENGINE_BASE}/alerts?limit=${limit}`);
+    const r = await fetch(`${ENGINE_BASE}/alerts?limit=${limit}&profile=${encodeURIComponent(profileId())}`);
     if (!r.ok) return null;
     const j = await r.json();
     return j && Array.isArray(j.alerts) ? j : null;
@@ -467,7 +478,7 @@ export async function listAlerts(limit = 50) {
 
 export async function markAlertsSeen() {
   try {
-    await fetch(`${ENGINE_BASE}/alerts/seen`, { method: 'POST' });
+    await fetch(`${ENGINE_BASE}/alerts/seen?profile=${encodeURIComponent(profileId())}`, { method: 'POST' });
   } catch {
     /* best-effort */
   }

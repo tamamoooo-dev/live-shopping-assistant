@@ -6,7 +6,17 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-16 · Latest change: **Search Intelligence**
+> **Last updated:** 2026-07-17 · Latest change: **Local Profile**
+> (HISTORY §37) — every browser gets a silent per-browser identity
+> (`lsa.profile.v1`, frontend `src/profile.js`, created at boot; all local
+> `lsa.*` user data adopted in place, `profileGet/profileSet` slots for
+> future personalization), and **Price Watches are PROFILE-SCOPED end to
+> end** (engine `watches.profile_id`, every user-facing route requires the
+> profile, per-profile cap 24 + global backstop 90, cron unscoped) —
+> deployed + production-verified 2026-07-17. ⚠️ The 19 legacy watches are
+> still UNOWNED: first profile to open Alerts adopts them (§11 TODO -1 —
+> main browser first).
+> Previous change: **Search Intelligence**
 > (HISTORY §36) — the grid's third perspective is now **Featured** (replaces
 > Most discounted; still exactly three modes): a new frontend-only
 > `src/featured.js` intelligence layer ABOVE the engine — category-aware
@@ -325,9 +335,19 @@ means SILENCE, never a wrong product). Alert-only extras (declared in
 monitor.js, only ever narrowing): relevance floor 50, reference-size
 comparability ±25%, flyer NAME-tier matches only. Alerts fire on a
 downward **crossing** of the target (re-arms above); no-data never re-arms.
-Cap: 24 active watches, checked daily in SELF-fan-out batches of 3. Watch API
-is open but validated+capped (single-user posture). Push = optional
-`NTFY_TOPIC` secret (unset ⇒ in-app only).
+**PROFILE-SCOPED** (Local Profile milestone): every watch belongs to one
+browser's local profile (`watches.profile_id`; alerts scope through their
+watch). User-facing routes require the profile (`?profile=` / body
+`profileId`) — browsers never see or delete each other's watches; the cron
+checks ALL profiles' watches (unscoped list). Legacy pre-profile rows
+(profile_id NULL) are claimed by the FIRST profile to call GET /watches
+(`adoptOrphans`, one-time) — the 19 existing watches are still unowned;
+open the app on the MAIN browser first so it inherits them (§11 TODO -1).
+Cap: 24 active watches PER PROFILE (`MAX_WATCHES`) + a global backstop of 90
+(`MAX_WATCHES_TOTAL`, keeps the daily fan-out ≤31 of the 32-invocation
+budget), checked daily in SELF-fan-out batches of 3. Watch API is open but
+validated+capped (single-user posture). Push = optional `NTFY_TOPIC` secret
+(unset ⇒ in-app only; the ntfy channel is one topic, not per-profile).
 
 **Retention** (`retention.js`, runs after each cron ingest; manual
 `POST /prune`): metadata forever; **bytes** deleted once a brochure is
@@ -366,8 +386,9 @@ changes. Tests: `node src/browse/browse.test.mjs`.
 `/offers?q=`, `/browse` (market floor, edge-cached 1h),
 `/browse/offers?dept=|aisle=|brand=|rail=|store=&sort=`,
 `/lowest?q=`, `/prices?q=` (legacy `product=` maps to q),
-`/watches`, `/alerts[?unseen=1]`;
-open writes `POST /watches`, `DELETE /watches?id=`, `POST /alerts/seen`;
+`/watches?profile=`, `/alerts?profile=[&unseen=1]`;
+open writes `POST /watches` (body carries `profileId`),
+`DELETE /watches?id=&profile=`, `POST /alerts/seen?profile=`;
 guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`,
 `/watches/check`, `/prune`. CORS open (incl. DELETE).
 
@@ -416,7 +437,7 @@ CSS-variable driven (`--brand` blue `#2563eb`, light+dark).
   (`maxTotalPages` — oversize flyers truncate; `maxPages` must never exceed
   `maxTotalPages` or the flyer starves forever) + ~4 offers POSTs.
 - **32 invocations per event.** Ingest fire ≈ 1 + 18 children + capture +
-  prune; watch fire ≈ 1 + ⌈watches/3⌉ (cap 24 watches ⇒ ≤9).
+  prune; watch fire ≈ 1 + ⌈watches/3⌉ (24/profile, global backstop 90 ⇒ ≤31).
 - **KV Free:** 1 GB total (retention keeps it bounded), **1,000 writes/day** —
   a worst-case all-stores-new-flyers day is ~700–900 writes; partial failures
   self-heal at the next fire. This is the binding constraint on adding stores.
@@ -544,6 +565,13 @@ external product images — verify via `preview_eval` DOM inspection; preview
   neither.
 
 ## 11. Open TODOs (priority order)
+
+-1. **Legacy watch adoption pending** (profile-scoped watches deployed +
+   production-verified 2026-07-17, HISTORY §37): the 19 pre-profile
+   watches sit at `profile_id NULL` — the FIRST profile to load the
+   Alerts page adopts them, so open the app on the MAIN browser before
+   any other. (Verification throwaway profiles were reset to NULL after
+   testing; nothing is owned yet.)
 
 0. **V1.1 brand re-stamp** (everything else is deployed & verified): the
    ~130 wrong / 31 stale `brand_slug` stamps in D1 self-heal at the next

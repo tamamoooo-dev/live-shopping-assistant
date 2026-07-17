@@ -38,6 +38,7 @@ import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPag
 import { initCartPage } from './cartPage.js';
 import { cartCount, CART_EVENT } from './cart.js';
 import { t, tn, applyI18n, initLangSwitch } from './i18n.js';
+import { initProfile } from './profile.js';
 
 const memory = createMemory('app');
 
@@ -476,6 +477,7 @@ async function fillFlyer(slot, storeId, token) {
 }
 
 // --- boot ---------------------------------------------------------------------
+initProfile(); // the local profile: created silently on first open, then reloaded
 applyI18n(); // language metadata (lang; dir stays ltr in Phase 1) + static shell
 initLangSwitch(); // the language chip beside the logo
 renderChips();

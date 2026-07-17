@@ -4137,6 +4137,41 @@ data-slot round-trips) + live in the browser: first load created the
 profile beside the untouched existing `lsa.*` keys; reload returned the
 SAME id with an updated `lastSeenAt`; console clean.
 
+**Part 2 — profile-scoped Price Watches (same day):** the isolation audit
+found the one leak: the engine's `/watches` API was global — a brand-new
+browser (fresh profile) immediately saw all 19 existing watches and could
+delete them. Fixed as an API evolution on the profile id:
+- **Engine:** `watches.profile_id` column (`migrate-2026-07-profiles.sql` +
+  `ix_watches_profile`); `buildWatch` requires a validated `profileId`
+  (8–64 chars); GET/DELETE `/watches`, GET `/alerts`, POST `/alerts/seen`
+  all require `?profile=` and answer ONLY that profile's rows (alerts scope
+  through their watch — join, no denormalized column); DELETE is
+  ownership-guarded (cross-profile delete = 404 no-op). The cap became
+  per-profile (`MAX_WATCHES` 24) with a NEW global backstop
+  (`MAX_WATCHES_TOTAL` 90) protecting the daily cron fan-out
+  (1 + ⌈90/3⌉ = 31 ≤ 32 invocations). The cron's check path stays unscoped
+  (checks every profile's watches). Legacy pre-profile rows: the FIRST
+  profile to call GET /watches adopts them (`adoptOrphans`, idempotent
+  one-time) — deploy note: open the app on the main browser first.
+- **Frontend:** brochure.js's five watch/alert clients all carry
+  `getProfile().id` (query param / POST body). Graceful mismatch window
+  verified: the new client against the OLD deployed engine still works
+  (unknown param ignored) until the engine deploy lands.
+- **Verified:** new `brochure-engine/src/watches.test.mjs` — 32 tests
+  end-to-end through `handleRequest` over the in-memory store twin
+  (isolation matrix, cross-profile delete 404, per-profile caps, global
+  backstop 409, alerts/badge/seen scoping, legacy adoption one-time);
+  `node dev.mjs watchtest` green after updating its selftest to the new
+  contract; all other engine suites (reingest, hotspots, console, status,
+  browse) green.
+- **Deployed + production-verified 2026-07-17** (migration then deploy):
+  GET /watches without profile → 400; a throwaway profile created a watch,
+  listed it (adopting the 19 legacy watches — count 20), a second profile
+  saw 0, its cross-delete answered 404, the owner's delete 200. The
+  adoption was then RESET via D1 (`profile_id = NULL`, 19 rows verified)
+  so the user's main browser claims the legacy watches on its first real
+  visit — the one remaining step (HANDOFF §11 TODO -1).
+
 ## §38 · Fresh Food heals: the produce-vanishing SQL bug + the processed-frozen leak (2026-07-17)
 
 **The complaint:** open Browse → Fresh Food and you meet frozen nuggets,
