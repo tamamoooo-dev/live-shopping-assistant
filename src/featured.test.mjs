@@ -77,7 +77,7 @@ ok('outlier signal product below sane generic',
 // --- learning (gradual, bounded, ranking-only) ---
 ok('learn key: family beats token (bilingual convergence)',
   learnKeyFor('strawberry') === 'f:strawberry' && learnKeyFor('فراولة') === 'f:strawberry');
-ok('learn key: brand-only query keys by token', learnKeyFor('المراعي') === 't:المراعي');
+ok('learn key: brand-only query uses the canonical Arabic token', learnKeyFor('المراعي') === 't:مراعي');
 ok('no query -> no key', learnKeyFor('') === null);
 
 recordChoice('فراولة', 'فراولة محلية طازجة', '');

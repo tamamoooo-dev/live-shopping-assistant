@@ -41,6 +41,7 @@ import {
   offerFamily,
   productType,
   normalizeText,
+  canonicalMatchText,
   matchStage,
   resolveJourneyPool,
 } from './match.js';
@@ -79,7 +80,7 @@ function listingMatchText(l) {
 // only reuses match.js's exported helpers.
 function coveredQueryTokens(text, query) {
   const qTokens = queryTokens(query);
-  const f = normalizeText(text || '');
+  const f = canonicalMatchText(text || '');
   const words = f.split(' ').filter(Boolean);
   const wordSet = new Set(words);
   const covered = new Set();

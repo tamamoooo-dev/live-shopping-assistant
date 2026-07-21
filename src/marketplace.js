@@ -773,16 +773,22 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       flyerChip.setAttribute('aria-pressed', String(flyersOn));
     }
     const view = activeStore ? ordered.filter((e) => entryMatchesFilter(e, activeStore)) : ordered;
-    count.textContent = String(view.length);
+    const primaryView = [];
+    const relatedView = [];
+    for (const e of view) {
+      const badge = matchBadge(e, query, qFam, freshFam);
+      (e.related || badge.cls === 'related' ? relatedView : primaryView).push({ e, badge });
+    }
+    count.textContent = String(primaryView.length);
     subnote.textContent =
       sort === 'value'
         ? t('market.sortedValue')
         : sort === 'featured'
         ? t('market.sortedFeatured')
         : t('market.sortedPrice');
-    subnote.hidden = finished && !view.length;
+    subnote.hidden = finished && !primaryView.length;
     body.innerHTML = '';
-    if (!view.length) {
+    if (!primaryView.length && !relatedView.length) {
       if (finished) {
         body.appendChild(
           el(
@@ -796,10 +802,9 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       }
       return;
     }
-    const grid = el('div', 'results-grid');
-    const visible = expanded ? view : view.slice(0, DEFAULT_VISIBLE);
-    for (const e of visible) {
-      const badge = matchBadge(e, query, qFam, freshFam);
+    const renderGrid = (entries) => {
+      const grid = el('div', 'results-grid');
+      for (const { e, badge } of entries) {
       const up = upSuppressed.has(e) ? null : entryUnit(e);
       const card = e.kind === 'online' ? onlineCard(e.store, e.it, badge, up) : flyerCard(e.listing, badge, up);
       // Featured LEARNING (featured.js): every real engagement with a card —
@@ -812,10 +817,17 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
         { capture: true },
       );
       grid.appendChild(card);
+      }
+      return grid;
+    };
+    if (primaryView.length) {
+      const visible = expanded ? primaryView : primaryView.slice(0, DEFAULT_VISIBLE);
+      body.appendChild(renderGrid(visible));
+    } else if (finished) {
+      body.appendChild(el('div', 'store-note', t('market.nonePrimary')));
     }
-    body.appendChild(grid);
-    if (view.length > DEFAULT_VISIBLE) {
-      const btn = el('button', 'show-all', expanded ? t('market.showFewer') : t('market.showAll', { count: view.length }));
+    if (primaryView.length > DEFAULT_VISIBLE) {
+      const btn = el('button', 'show-all', expanded ? t('market.showFewer') : t('market.showAll', { count: primaryView.length }));
       btn.type = 'button';
       btn.setAttribute('aria-expanded', String(expanded));
       btn.addEventListener('click', () => {
@@ -824,19 +836,30 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       });
       body.appendChild(btn);
     }
+    if (relatedView.length) {
+      const details = el('details', 'related-results');
+      details.appendChild(el('summary', 'related-summary', t('market.relatedResults', { count: relatedView.length })));
+      details.appendChild(el('p', 'related-note', t('market.relatedNote')));
+      details.appendChild(renderGrid(relatedView));
+      body.appendChild(details);
+    }
   }
 
   return {
     // A store answered with its RELEVANT (ranked) items; `hidden` counts the
     // unrelated results that were filtered out — surfaced, never dumped.
-    addOnline(store, items, hidden = 0) {
+    addOnline(store, items, hidden = 0, related = []) {
       for (const it of items) pool.push({ kind: 'online', store, it });
+      for (const it of related) pool.push({ kind: 'online', store, it, related: true });
       const c = chips.get(store.id);
       if (c) {
         c.chip.classList.remove('is-loading');
         c.state.textContent = items.length ? String(items.length) : t('market.state.noMatches');
         if (!items.length) c.chip.classList.add('is-empty');
-        if (hidden > 0) c.chip.title = tn('market.hidden', hidden);
+        const notes = [];
+        if (related.length) notes.push(t('market.relatedSource', { count: related.length }));
+        if (hidden > 0) notes.push(tn('market.hidden', hidden));
+        if (notes.length) c.chip.title = notes.join(' · ');
       }
       render();
     },
@@ -854,12 +877,20 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     addFlyers(listings) {
       if (!includeFlyers) return 0;
       const unique = dedupeFlyers(listings);
-      for (const l of unique) pool.push({ kind: 'flyer', listing: l });
+      let primaryCount = 0;
+      for (const l of unique) {
+        const entry = { kind: 'flyer', listing: l };
+        const related = matchBadge(entry, query, qFam, freshFam).cls === 'related';
+        entry.related = related;
+        if (!related) primaryCount += 1;
+        pool.push(entry);
+      }
       flyerChip.classList.remove('is-loading');
-      flyerState.textContent = unique.length ? t('market.state.offers', { count: unique.length }) : t('market.state.noMatches');
-      if (!unique.length) flyerChip.classList.add('is-empty');
+      flyerState.textContent = primaryCount ? t('market.state.offers', { count: primaryCount }) : t('market.state.noMatches');
+      if (unique.length > primaryCount) flyerChip.title = t('market.relatedSource', { count: unique.length - primaryCount });
+      if (!primaryCount) flyerChip.classList.add('is-empty');
       render();
-      return unique.length;
+      return primaryCount;
     },
     flyersUnavailable() {
       if (!includeFlyers) return 0;

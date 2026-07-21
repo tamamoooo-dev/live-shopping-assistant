@@ -30,7 +30,7 @@ import {
 import { openBrochureViewer } from './viewer.js';
 import { initBrochuresPage } from './brochures.js';
 import { initBrowsePage } from './browsePage.js';
-import { rankItems as smartRank, relevance as matchRelevance, isRelevant, sizeLabel } from './match.js';
+import { rankItems as smartRank, relevance as matchRelevance, isRelevant, isPrimaryMatch, sizeLabel } from './match.js';
 import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
 import { createMarketplace } from './marketplace.js';
@@ -82,7 +82,9 @@ const OFFERS_FETCH_LIMIT = 120;
 function rankAndFilter(items, query) {
   const ranked = smartRank(items, query); // attaches _size and _rel
   const relevant = ranked.filter((it) => isRelevant(it, query) && matchRelevance(it, query) > 0);
-  return { relevant, hidden: ranked.length - relevant.length };
+  const primary = relevant.filter((it) => isPrimaryMatch(it, query));
+  const related = relevant.filter((it) => !isPrimaryMatch(it, query));
+  return { primary, related, hidden: ranked.length - relevant.length };
 }
 
 const $ = (id) => document.getElementById(id);
@@ -362,10 +364,10 @@ async function runSearch(query) {
         if (inFlight !== token) return;
         // Smart ranking + irrelevance filtering per store; only genuinely
         // matching results enter the marketplace and the comparison.
-        const { relevant, hidden } = rankAndFilter(found, q);
-        total += relevant.length;
-        for (const it of relevant) tagged.push({ store: s, it });
-        market.addOnline(s, relevant, hidden);
+        const { primary, related, hidden } = rankAndFilter(found, q);
+        total += primary.length;
+        for (const it of primary) tagged.push({ store: s, it });
+        market.addOnline(s, primary, hidden, related);
       } catch (err) {
         if (inFlight !== token) return;
         market.failStore(s, BEST_EFFORT.has(s.id));

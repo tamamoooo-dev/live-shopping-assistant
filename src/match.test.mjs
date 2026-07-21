@@ -7,7 +7,8 @@
 //  • equivalent products group by brand+size and never merge different sizes.
 
 import {
-  parseSize, sizeLabel, unitPrice, isRelevant, relevance, groupEquivalents, normalizeText,
+  parseSize, sizeLabel, unitPrice, isRelevant, isPrimaryMatch, relevance, groupEquivalents, normalizeText,
+  canonicalMatchText,
   productFamily, queryFamily, tokenCoverage, categoryFamily, offerFamily,
   productType, queryType, freshProduceIntent, isProcessedProduce, isProduceFamily, producePresence,
   matchStage, queryTokenPresence, resolveJourneyPool, querySize, queryTokens, sizeContradicts,
@@ -69,6 +70,20 @@ ok('unit price 6x200ml @9 = 7.5/L', near(unitPrice({ name: 'Milk 6 x 200 ml', pr
 ok('no size -> no unit price', unitPrice({ name: 'Milk', price: 5 }) === null);
 
 // --- relevance / irrelevance ---
+ok('Arabic article canonicalization: الدجاج = دجاج', canonicalMatchText('صدور الدجاج') === 'صدور دجاج');
+ok('Arabic conjunction+article canonicalization: والدجاج = دجاج', canonicalMatchText('صدور والدجاج') === 'صدور دجاج');
+ok('Arabic ingredient preposition stays attached', canonicalMatchText('فاصوليا بالدجاج') === 'فاصوليا بالدجاج');
+ok('article query matches bare product token', relevance({ name: 'صدور دجاج طازجة' }, 'صدور الدجاج') >= 90);
+ok('bare query matches article product token', relevance({ name: 'صدور الدجاج طازجة' }, 'صدور دجاج') >= 90);
+ok('primary: صدور الدجاج accepts bare-article spelling', isPrimaryMatch({ name: 'صدور دجاج طازجة' }, 'صدور الدجاج'));
+ok('primary: صدور دجاج accepts article spelling', isPrimaryMatch({ name: 'صدور الدجاج طازجة' }, 'صدور دجاج'));
+ok('primary: broad دجاج keeps legitimate single-token recall', isPrimaryMatch({ name: 'دجاج كامل طازج' }, 'دجاج'));
+ok('primary: برجر الدجاج keeps the named form', isPrimaryMatch({ name: 'برجر دجاج بالبقسماط' }, 'برجر الدجاج'));
+ok('primary: ناجت الدجاج keeps the named form', isPrimaryMatch({ name: 'ناجت الدجاج مجمد' }, 'ناجت دجاج'));
+ok('primary: فيليه دجاج keeps the named cut', isPrimaryMatch({ name: 'فيليه الدجاج طازج' }, 'فيليه دجاج'));
+ok('related: chicken ingredient alone cannot satisfy صدور الدجاج', !isPrimaryMatch({ name: 'فاصوليا مع الدجاج' }, 'صدور الدجاج'));
+ok('related: chicken gizzards cannot satisfy صدور الدجاج', !isPrimaryMatch({ name: 'صينية قوانص الدجاج' }, 'صدور الدجاج'));
+ok('related: chicken burger cannot satisfy صدور الدجاج', !isPrimaryMatch({ name: 'برجر الدجاج' }, 'صدور الدجاج'));
 ok('plain milk kept + high', isRelevant({ name: 'Almarai Fresh Milk 1 L' }, 'milk') && relevance({ name: 'Almarai Fresh Milk 1 L' }, 'milk') >= 90);
 ok('milk chocolate demoted below plain', relevance({ name: 'Milk Chocolate Bar 90g' }, 'milk') < relevance({ name: 'Fresh Milk 1 L' }, 'milk'));
 ok('coffee dropped for milk', !isRelevant({ name: 'Nescafe Coffee Jar' }, 'milk'));
@@ -424,7 +439,7 @@ const cand = (name, stage, extra = {}) => ({
 ok('queryTokens strips the size expression', queryTokens('Arwa Water 1.5L').join(' ') === 'arwa water');
 ok('queryTokens strips Arabic-Indic sizes', queryTokens('مياه اروى ١.٥ لتر').join(' ') === 'مياه اروي');
 ok('queryTokens strips count expressions', queryTokens('بيض 30 حبة').join(' ') === 'بيض');
-ok('queryTokens leaves size-less queries alone', queryTokens('حليب المراعي').join(' ') === 'حليب المراعي');
+ok('queryTokens canonicalizes Arabic articles without removing lexical terms', queryTokens('حليب المراعي').join(' ') === 'حليب مراعي');
 ok('queryTokens keeps identity digits (no size unit)', queryTokens('Omega 3 fish oil').includes('3'));
 ok('a size-only query keeps its raw tokens', queryTokens('1.5 لتر').length > 0);
 ok('querySize reads the named size', (() => { const s = querySize('Arwa Water 1.5L'); return s && s.unit === 'ml' && s.total === 1500; })());

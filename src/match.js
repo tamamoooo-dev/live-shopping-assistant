@@ -36,6 +36,25 @@ export function normalizeText(s) {
     .trim();
 }
 
+// Matching-only Arabic clitic canonicalization. The definite article carries
+// no product identity, so الدجاج / والدجاج and دجاج must be the SAME token.
+// Deliberately do not strip attached prepositions (بال / لل): they encode an
+// ingredient or purpose and are interpreted separately by the role detectors.
+export function canonicalToken(token) {
+  const t = normalizeText(token);
+  if (!t || /\s/.test(t)) return t;
+  const bare = t.replace(/^(وال|ال)/, '');
+  return bare.length >= 2 ? bare : t;
+}
+
+export function canonicalMatchText(text) {
+  return normalizeText(text)
+    .split(' ')
+    .filter(Boolean)
+    .map(canonicalToken)
+    .join(' ');
+}
+
 // A tiny bilingual synonym bridge so an Arabic query still recognises an English
 // product name (and vice versa) for the tracked staples and a few common words.
 // Deliberately small — it only needs to cover the equivalence/summary layer, not
@@ -109,7 +128,7 @@ const SYNONYMS = [
 const SYN_INDEX = (() => {
   const m = new Map();
   for (const group of SYNONYMS) {
-    const norm = group.map(normalizeText);
+    const norm = [...new Set(group.map(canonicalToken))];
     for (const t of norm) m.set(t, norm);
   }
   return m;
@@ -117,11 +136,12 @@ const SYN_INDEX = (() => {
 
 // Expand a query token to its bilingual synonyms (normalized), including itself.
 export function expandToken(tok) {
-  return SYN_INDEX.get(tok) || [tok];
+  const canonical = canonicalToken(tok);
+  return SYN_INDEX.get(canonical) || [canonical];
 }
 
 export function tokens(s) {
-  const n = normalizeText(s);
+  const n = canonicalMatchText(s);
   return n ? n.split(' ').filter((t) => t.length > 1 || /\p{N}/u.test(t)) : [];
 }
 
@@ -531,7 +551,7 @@ export function offerFamily(offer) {
 export function tokenCoverage(item, query) {
   const qTokens = queryTokens(query);
   if (!qTokens.length) return 1;
-  const f = normalizeText(`${item.name || ''} ${item.brand || ''}`);
+  const f = canonicalMatchText(`${item.name || ''} ${item.brand || ''}`);
   const fWords = new Set(f.split(' '));
   let matched = 0;
   for (const qt of qTokens) {
@@ -816,7 +836,7 @@ export function unitPrice(item) {
 // Uses normalized tokens + bilingual synonym expansion so Arabic and English
 // queries both rank sensibly.
 function fieldScore(field, qTokens) {
-  const f = normalizeText(field);
+  const f = canonicalMatchText(field);
   if (!f) return 0;
   const fWords = new Set(f.split(' '));
   let score = 0;
@@ -858,7 +878,7 @@ const COMPOUND_SHIFTERS = new Set(
 );
 
 function compoundPenalty(item, qTokens) {
-  const words = normalizeText(item.name).split(' ');
+  const words = canonicalMatchText(item.name).split(' ');
   for (const qt of qTokens) {
     const variants = expandToken(qt);
     for (let i = 0; i < words.length - 1; i++) {
@@ -883,7 +903,7 @@ export function relevance(item, query) {
 export function isRelevant(item, query) {
   const qOriginal = queryTokens(query);
   if (!qOriginal.length) return true;
-  const f = normalizeText(item.name);
+  const f = canonicalMatchText(item.name);
   const fWords = new Set(f.split(' '));
   const head = qOriginal[0];
   for (const qt of qOriginal) {
@@ -899,6 +919,19 @@ export function isRelevant(item, query) {
     if (v.length >= 5 && f.includes(v)) return true;
   }
   return false;
+}
+
+// Primary-result admission. A two-token product query expresses one compound
+// intent, so both canonical tokens are mandatory. Longer queries may contain
+// one optional descriptor (the same recall-preserving rule the comparison
+// layer already uses). Partial matches remain useful discovery material, but
+// belong in the explicitly separated Related section rather than the primary
+// result count or Shopping Summary.
+export function isPrimaryMatch(item, query) {
+  const qTokens = queryTokens(query);
+  if (qTokens.length < 2) return isRelevant(item, query);
+  const coverage = tokenCoverage(item, query);
+  return qTokens.length === 2 ? coverage >= 1 : coverage >= (qTokens.length - 1) / qTokens.length;
 }
 
 // Rank a store's items by relevance (stable; ties keep source order). Attaches
@@ -963,8 +996,8 @@ const FLAVOR_AFTER = new Set(
 // anywhere wins over a secondary one. Conservative by design (§10): when in
 // doubt the answer is 'primary' — the failure mode must stay "not demoted".
 export function queryTokenPresence(text, tok) {
-  const variants = new Set(expandToken(normalizeText(tok)));
-  const words = normalizeText(text).split(' ');
+  const variants = new Set(expandToken(canonicalToken(tok)));
+  const words = canonicalMatchText(text).split(' ');
   let secondary = false;
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
@@ -1049,10 +1082,10 @@ export function matchStage(item, query) {
 }
 
 function rawMatchStage(item, qTokens, query) {
-  const name = normalizeText(item.name);
+  const name = canonicalMatchText(item.name);
   const nameWords = name ? name.split(' ') : [];
   const nameSet = new Set(nameWords);
-  const brand = normalizeText(item.brand);
+  const brand = canonicalMatchText(item.brand);
   const brandSet = new Set(brand ? brand.split(' ') : []);
   const tokTier = (qt) => {
     let best = 0;
