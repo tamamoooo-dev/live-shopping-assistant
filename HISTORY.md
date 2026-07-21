@@ -4223,3 +4223,281 @@ chicken-poultry tile 432 → 244, frozen-poultry 86 → 274; dept=fresh's first
 page is lemons, mandarins, gourds, garlic — every other department's tile
 count unchanged to the digit. (`/browse` is edge-cached 1h, so tiles lag
 listings by up to an hour after any such deploy.)
+
+## §39 · Vision + Product Registry: identity by assignment (2026-07-18)
+
+**The arc.** Three sessions, one through-line: flyer OCR names are too weak
+to carry product identity. (1) **Vision enrichment** shipped + deployed
+(v72ab539b): each offer's own flyer crop read by Mistral vision into the
+`offer_enrichments` side-car; gate on `corroboration()` ONLY — model
+self-confidence measured useless (0.98 on a hallucination); user adjudication
+on 20 cases: vision right 20/20, OCR 4/20. (2) **IDENTITY-V2 falsified
+itself honestly:** the stability experiment measured 60.5% cross-week
+agreement for ANY exact hash over free text (determinism ceiling 92.8% —
+model variance at temp 0; flyers reprint different facts weekly). NEVER
+re-attempt exact-hash identity from free text. The decomposition showed
+tolerant containment ≥0.6 recovers 86.9–99.0% at 0.00% measured false
+matches — wobble must be absorbed at MATCH time. (3) **REGISTRY-DESIGN:**
+identity by ASSIGNMENT — an opaque `pr_` row minted once; sightings match
+INTO it with tolerance. P1 (prefer false splits over false merges) biases
+every threshold.
+
+**Implementation (phases 1–7, one milestone, all offline suites green;
+engine repo, NOT yet deployed — HANDOFF §11 TODO 0 is the runbook):**
+
+- **Phases 1–4** (data model + resolver + learning + pipeline flag): tables
+  `products`/`product_tokens`/`product_sightings`; source-agnostic resolver
+  (blocking on distinctive tokens, containment workhorse, size veto, brand
+  penalty-never-veto, sticky incumbency); attach/review/create bands —
+  review attaches but NEVER teaches; §3.1 verdicts stamped on every
+  enrichment row, never silent. `SEARCH_PIPELINE` var + `?pipeline=` flips
+  `/offers` between byte-identical OCR and Vision+Registry substrates —
+  the user's chosen validation method (personal comparative evaluation,
+  supersedes shadow-first).
+- **Phase 5 — lifecycle (`registry/lifecycle.js`):** §5.1 dormancy sweep
+  (6 weeks unseen → dormant, index kept so seasonal returns REACTIVATE
+  instead of duplicating); §5.4 conservative auto-merge — the loser's
+  profile replays through the REAL scoreCandidate against the survivor, bar
+  strictly above tAttach (0.85), brand conflict vetoes (live matching only
+  penalizes), plus a requirement no live match has (shared store or same
+  size read on both); tombstones single-hop, sightings never rewritten
+  (reversible), merges logged as ops-audit rows; dangling-sighting healing
+  closes the apply-crash containment loop (delete + verdict un-stamp →
+  next drain re-resolves). Weekly Monday duty on the daily cron (D1-only,
+  zero new scheduling) + guarded `POST /registry/maintain`.
+- **Phase 6 — consumers:** **Price History V2** (`registry/history.js`):
+  points = SIGHTINGS — market-wide by construction, no second bookkeeping
+  path; same doc shape as V1 behind `/prices|/lowest?pipeline=vision`;
+  merged losers fold into survivors at read time; §4.3 confidence
+  (sightings/stores/weeks) on every variant. **Product watches:** kind
+  `registry` binds a stable `pr_` id — sighting-precision alerting, D1-only
+  checks, no name matching to get wrong unattended. **Review surface**
+  (`GET/POST /registry/review`, guarded): the human side of the §5.4
+  asymmetry — clear_flag / reassign (band review: a human fix must not
+  poison a profile either) / split (re-mint from the sighting's own
+  enrichment).
+- **Phase 7 — calibration (`calibrate-registry.mjs` + `registry/calibrate.js`):**
+  read-only corpus export → boundary-stratified pair sampling (through the
+  production scorer, deterministic seed) → self-contained labeling page →
+  REPLAY through the real drain in ingest order → §8 ship gate: attach
+  ≥95%, false-attach ≤0.5%; sweep ranks threshold grids. The labeled corpus
+  is the permanent regression harness for every resolver/model change. The
+  test suite already demonstrates the harness EARNING ITS KEEP: at the
+  priors, a brand-conflicting 0.67-containment pair binds in the review
+  band — surfaced as a false attach, fixed by a swept tReview.
+- **Also closed:** the deferred IDENTITY-V2 §3 gate 2b — bare او/or
+  OR-deal tiles (true two-product choices) defer with verdict `or_deal`;
+  detection reads VISION names only (the OCR pattern measured 20.7% noise)
+  and demands ≥2 substantial sides; the recorded verdict makes the
+  before-lock re-measurement a `/registry/stats` read once the catalog is
+  enriched.
+
+**Deliberately NOT in this milestone:** frontend adoption (product-watch UI,
+Browse-on-registry badges) waits for the user's A/B verdict — building
+consumers on a substrate that might lose the evaluation would be waste; the
+engine carries everything either verdict needs. Locked lowest-price ordering
+untouched throughout (ranking logic byte-identical in both modes).
+
+**Verification:** 13 offline suites green (6 registry suites incl. new
+lifecycle/history/calibrate + watches/enrich/ops/hotspots/reingest) plus
+dev.mjs pricetest/offerstest/watchtest; the only failure anywhere is the
+pre-existing live-Othaim fixture rot (chip filed 2026-07-18). Shared
+in-memory registry twin extracted to `registry/memstore.js` — one twin,
+same semantics, consumed by tests AND the calibration replay.
+
+**Addendum (2026-07-19) — steady-state autonomy, and a principle made
+explicit.** Pre-deploy review caught a zero-manual-intervention violation:
+the enrich drain rode the daily watch fire at 4×15 = 60 offers/day — sized
+for the old debris-only scope, hopeless against the full-catalog scope's
+Tuesday burst (the whole catalog re-keys weekly; D4D ids are never stable),
+which would have made the weekly `backfill-enrich.mjs` run a standing human
+duty. Two candidate fixes; the user rejected the reuse-gate one and
+ARCHITECTURALLY LOCKED the alternative: **Vision is an ingestion step and
+authoritative for every new offer — nothing may gate, cache, or reuse in
+front of it.** The shipped fix is throughput, not avoidance: the drain moved
+to its own `10,30,50 * * * *` schedule (each fire its own Free-plan budget;
+~4.3k offers/day ceiling; empty fire = one D1 count; minutes chosen clear of
+05:45/06:00 for the registry's single-writer discipline), and the daily fire
+kept watches + Monday maintenance. `backfill-enrich.mjs` is thereby demoted
+to one-time seeding (it alone reaches expired offers for history depth) and
+disaster recovery — never weekly ops.
+One developer convenience rides along (user request, explicitly NOT part of
+normal operations): an Ops Console **Vision Drain** button
+(`POST /__ops/api/enrich`) that fires the identical cron drain on demand —
+same `runEnrichDrain` + `/enrich` children, `ops`-origin audit rows — for
+development, testing, and exceptional catch-up.
+
+**Deployed 2026-07-19 (version fbe294e6).** The two `offer_enrichments`
+column ALTERs + the registry-tables migration ran against production D1;
+`wrangler deploy` registered all three crons (incl. the new `10,30,50`
+enrich drain). Verified live: `/registry/stats` serves, and `/offers`,
+`/prices`, `/lowest` honor `?pipeline=vision`. A standing backlog of 2000
+already-stored enrichments resolves into the registry AUTONOMOUSLY through
+the enrich cron's D1-only resolution post-step — no manual `/resolve`.
+One follow-up surfaced at deploy: `.ingest.secret` doesn't match the
+deployed `INGEST_SECRET` (external guarded calls 403), which does not affect
+the crons (self-consistent internal secret) or the local backfill (writes
+via wrangler d1) — noted in §11 TODO 0.
+
+Alongside the deploy, **Mistral key failover** shipped (user request):
+`src/offers/mistralKeys.js` is one shared cold-standby primitive
+(`createKeyChain` + `classifyMistralError` + `withFailover`) that every
+vision caller composes — the Worker drain (cron + Ops "Vision Drain" button,
+`MISTRAL_API_KEY`→`MISTRAL_API_KEY_BACKUP`) and the local backfill
+(`.mistral.key`→`.mistral.key.backup` via `local-secrets.mjs`). Policy: the
+standby serves ONLY when the primary is unusable — auth failure retires it at
+once; a lone 429 is waited out on the same key and only a PERSISTENT 429
+promotes the standby (never parallel quota); 5xx/crop errors never retire a
+key; every switch logs. Single-key config is byte-identical to prior
+behavior. 9 new offline checks (`src/offers/mistralKeys.test.mjs`); full
+suite green.
+
+## §40 · Vision Milestone 2: English-first, background drain, resilient limits (2026-07-19)
+
+Three targeted upgrades to the stable Vision pipeline, **no architecture change**.
+
+**1 · English-first extraction (prompt only).** Per user directive Vision stays a
+LITERAL EXTRACTION engine — the Registry keeps all normalization/identity/matching.
+The `PROMPT` in `src/offers/enrich.js` was rewritten to a strict contract: English is
+the canonical identity, copied VERBATIM (no rewrite/normalize/translate/reorder/
+expand/spell-fix/infer); Arabic is an INDEPENDENT literal extraction that never
+modifies English and is never translated to fill a gap; product-boundary isolation
+(never borrow words from adjacent tiles). The JSON output schema is unchanged
+(`name_en, name_ar, brand, size, confidence`), so nothing downstream moved — the
+registry was already EN-canonical (`read.js` name preference), so it was left
+untouched by design.
+
+**2 · Background Manual Vision (`§2`).** A new Ops Center "Run Vision (background)"
+control drains the queue to EMPTY server-side and survives the browser closing.
+Mechanism: a durable `vision_jobs` D1 row (`storage/visionJobStore.js`,
+`migrate-2026-07-vision-jobs.sql`) + a self-continuing chain — `POST /enrich/step`
+runs one batch then, while work remains and the operator hasn't stopped it,
+dispatches the NEXT hop via SELF inside `execCtx.waitUntil` (fresh subrequest budget
+per hop; `fetch(request, env, execCtx)` gained the third arg, threaded as
+`ctx.execCtx`). Terminal states: `done` (queue empty / 500-hop cap), `stopped`
+(operator), `error` (a zero-progress batch = provider wall). Routes `vision/start`
+(confirm-gated), `vision/stop`, `vision/job` (polled for live progress); the cron
+drain is unchanged and autonomous.
+
+**3 · "~15 batches" investigated + relaxed (`§3`).** No hard cap existed — every
+drain path aborted the whole run on the FIRST error, so a single Mistral free-tier
+429 (one Worker key, `maxRateRetries` was 1) stopped everything after ~225 calls.
+Fixes, all Free-plan-safe: the drain now CONTINUES past an isolated per-offer error
+(bad crop/parse) and only stops on a real wall (auth/rate/transient); `maxRateRetries`
+1→3 and `withFailover` honors the provider `Retry-After`; the 429 rate-limit headers
+(unpublished, account-specific) are captured (`readRateLimit`) into `report.providerLimit`,
+the `vision_jobs` row, and the audit, and surfaced in the Ops Center (limit / remaining /
+reset / auto-resume time, plus a pointer to Mistral Admin Console → Limits). Cron
+`maxBatches` 4→6 (~90 offers/fire). New/updated offline checks in
+`src/enrich.test.mjs` (resilient skip, 429 capture) and `src/ops/console.test.mjs`
+(job start→step→done, stop, non-running no-op); full suite green; Ops UI smoke-tested
+in the local console. Deploy: apply `migrate-2026-07-vision-jobs.sql`, `wrangler deploy`.
+
+**Follow-up (same day) — ACTIVE key failover + DEPLOY.** Per user request the
+failover policy in `mistralKeys.js` changed from cold-standby ("wait out a 429 on
+the same key; only a persistent 429 promotes the standby") to ACTIVE failover: a
+429 now PARKS the key for its Retry-After window and the backup is tried
+IMMEDIATELY, before any wait; the runner sleeps only when EVERY key is
+dead/parked, then resumes at the soonest window; primary-preferred once a window
+elapses; single-key config stays backward compatible. `createKeyChain` reworked to
+per-key slots (`pick`/`markDead`/`markRateLimited`/`nextResumeAt`, injectable
+clock); `mistralKeys.test.mjs` rewritten to the new contract (all green).
+**Deployed** (version `3f0729ec`): `MISTRAL_API_KEY_BACKUP` secret set from
+`.mistral.key.backup`, `vision_jobs` migration applied, Worker deployed; health +
+both-secrets + tables verified; a live `/enrich` enriched an offer (18:38:40),
+confirming the new chain serves the primary. NOTE (pre-existing, NOT from this
+change): the `/enrich` REQUEST hits the free-plan "Worker exceeded CPU time limit"
+(1101) on the resolution-heavy path — visible in `cron:enrich` rows from before the
+deploy — so the live `failedOver`/`providerLimit` JSON can't be read from an
+`/enrich` response; the 429→backup switch itself is proven by the deterministic
+tests. Enrichment coverage is 10,092/10,115 regardless.
+
+**Follow-up (2026-07-20) — the `/enrich` 1101 was the RESOLUTION post-step, not
+Vision.** Investigation (audit trail + standalone `/resolve` binary search)
+found: the enrich handler runs `drainEnrichment(15)` + `drainResolution(200)`;
+resolution issues ~6 fresh D1 queries PER offer (no cross-offer caching), so a
+200-offer pass needs ~1200 subrequests. Measured per-invocation ceiling ≈ **150
+offers / 1000 subrequests** (standalone `/resolve`: 150 completes, 160 dies) —
+so the account is on the **paid 1000-subrequest plan, NOT Free/50** (correcting
+the repo's long-standing assumption). Because 200 > 150, the post-step always
+died before its final `setVerdicts`, committing NOTHING durable; the audit shows
+this began as a **threshold failure at 2026-07-19 13:53** (not a regression — no
+deploy/re-ingest then; a concurrent manual Run-Drain + cron load spike crossed
+the ceiling, and the die-before-`setVerdicts` mode is non-recovering, so a
+transient overload became a permanent 4,272-row stuck backlog). Fix (deployed,
+version `5b03a1b6`): `/enrich` + `/enrich/step` post-step limit **200→100**
+(< ceiling ⇒ completes every call ⇒ recovering), plus `resolver.js` memoizes the
+batch-invariant `productCount` once per drain and reuses the resolver-fetched
+product on attach (was a 2nd `getProducts`) — ~1 fewer subrequest/offer. A
+`?reslimit` override is the measurement knob. Verified live: `/enrich?limit=15`
+now returns 200 with `resolved.scanned:100`, backlog drops ~85/call, and
+`action='enrich' ok=1` rows resumed. 3 new memoization checks in
+`registry/pipeline.test.mjs`; full suite green.
+
+**Follow-up (2026-07-20) — Background Manual Vision rebuilt as a continuous
+cron-driven drain.** The Milestone-2 self-continuing `/enrich/step` chain was
+found unsound: each hop is ~30s (15 Mistral calls), but a fetch-invocation's
+post-response `waitUntil` budget can't keep a 30s child alive, so every hop→hop
+handoff was cancelled — the job sat at 0 hops (only a client-awaited hop
+completed). The cron path works precisely because its coordinator runs children
+inside one `scheduled()` invocation's generous (~15-min) `waitUntil`. Rebuilt:
+`vision/start` now just ARMS a `running` job; a new **1-minute `visionDrain`
+cron** (`* * * * *`) drains it to empty, paced by Mistral, updating the job each
+fire. **Single-writer** is guaranteed by a D1 lease (`vision_jobs.lease_until`,
+atomic CAS `tryLease`): no two fires overlap, and the steady `10,30,50` drain +
+Monday maintenance both YIELD to a running job. Throughput knob
+`VISION_DRAIN_BATCHES=4` (60 offers/fire; children self-throttle on 429s) sized
+to the ~67/min the operator demonstrated manually (~8k in 2h); lease 5 min
+(> worst-case fire). The `/enrich/step` route, `kickVisionStep`, and the
+`execCtx` plumbing were removed. New `storage/visionJobStore.test.mjs` guards the
+lease CAS; `ops/console.test.mjs` updated (start arms, no chain); migration
+`migrate-2026-07-vision-lease.sql`; full suite green (16). Deployed.
+
+## §41 · Vision-canonical identity: one gate, every feature (2026-07-21)
+
+The user's directive ended the A/B evaluation: **Vision is the canonical
+product-understanding pipeline; OCR is only an extraction fallback**, and every
+user-facing feature must consume the SAME vision-derived identity through one
+definition of "servable". Implemented by deleting the parallel-path machinery,
+not by adding a layer.
+
+**One gate, two twins, defined once.** `offers/enrich.js servable()` (JS) and
+`storage/enrichStore.js SERVABLE_SQL` + `CANON_NAME_SQL`/`CANON_NAME_AR_SQL`/
+`CANON_HAYSTACK_SQL`/`ENRICH_JOIN`/`ENRICH_ROW_COLS` (SQL), both derived from
+`CORROBORATION_FLOOR`. New `applyEnrichment(offer, row)` (offers/enrich.js) is
+the ONLY display overlay: reads the row's aliased `e_*` columns, overlays
+vision names when servable (`enriched: true`), returns the match haystack.
+
+**Per feature.** Search: `offerStore.search()` lost its `pipeline` argument —
+one query LEFT JOINs enrichments, prefilters/ranks over the canonical haystack,
+and returns `e_*` columns, so engine.js `/offers` dropped its `getForIds`
+second fetch (one fewer D1 round-trip), always applies `applyEnrichment`, and
+always annotates registry `productId`/`matchBand`. Watches: `monitor.js
+evaluateGrocery` now runs relevance over `applyEnrichment`'s haystack — a
+debris offer OCR can't name alerts through its vision read (new test proves a
+vision-only match alerts with the vision name). Browse: `browseStore.js`
+CARD_COLS, FROZEN_MARK_SQL and both facet counts select/classify over the
+canonical name expressions (side-car discipline intact: offers rows never
+mutated; `brand_slug` rails unchanged — follow-up §11 TODO (8)). Price
+History: `/prices` + `/lowest` are registry-first; the V1 OCR-identity doc
+serves only when the registry doc is empty (temporary depth bridge, marked
+`TODO: remove V1 fallback`).
+
+**Removed** (one source of truth, no compat layers): `SEARCH_PIPELINE` var
+(wrangler.toml + index.js), `?pipeline=` on all three routes, `?compare=1`,
+`/compare` + `/__compare` + `registry/compare.js`, `/registry/stats
+.pipelineDefault`, frontend `devCompare.js` + `visionCompareEnabled` wiring +
+`.dev-compare` CSS.
+
+**Local dev finally has the substrate**: `createMemoryEnrichStore` (full D1
+interface twin incl. verdict bookkeeping) + `createMemoryOfferStore({
+enrichStore })` whose `search()` decorates rows with `e_*` and matches through
+`applyEnrichment` — dev.mjs wires both, so the canonical path runs end-to-end
+offline (verified: a `garbled zz` OCR row is retrieved and named via its
+vision read).
+
+Tests rewritten for the new world (`pipeline.test.mjs`, `history.test.mjs`,
+`enrich.test.mjs` + new `applyEnrichment` unit block, `watches.test.mjs` +2);
+full engine suite (16 files) + frontend suite green. Payloads stay
+backward-compatible (vision shape was a superset; frontend reads only
+`offers`/`lowest`/`variants`/…).

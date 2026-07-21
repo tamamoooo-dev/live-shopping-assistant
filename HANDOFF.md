@@ -355,7 +355,11 @@ non-current AND expired >28 days (row marked `pruned_at`); ≤250 KV deletes +
 ≤12 rows per run; offers rows deleted after ~180 days.
 
 **D1 tables:** `brochures`, `price_points`, `offers`, `watches`, `alerts`
-(canonical `schema.sql`; past deltas in `migrate-*.sql`, already applied).
+(canonical `schema.sql`; past deltas in `migrate-*.sql`, already applied),
+plus the NOT-YET-MIGRATED registry set: `offer_enrichments`
+(migrate-2026-07-enrichments.sql), `products`/`product_tokens`/
+`product_sightings` (migrate-2026-07-registry.sql), and `vision_jobs`
+(migrate-2026-07-vision-jobs.sql — Background Manual Vision, §40) — §11 TODO 0.
 
 **Browse** (engine `src/browse/`, BROWSE-DESIGN.md Rev 3): read-only views
 over the offers+history substrate, speaking ONLY canonical ids. `taxonomy.js`
@@ -381,16 +385,84 @@ page carries `brand` + `families` (live offers per canonical aisle,
 `/prices/backfill` heals pre-column rows AND re-stamps after brand-knowledge
 changes. Tests: `node src/browse/browse.test.mjs`.
 
+**Vision enrichment + Product Registry** (engine `src/offers/enrich.js`,
+`src/registry/`; designs `IDENTITY-V2.md` + `REGISTRY-DESIGN.md`, both in the
+engine repo — every change must cite a design section). Enrichment reads each
+offer's own flyer crop with Mistral vision (`MISTRAL_API_KEY` secret; absent ⇒
+whole feature inert, fail-soft) into the `offer_enrichments` side-car; gate on
+`corroboration()` ONLY (model confidence is measured-useless). **English-first
+extraction** (Milestone 2, §40): the `PROMPT` is a strict LITERAL-EXTRACTION
+contract — English canonical + verbatim, Arabic an independent verbatim read
+(never translated to fill a gap, never modifies English), product-boundary
+isolation; Vision extracts, the Registry normalizes. Output schema unchanged.
+**Resilient drain** (§40): a per-offer crop/parse error is skipped and the batch
+CONTINUES (only an auth/rate/transient WALL stops it); `maxRateRetries` 3 and
+`withFailover` honors `Retry-After`; 429 rate-limit headers are captured
+(`readRateLimit` → `report.providerLimit`) and surfaced in the Ops Center (the
+free-tier quota is account-specific/unpublished — Mistral Admin Console → Limits).
+**Background Manual Vision** (§40): Ops "Run Vision (background)" arms a durable
+`vision_jobs` row (`storage/visionJobStore.js`) and a self-continuing
+`POST /enrich/step` chain (re-dispatches via SELF inside `execCtx.waitUntil`) that
+drains to empty server-side — browser can close; routes `vision/start|stop|job`.
+**Key failover** (`src/offers/mistralKeys.js`, one shared primitive every caller
+composes; policy = ACTIVE failover on rate limit, updated 2026-07-19 per user
+request, superseding the old cold-standby "wait on the same key first" rule): a
+chain over `MISTRAL_API_KEY` then optional `MISTRAL_API_KEY_BACKUP` in the Worker
+(**both set in production 2026-07-19**), `.mistral.key` then `.mistral.key.backup`
+locally (`local-secrets.mjs`, walks up dirs; env overrides file). One key at a
+time (never parallel quota), primary-preferred. Auth failure retires a key for
+the run; a **429 PARKS the key (Retry-After window) and the next usable key is
+tried IMMEDIATELY — before any wait**; the runner SLEEPS only when EVERY key is
+dead/parked, then resumes at the soonest window (honors `Retry-After`), bounded
+by `maxRateRetries` wait-cycles. Single-key config is backward compatible (429 is
+waited out then retried). 5xx/crop errors never park/retire a key; every switch
+is logged; `drainEnrichment` surfaces
+`failedOver`. Single-key config = today's exact behavior. The REGISTRY is
+identity by ASSIGNMENT: opaque `pr_` products minted once, sightings
+(`product_sightings`, offer-PK idempotent) attach with tolerant token-profile
+matching (attach/review/create bands; review attaches but never teaches;
+create-on-doubt — P1 prefers false splits). Resolution runs inside the enrich
+drain + `POST /resolve`; verdicts stamp `offer_enrichments.mint_verdict`
+(incl. `or_deal` — bare او/or two-product tiles, vision-names-only detection;
+its live fire rate in `/registry/stats` is the lock measurement). Lifecycle
+(`registry/lifecycle.js`, weekly Monday cron duty + `POST /registry/maintain`):
+§5.1 dormancy sweep (6 weeks; dormant stays matchable and reactivates),
+§5.4 conservative auto-merge (bar strictly above attach + brand-conflict veto
++ shared-store-or-same-size requirement; tombstones single-hop; sightings
+never rewritten — reversible; log = ops audit rows), dangling-sighting
+healing. Splits are HUMAN-gated: `GET/POST /registry/review` (guarded) with
+`clear_flag` / `reassign` / `split` actions. **VISION IS CANONICAL
+(2026-07-21, permanent directive):** the old A/B switch (`SEARCH_PIPELINE`
+var, `?pipeline=`, `/compare`, `/__compare`, frontend devCompare) is REMOVED.
+One path everywhere: the servable gate is defined exactly once —
+`offers/enrich.js servable()` (JS) + `storage/enrichStore.js SERVABLE_SQL` /
+`CANON_*_SQL` fragments (its SQL twin, both from `CORROBORATION_FLOOR`) — and
+every feature consumes it: `/offers` retrieval+overlay (rows carry `e_*` cols;
+`applyEnrichment()` is the ONLY overlay), Watches (`monitor.js` uses the same
+`applyEnrichment`), Browse (`browseStore.js` canonical-name COALESCE incl.
+`FROZEN_MARK_SQL`), `/prices`+`/lowest` registry-first (V1 OCR-history doc
+serves only when the registry doc is empty — a temporary depth bridge).
+No feature may implement its own corroboration or fallback logic.
+Watches gained kind `registry` (`productId: pr_…`, sighting-precision, D1-only
+checks). Calibration (`calibrate-registry.mjs` + `src/registry/calibrate.js`):
+export → label pairs (`calibration/labeling.html`) → replay/sweep against the
+§8 ship gate (attach ≥95%, false-attach ≤0.5%) — the permanent regression
+corpus for every resolver/model change. Tests: `node src/registry/*.test.mjs` +
+`src/enrich.test.mjs`, all offline.
+
 **API:** public reads `GET /` (health), `/brochures[?store=&region=]`,
 `/brochures/history`, `/brochures/hotspots?id=`, `/asset/<key>`,
-`/offers?q=`, `/browse` (market floor, edge-cached 1h),
+`/offers?q=` (vision-canonical), `/browse` (market floor, edge-cached 1h),
 `/browse/offers?dept=|aisle=|brand=|rail=|store=&sort=`,
-`/lowest?q=`, `/prices?q=` (legacy `product=` maps to q),
+`/lowest?q=`, `/prices?q=` (legacy `product=` maps to q; registry-first,
+V1 fallback), `/registry/stats`,
 `/watches?profile=`, `/alerts?profile=[&unseen=1]`;
 open writes `POST /watches` (body carries `profileId`),
 `DELETE /watches?id=&profile=`, `POST /alerts/seen?profile=`;
 guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`,
-`/watches/check`, `/prune`. CORS open (incl. DELETE).
+`/watches/check`, `/prune`, `/enrich`, `/enrich/step` (Background Manual Vision
+hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open
+(incl. DELETE).
 
 ## 6. Frontend map (no build step; `index.html` + `styles.css` + `src/`)
 
@@ -426,13 +498,48 @@ CSS-variable driven (`--brand` blue `#2563eb`, light+dark).
   via the `SELF` service binding ("Architecture C") — each child gets its own
   50-subrequest budget and runs brochures → that store's offers → that store's
   price-history harvest (D1-only, no subrequests). Then the coordinator prunes.
-- **`45 5 * * *`**: watch check — SELF fan-out in batches of 3.
+- **`45 5 * * *`**: watch check — SELF fan-out in batches of 3. On MONDAYS
+  the same fire then runs registry maintenance (`runMaintenance`: dormancy,
+  consolidation, healing — D1-only, no fan-out).
+- **`10,30,50 * * * *`**: the vision-enrichment drain on its OWN schedule
+  (steady-state autonomy, 2026-07-19). Vision is an INGESTION step — every
+  new offer passes through it exactly once; **no reuse/caching gates in
+  front of Vision** (user directive) — so throughput must absorb the
+  Tuesday-night burst (the whole catalog re-keys weekly; D4D offer ids are
+  never stable): each fire = own budgets, 6 sequential children × 15 offers
+  (§40 bump from 4), 3 fires/hour ⇒ ~6.5k offers/day ceiling, burst clears within the day with
+  zero manual steps. Self-limiting (empty queue = one D1 count; newest-first;
+  expired offers leave the queue). Inert without `MISTRAL_API_KEY`.
+  Resolution rides each child as its `/enrich` post-step (capped at
+  `RESOLVE_POST_LIMIT=100`, HISTORY §40). **YIELDS to a running Background Vision
+  job** so there is never more than one resolution writer (§2). DEVELOPER
+  convenience: the Ops Console's **Vision Drain** button
+  (`POST /__ops/api/enrich`, confirm:true, `batches` ≤8) fires the identical
+  drain on demand — children audited origin `ops`.
+- **`* * * * *`** (Background Manual Vision continuous drain, §40 cron redesign
+  2026-07-20): a single cheap D1 read unless an operator has a `vision_jobs` job
+  `running`; then it drains `VISION_DRAIN_BATCHES` (=4) children/fire, paced by
+  Mistral, as the SOLE resolution writer — a D1 lease (`lease_until`, atomic CAS
+  `tryLease`, `VISION_LEASE_MS`=5min) stops overlapping fires, and the `10,30,50`
+  drain + Monday maintenance yield to it. `POST /__ops/api/vision/start` just ARMS
+  the job (no chain — the old `/enrich/step` self-chain was removed as unsound: a
+  fetch-invocation `waitUntil` can't keep a ~30s hop alive). Poll `vision/job`,
+  halt with `vision/stop`. `VISION_DRAIN_BATCHES` is the tuning knob.
 - `scheduled()` branches on `event.cron`. On-demand equivalent:
   `POST /ingest?store=<id>` (same path the fan-out hits).
 
-## 8. Free-plan budgets (re-do this math before adding stores/watches)
+## 8. Per-invocation budgets (re-do this math before adding stores/watches)
 
-- **50 external subrequests per invocation.** Per-store ingest child ≈ 47:
+- ⚠️ **The Worker is on a PAID plan: ~1000 subrequests per invocation**, NOT the
+  Free 50 the rest of this doc historically assumed (MEASURED 2026-07-20: a
+  standalone `/resolve` doing ~640 subrequests succeeds, ~1024 dies — HISTORY
+  §40). The per-store ingest math below is still a good design ceiling to keep
+  children lean, but the true limit is 1000. **D1 queries count as subrequests**:
+  the resolution drain does ~6 per offer, so its per-invocation capacity ≈ **150
+  offers**; the `/enrich` + `/enrich/step` resolution post-step is capped at 100
+  to stay under it (`RESOLVE_POST_LIMIT` in engine.js). Backlog beyond that
+  drains via standalone `POST /resolve` (limit ≤150).
+- **Design ceiling ~50 external subrequests per ingest child.** Per-store ≈ 47:
   1 store page + ≤6 leaflet fetches (`maxCandidates`) + ≤36 page images
   (`maxTotalPages` — oversize flyers truncate; `maxPages` must never exceed
   `maxTotalPages` or the flyer starves forever) + ~4 offers POSTs.
@@ -573,7 +680,38 @@ external product images — verify via `preview_eval` DOM inspection; preview
    any other. (Verification throwaway profiles were reset to NULL after
    testing; nothing is owned yet.)
 
-0. **V1.1 brand re-stamp** (everything else is deployed & verified): the
+0. **Vision+Registry milestone — DEPLOYED 2026-07-19** (version
+   fbe294e6). Done: (1) the two `offer_enrichments` ALTERs, (2) the registry
+   tables migration, (3) `wrangler deploy` (all 3 crons registered incl.
+   `10,30,50` enrich drain), verified — `/registry/stats` live,
+   `/offers`+`/prices`+`/lowest` honor `?pipeline=vision`. 2000 pre-existing
+   enrichments resolved into the registry (cron post-step + a manual
+   `/resolve` drain). **VERIFIED 2026-07-19**: registry has 767 products /
+   1712 sightings (all current), 116 assortments; `/prices?pipeline=vision`
+   returns real market-wide lows (milk 7 variants @4.50 nesto, oil 9
+   variants @9.99); `/offers?pipeline=vision` annotates `productId` on
+   resolved offers; verdicts healthy (minted 1712, **or_deal 1** — the new
+   gate fired in production, too_few_tokens 69, unresolved 202 = expired-offer
+   enrichments that correctly never enter the current registry); autonomous
+   cron resolution independently confirmed (0→91 products on the :50 fire).
+   `INGEST_SECRET` was rotated to match `.ingest.secret` (self-consistent —
+   crons read the same env var). ⚠️ `POST /resolve` with large `limit` (≥~200)
+   overruns a Worker's D1-op budget and returns a Cloudflare error page — use
+   `limit=50` and loop (occasional 503 → back off + retry). REMAINING:
+   - (4) OPTIONAL one-time historical vision backfill `node backfill-enrich.mjs`
+     (~37k calls, resumable; failover-hardened) — reaches EXPIRED offers for
+     history depth that the cron never will; current-catalog coverage builds
+     autonomously either way (`10,30,50` drain, ~4.3k/day).
+   - (5)–(7) RESOLVED 2026-07-21: the verdict is VISION-CANONICAL (HISTORY
+     §41) — flag/evaluation tooling removed, one path shipped. Remaining
+     frontend adoption ideas (product-watch UI on `productId`, Browse-on-
+     registry badges) are now ordinary feature work.
+   - (8) follow-up: Browse brand rails still group by ingest-stamped
+     `brand_slug` (OCR-derived); re-stamp from the vision `brand` field.
+   - (9) follow-up: remove the `/prices` V1 fallback once registry depth
+     covers the catalog (grep `TODO: remove V1 fallback`).
+
+0b. **V1.1 brand re-stamp** (everything else is deployed & verified): the
    ~130 wrong / 31 stale `brand_slug` stamps in D1 self-heal at the next
    ingest cron (the weekly upsert re-stamps every re-extracted offer —
    first fire Fri 2026-07-17 06:00Z). For an immediate fix instead: rotate
