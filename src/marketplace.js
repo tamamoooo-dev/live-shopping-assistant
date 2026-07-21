@@ -594,6 +594,7 @@ export async function openFlyerOffer(offer) {
 export function createMarketplace(root, stores, query = '', opts = {}) {
   const qFam = queryFamily(query);
   const freshFam = freshProduceIntent(query);
+  const includeFlyers = opts.includeFlyers !== false;
   let sort = opts.sort === 'value' || opts.sort === 'featured' ? opts.sort : 'price';
   const onSort = typeof opts.onSort === 'function' ? opts.onSort : () => {};
   // Sources strip: one status chip per selected store (+ its flyer chip slot),
@@ -627,24 +628,28 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     strip.appendChild(chip);
     chips.set(s.id, { chip, state, flyerSlot });
   }
-  const flyerChip = el('span', 'src-chip src-chip-flyers is-loading');
-  flyerChip.appendChild(el('span', null, '📄'));
-  flyerChip.appendChild(el('span', 'src-name', t('market.weeklyFlyers')));
-  const flyerState = el('span', 'src-state', '…');
-  flyerChip.appendChild(flyerState);
-  // Interactive filter, consistent with the store chips: toggles the view to
-  // this week's flyer offers only. Reachable by keyboard.
-  flyerChip.setAttribute('role', 'button');
-  flyerChip.tabIndex = 0;
-  flyerChip.setAttribute('aria-pressed', 'false');
-  flyerChip.addEventListener('click', () => toggleStoreFilter(FLYERS_FILTER));
-  flyerChip.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' || ev.key === ' ') {
-      ev.preventDefault();
-      toggleStoreFilter(FLYERS_FILTER);
-    }
-  });
-  strip.appendChild(flyerChip);
+  let flyerChip = null;
+  let flyerState = null;
+  if (includeFlyers) {
+    flyerChip = el('span', 'src-chip src-chip-flyers is-loading');
+    flyerChip.appendChild(el('span', null, '📄'));
+    flyerChip.appendChild(el('span', 'src-name', t('market.weeklyFlyers')));
+    flyerState = el('span', 'src-state', '…');
+    flyerChip.appendChild(flyerState);
+    // Interactive filter, consistent with the store chips: toggles the view to
+    // this week's flyer offers only. Reachable by keyboard.
+    flyerChip.setAttribute('role', 'button');
+    flyerChip.tabIndex = 0;
+    flyerChip.setAttribute('aria-pressed', 'false');
+    flyerChip.addEventListener('click', () => toggleStoreFilter(FLYERS_FILTER));
+    flyerChip.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        toggleStoreFilter(FLYERS_FILTER);
+      }
+    });
+    strip.appendChild(flyerChip);
+  }
   root.appendChild(strip);
 
   // The grid.
@@ -760,11 +765,13 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       c.chip.classList.toggle('is-active', on);
       c.chip.setAttribute('aria-pressed', String(on));
     }
-    const hasFlyers = pool.some((e) => e.kind === 'flyer');
-    const flyersOn = activeStore === FLYERS_FILTER;
-    flyerChip.classList.toggle('is-filterable', hasFlyers);
-    flyerChip.classList.toggle('is-active', flyersOn);
-    flyerChip.setAttribute('aria-pressed', String(flyersOn));
+    if (flyerChip) {
+      const hasFlyers = pool.some((e) => e.kind === 'flyer');
+      const flyersOn = activeStore === FLYERS_FILTER;
+      flyerChip.classList.toggle('is-filterable', hasFlyers);
+      flyerChip.classList.toggle('is-active', flyersOn);
+      flyerChip.setAttribute('aria-pressed', String(flyersOn));
+    }
     const view = activeStore ? ordered.filter((e) => entryMatchesFilter(e, activeStore)) : ordered;
     count.textContent = String(view.length);
     subnote.textContent =
@@ -845,18 +852,22 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     // This week's flyer offers (compare.js flyerListings — already gated);
     // branch/language duplicates of the same offer collapse to one card.
     addFlyers(listings) {
+      if (!includeFlyers) return 0;
       const unique = dedupeFlyers(listings);
       for (const l of unique) pool.push({ kind: 'flyer', listing: l });
       flyerChip.classList.remove('is-loading');
       flyerState.textContent = unique.length ? t('market.state.offers', { count: unique.length }) : t('market.state.noMatches');
       if (!unique.length) flyerChip.classList.add('is-empty');
       render();
+      return unique.length;
     },
     flyersUnavailable() {
+      if (!includeFlyers) return 0;
       flyerChip.classList.remove('is-loading');
       flyerChip.classList.add('is-empty');
       flyerState.textContent = t('market.state.unavailable');
       render();
+      return 0;
     },
     flyerSlot(storeId) {
       const c = chips.get(storeId);

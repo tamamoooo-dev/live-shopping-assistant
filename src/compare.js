@@ -127,6 +127,7 @@ export function onlineListing(t, query) {
     family: productFamily(it.name),
     type: productType(it.name),
     text: `${it.name || ''} ${it.brand || ''}`,
+    productId: null, // canonical Registry identity is a flyer-offer concept
     it,
   };
 }
@@ -170,6 +171,46 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     family: offerFamily(offer),
     type: productType(`${offer.name || ''} ${offer.nameAr || ''}`),
     text: `${offer.name || ''} ${offer.nameAr || ''}`,
+    // The engine's canonical Registry identity (Vision-canonical, one per real
+    // product). When two offers share it, they ARE the same product — no
+    // lexical re-derivation may overrule it.
+    productId: offer.productId || null,
+    brandSlug: offer.brandSlug || null,
+    offer,
+  };
+}
+
+// A flyer offer admitted on Registry identity alone (canonical pull-in): it
+// shares a productId with a listing the query DID admit, so it IS the same
+// product — its generic extracted name ("Milk" on a tile whose brand lives
+// only in the artwork) must not hide its price. No lexical gates here, by
+// design; identity was already proven upstream.
+function canonicalFlyerListing(offer, query, storeLabelFn = (x) => x) {
+  if (!offer || offer.price == null) return null;
+  const arQuery = /[؀-ۿ]/.test(query || '');
+  const name = arQuery ? offer.nameAr || offer.name : offer.name || offer.nameAr;
+  if (!name) return null;
+  const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, '');
+  const item = { name, price: offer.price, _size: size };
+  return {
+    source: 'flyer',
+    store: { id: offer.store, label: storeLabelFn(offer.store) },
+    name,
+    brand: '',
+    price: offer.price,
+    oldPrice: offer.oldPrice ?? null,
+    currency: offer.currency || 'SAR',
+    link: offer.sourceUrl || null,
+    image: offer.imageUrl || null,
+    size,
+    up: unitPrice(item),
+    rel: REL_FLOOR,
+    stage: 0,
+    family: offerFamily(offer),
+    type: productType(`${offer.name || ''} ${offer.nameAr || ''}`),
+    text: `${offer.name || ''} ${offer.nameAr || ''}`,
+    productId: offer.productId,
+    brandSlug: offer.brandSlug || null,
     offer,
   };
 }
@@ -257,6 +298,11 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     const anchorSet = coveredQueryTokens(listingMatchText(anchor), query);
     if (anchorSet.size) {
       const locked = listings.filter((l) => {
+        // Canonical override: a listing resolved to the SAME Registry product
+        // as the anchor is the same product by definition — token spelling in
+        // its OCR/Vision name can never exclude it (the "Nadec Skimmed Milk"
+        // disappearing-comparison bug).
+        if (anchor.productId && l.productId === anchor.productId) return true;
         const s = coveredQueryTokens(listingMatchText(l), query);
         for (const t of anchorSet) if (!s.has(t)) return false; // must cover ≥ the anchor
         return true;
@@ -264,6 +310,37 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
       if (locked.length) {
         identityExcluded = listings.length - locked.length;
         listings = locked;
+      }
+    }
+  }
+
+  // CANONICAL PULL-IN — an offer the lexical gates rejected but whose
+  // productId matches a listing that survived every gate is the SAME product
+  // (Registry identity is authoritative). Admit it now, so the true best
+  // price can never be hidden by a generic Vision name ("the Othaim 18.99
+  // Nadec milk" bug, 2026-07-21).
+  {
+    // Brand guard mirrors the engine's: a 'review'-band sighting can wrongly
+    // co-locate brands under one productId, so a pulled-in offer must ALSO
+    // carry the same ingest-stamped brand as an admitted listing of that
+    // product. Identity expands reach, never brand.
+    const brandsByPid = new Map();
+    for (const l of listings) {
+      if (!l.productId || !l.brandSlug) continue;
+      const set = brandsByPid.get(l.productId) || new Set();
+      set.add(l.brandSlug);
+      brandsByPid.set(l.productId, set);
+    }
+    if (brandsByPid.size) {
+      const seenOffers = new Set(listings.map((l) => l.offer).filter(Boolean));
+      const seenIds = new Set([...seenOffers].map((o) => o.id).filter((id) => id != null));
+      for (const o of offers || []) {
+        if (!o || !o.productId) continue;
+        const okBrands = brandsByPid.get(o.productId);
+        if (!okBrands || !o.brandSlug || !okBrands.has(o.brandSlug)) continue;
+        if (seenOffers.has(o) || (o.id != null && seenIds.has(o.id))) continue;
+        const l = canonicalFlyerListing(o, query, storeLabelFn);
+        if (l) listings.push(l);
       }
     }
   }
@@ -299,19 +376,58 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     }
   }
 
-  // Equivalence (online only): does a confidently-same product span ≥2 stores?
-  const onlineListings = listings.filter((l) => l.source === 'online');
-  const groups = groupEquivalents(onlineListings.map((l) => ({ it: l.it, store: l.store, _l: l })));
+  // Equivalence: does a confidently-same product span ≥2 stores?
+  //
+  // CANONICAL FIRST (Vision-canonical directive): flyer offers the engine has
+  // resolved to one Registry productId ARE the same product — across any
+  // retailers, however the query is phrased. Those groups are authoritative
+  // and take precedence over lexical re-derivation. Lexical grouping
+  // (groupEquivalents: brand + size over catalogue names) remains for online
+  // results, which carry no Registry identity.
   let equivalent = null;
   const headIt = headline.listing.it;
+  {
+    const byProduct = new Map();
+    for (const l of listings) {
+      if (!l.productId) continue;
+      // Brand-scoped key: a polluted productId must never merge brands.
+      const key = `${l.productId}|${l.brandSlug || ''}`;
+      const arr = byProduct.get(key) || [];
+      arr.push(l);
+      byProduct.set(key, arr);
+    }
+    let bestG = null;
+    for (const arr of byProduct.values()) {
+      const stores = new Set(arr.map((l) => l.store.id));
+      if (stores.size < 2) continue;
+      const hasHead = arr.includes(headline.listing);
+      if (!bestG || (hasHead && !bestG.hasHead) || (hasHead === bestG.hasHead && stores.size > bestG.stores)) {
+        bestG = { arr, stores: stores.size, hasHead };
+      }
+    }
+    if (bestG) {
+      // One row per store (its cheapest) — duplicate ingest rows never repeat.
+      const cheapestByStore = new Map();
+      for (const l of bestG.arr) {
+        const cur = cheapestByStore.get(l.store.id);
+        if (!cur || l.price < cur.price) cheapestByStore.set(l.store.id, l);
+      }
+      const sorted = [...cheapestByStore.values()]
+        .map((l) => ({ it: l.it || { name: l.name, price: l.price, link: l.link }, store: l.store, _l: l }))
+        .sort((a, b) => a.it.price - b.it.price);
+      equivalent = { sorted, stores: bestG.stores, size: bestG.arr[0].size, canonical: true, hasHeadline: bestG.hasHead };
+    }
+  }
+  const onlineListings = listings.filter((l) => l.source === 'online');
+  const groups = equivalent ? [] : groupEquivalents(onlineListings.map((l) => ({ it: l.it, store: l.store, _l: l })));
   for (const g of groups) {
     const stores = new Set(g.items.map((i) => i.store.id));
     if (stores.size >= 2 && headIt && g.items.some((i) => i.it === headIt)) {
-      equivalent = { sorted: g.items.slice().sort((a, b) => a.it.price - b.it.price), stores: stores.size, size: g.size };
+      equivalent = { sorted: g.items.slice().sort((a, b) => a.it.price - b.it.price), stores: stores.size, size: g.size, hasHeadline: true };
       break;
     }
   }
-  if (!equivalent) {
+  if (!equivalent && groups.length) {
     const multi = groups
       .map((g) => ({ g, stores: new Set(g.items.map((i) => i.store.id)).size }))
       .filter((x) => x.stores >= 2 && x.g.size && x.g.size.unit)
@@ -346,9 +462,10 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
     }
   }
 
-  // Confidence in the headline claim.
+  // Confidence in the headline claim. A canonical (Registry-verified) group
+  // containing the headline is as strong as a lexical online one.
   let confidence = 'low';
-  if (equivalent && headIt && equivalent.sorted.some((i) => i.it === headIt)) confidence = 'high';
+  if (equivalent && (equivalent.hasHeadline || (headIt && equivalent.sorted.some((i) => i.it === headIt)))) confidence = 'high';
   else if (value) confidence = 'medium';
 
   // Price History verdict (catalog-wide: the engine derives history for ANY
@@ -388,17 +505,6 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
         chosenToday = tb;
       }
     }
-    if (!chosen) {
-      for (const v of variants) {
-        const tb = todaysBestFor(v);
-        if (tb != null) {
-          chosen = v;
-          chosenToday = tb;
-          break;
-        }
-      }
-    }
-
     let low = null;
     let todaysBest = null;
     let variantInfo = null;
@@ -414,14 +520,15 @@ export function computeComparison(query, tagged, offers, prices, storeLabelFn) {
       otherVariants = variants
         .filter((v) => v.key !== chosen.key)
         .map((v) => ({ label: v.label, low: v.lowest }));
-    } else if (prices.lowest && prices.lowest.price != null) {
+    } else if (!variants.length && prices.lowest && prices.lowest.price != null) {
+      // Legacy engines only (no per-size records): product-wide low vs today's
+      // cheapest. When per-size records EXIST but none matches the recommended
+      // product's own size, we show NOTHING — a 4×1L pick must never sit next
+      // to a 170g record ("this is a disaster" bug, 2026-07-21). Same-size or
+      // silent.
       low = prices.lowest;
       todaysBest = cheapest.price;
       latestSource = prices.latest || [];
-      // No tracked size is present in today's results — the per-size records
-      // still exist, so surface them as "Other sizes" instead of hiding the
-      // history the engine actually has (each with its own independent low).
-      otherVariants = variants.map((v) => ({ label: v.label, low: v.lowest }));
     }
 
     if (low && low.price != null && todaysBest != null) {

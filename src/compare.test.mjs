@@ -426,8 +426,10 @@ const label = (id) => id;
   ok('image: flyer listing carries the D4D crop', c.listings.some((l) => l.source === 'flyer' && l.image === 'https://img/f.jpg'));
 }
 
-// Task 2: when NO tracked size is present in today's results, the per-size
-// records are still surfaced as "Other sizes" instead of disappearing.
+// Same-size or silent (2026-07-21): when per-size records exist but NONE
+// matches the recommended product's own size, the history section must not
+// render at all — a 12-pcs pick never sits next to a 6-pcs or 30-pcs record,
+// and the product-wide low (an unknown size) is just as incomparable.
 {
   const tagged = [T('panda', 'White Eggs Tray 12 pcs', 9)]; // untracked size today
   const prices = {
@@ -440,9 +442,27 @@ const label = (id) => id;
     ],
   };
   const c = computeComparison('eggs', tagged, [], prices, label);
-  ok('fallback: history still renders on the product-wide low', c.history && !c.history.variant);
-  ok('fallback: tracked sizes surface as Other sizes', c.history.otherVariants.length === 2);
-  ok('fallback: other-size records keep their dates', c.history.otherVariants.every((v) => v.low.observedAt));
+  ok('same-size or silent: no history section when no record matches the pick’s size', c.history === null);
+}
+
+// The history never locks to a DIFFERENT size that happens to be in the grid:
+// headline is 4×1L, a 170g product is also in today's results with a tracked
+// record — the 170g record must not become the card's history.
+{
+  const tagged = [
+    T('panda', 'Nadec Milk 4 x 1 L', 20),
+    T('lulu', 'Almarai Cream Cheese 170 g', 9.99),
+  ];
+  const prices = {
+    lowest: { price: 8, store: 'nesto' },
+    latest: [],
+    weeks: 4,
+    variants: [
+      { key: 'g:170', sizeUnit: 'g', sizeTotal: 170, label: '170 g', weeks: 4, lowest: { price: 8, store: 'nesto', observedAt: '2026-07-15' }, latest: [] },
+    ],
+  };
+  const c = computeComparison('milk', tagged, [], prices, label);
+  ok('same-size or silent: a stray same-size-as-OTHER-listing record never renders', c.history === null);
 }
 
 // Task 1: a size-carrying query still admits every size SPELLING of that size
@@ -455,6 +475,69 @@ const label = (id) => id;
   const c = computeComparison('Arwa Water 1.5L', tagged, [], null, label);
   ok('size query: both spellings compete', c.offers === 2);
   ok('size query: the cheaper spelling wins the headline', c.headline.listing.price === 2.25);
+}
+
+// --- CANONICAL BEST PRICE: one Registry productId across retailers -----------------
+// The "Nadec Skimmed Milk" bug: two flyer offers the engine resolved to the SAME
+// canonical product (productId) at different retailers must ALWAYS produce the
+// Best Price (equivalent) section — flyer source and query specificity never
+// suppress a Registry-verified identity.
+{
+  const offers = [
+    { store: 'farm', name: 'NADEC Skimmed Milk 1L', price: 4.5, currency: 'SAR', productId: 'pr_x1', sourceUrl: 'https://agg/n/1' },
+    { store: 'tamimi', name: 'NADEC UHT Milk Skimmed 1 Ltr', price: 5.25, currency: 'SAR', productId: 'pr_x1' },
+  ];
+  const c = computeComparison('nadec skimmed milk', [], offers, null, label);
+  ok('canonical: same-productId flyer offers form the Best Price group', c.equivalent && c.equivalent.stores === 2);
+  ok('canonical: group is flagged canonical and contains the headline', c.equivalent.canonical && c.equivalent.hasHeadline);
+  ok('canonical: rows are price-sorted with real prices', c.equivalent.sorted[0].it.price === 4.5 && c.equivalent.sorted[1].it.price === 5.25);
+  ok('canonical: Registry-verified identity earns high confidence', c.confidence === 'high');
+}
+
+// The identity lock never splits a canonical group, however specific the query.
+{
+  const offers = [
+    { store: 'farm', name: 'NADEC UHT Milk', nameAr: 'حليب نادك خالي الدسم', price: 19.99, currency: 'SAR', productId: 'pr_y1' },
+    { store: 'tamimi', name: 'NADEC SKIMMED UHT MILK', price: 21.5, currency: 'SAR', productId: 'pr_y1' },
+  ];
+  const c = computeComparison('nadec skimmed milk', [], offers, null, label);
+  ok('canonical: a same-productId offer missing a query token is never identity-excluded', c.listings.length === 2 && c.identityExcluded === 0);
+  ok('canonical: the section appears for the specific query', !!c.equivalent && c.equivalent.stores === 2);
+}
+
+// CANONICAL PULL-IN: an offer whose Vision name is generic ("Milk" — brand
+// only in the tile artwork) but that shares a productId with an admitted
+// offer joins the comparison and can win Best Price (the Othaim 18.99 bug).
+{
+  const offers = [
+    { id: 'farm:1', store: 'farm', name: 'NADEC UHT Milk', price: 19.99, oldPrice: 23.99, currency: 'SAR', productId: 'pr_m', brandSlug: 'nadec' },
+    { id: 'othaim:1', store: 'othaim', name: 'Milk', nameAr: 'حليب', price: 18.99, oldPrice: 23.99, currency: 'SAR', productId: 'pr_m', brandSlug: 'nadec' },
+  ];
+  const c = computeComparison('nadec milk', [], offers, null, label);
+  ok('pull-in: the generically-named same-product offer is admitted', c.listings.some((l) => l.store.id === 'othaim'));
+  ok('pull-in: it wins the headline at its true price', c.headline.listing.price === 18.99 && c.headline.listing.store.id === 'othaim');
+  ok('pull-in: Best Price group spans both retailers', c.equivalent && c.equivalent.stores === 2 && c.equivalent.canonical);
+  ok('pull-in: never admits an unrelated productId', !computeComparison('nadec milk', [], [...offers, { id: 'x:1', store: 'lulu', name: 'Cheese', price: 5, currency: 'SAR', productId: 'pr_other', brandSlug: 'kiri' }], null, label).listings.some((l) => l.store.id === 'lulu'));
+  // Brand guard: a polluted sighting (different brand, same productId — the
+  // live Al Safi-on-Nadec case) is refused by pull-in AND by grouping.
+  const polluted = { id: 'nesto:1', store: 'nesto', name: 'Al Safi Milk UHT Full Fat', price: 52.99, currency: 'SAR', productId: 'pr_m', brandSlug: 'alsafi' };
+  const c2 = computeComparison('nadec milk', [], [...offers, polluted], null, label);
+  ok('pull-in: a different-brand sighting on the same productId never joins', !c2.listings.some((l) => l.store.id === 'nesto'));
+  ok('pull-in: group stays brand-pure', c2.equivalent && c2.equivalent.stores === 2);
+  // Duplicate ingest rows collapse to one row per store.
+  const dup = { ...offers[1], id: 'othaim:dup' };
+  const c3 = computeComparison('nadec milk', [], [...offers, dup], null, label);
+  ok('pull-in: duplicate rows never repeat a store in the group', c3.equivalent && c3.equivalent.sorted.length === 2);
+}
+
+// Different productIds never merge; online lexical grouping still works unchanged.
+{
+  const offers = [
+    { store: 'farm', name: 'NADEC Milk 1L', price: 5, currency: 'SAR', productId: 'pr_a' },
+    { store: 'tamimi', name: 'NADEC Milk 6x1L', price: 27, currency: 'SAR', productId: 'pr_b' },
+  ];
+  const c = computeComparison('nadec milk', [], offers, null, label);
+  ok('canonical: distinct productIds never form a group', !c.equivalent || c.equivalent.stores < 2);
 }
 
 console.log(`\ncompare.test: ${pass} passed, ${fail} failed`);

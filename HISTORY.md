@@ -4501,3 +4501,47 @@ Tests rewritten for the new world (`pipeline.test.mjs`, `history.test.mjs`,
 full engine suite (16 files) + frontend suite green. Payloads stay
 backward-compatible (vision shape was a superset; frontend reads only
 `offers`/`lowest`/`variants`/…).
+
+## §42 · Resolver brand-conflict veto + size-band demotion (2026-07-21)
+
+Production Registry showed cross-brand sighting pollution: pr_b01c5a6e2f8f
+(founded by an Al Safi "12x1Lt" UHT offer) carried review-band sightings for
+NADEC (and other) offers — generic-token containment (milk/uht/full/fat = 4/5)
+scored 0.674 while the brand conflict was only a −0.1 weight nudge, landing in
+the review band, which still binds a sighting consumers see (/offers canonical
+siblings). Pack mixing (4×1L vs 12×1L) came from dual-size strings
+("12 * 1LTR / 4 * 1LTR") that parseSize silently resolved to one size.
+
+Resolver tightened (brochure-engine, deployed 603f41c6):
+- **P2 revised — brand conflict is a veto.** `scoreCandidate` vetoes when both
+  sides read a brand and they truly conflict; missing brand stays neutral (the
+  −4.4-pt requirement trap is untouched). `brandRelation` now compares
+  brand-repaired, space-stripped canonical forms ("al safi" ≡ "alsafi",
+  المراعي ≡ almarai) so misread/spacing variants don't fragment.
+- **Size-unknown demotion.** An attach-score match where exactly one side
+  carries a size lands in the review band (attaches, never teaches);
+  both-nosize still auto-attaches.
+- **Dual-size alternation → nosize.** `readSize` treats "12 x 1L / 4 x 1L" as
+  ambiguous, like ranges.
+
+Tests: resolver.test.mjs + calibrate.test.mjs updated (the Afia-onto-Halah
+demo pair now splits at the priors; the reckless-threshold trap re-based on a
+same-brand pair); all 7 registry suites green.
+
+Data repair PREPARED but not yet run (classifier blocked the production
+DELETE): 1481 cross-brand sightings (1443 review, 38 auto) identified with the
+resolver's own brandRelation; repair SQL (delete sighting + NULL mint_verdict
+so the drain re-resolves) at %TMP%\..\scratch_repair.sql — run
+`npx wrangler d1 execute brochure-engine --remote --yes --file <file>` from
+brochure-engine/. Until it runs, /offers?q=nadec uht milk still shows the
+polluted bindings (frontend brandSlug guards from earlier today mask display).
+
+§42 addendum (same day): the data repair RAN (user-authorized; 1481 sightings
+deleted + mint_verdict re-queued; pr_b01c5a6e2f8f now 9 Al Safi-only
+sightings, /offers?q=nadec uht milk shows zero Al Safi rows). Found + fixed a
+second gap while verifying: the 10,30,50 steady-state cron returned early on
+an empty VISION queue before its drainResolution post-step, so a resolution
+backlog with no vision work (exactly the repair's state) never drained —
+src/index.js now runs a D1-only resolution pass in that branch (deployed
+51d79c46). Backlog drains ~100/fire; the old-week Nadec offers re-bind last
+(newest-first feed).

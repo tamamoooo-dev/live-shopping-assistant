@@ -97,6 +97,11 @@ function listingThumb(l) {
 function priceLine(l, { big = true, shared = null } = {}) {
   const line = el('div', 'summary-line');
   line.appendChild(el('span', big ? 'summary-price' : 'summary-price-sm', money(l.price, l.currency)));
+  // The deal, in numbers: struck old price + discount percentage.
+  if (big && l.oldPrice != null && l.oldPrice > l.price) {
+    line.appendChild(el('span', 'summary-old', money(l.oldPrice, l.currency)));
+    line.appendChild(el('span', 'summary-disc', `−${Math.round((1 - l.price / l.oldPrice) * 100)}%`));
+  }
   const up = unitPriceLabel(l);
   if (up) line.appendChild(el('span', 'summary-unit', up));
   const stores =
@@ -106,7 +111,12 @@ function priceLine(l, { big = true, shared = null } = {}) {
   line.appendChild(el('span', 'summary-at', t('summary.atStores', { stores })));
   const sz = sizeLabel(l.size);
   if (sz) line.appendChild(el('span', 'summary-size', sz));
-  if (l.source === 'flyer') line.appendChild(el('span', 'summary-flyer-badge', t('summary.flyerBadge')));
+  if (l.source === 'flyer') {
+    // Badge only — the machine-extraction caveat lives in its tooltip.
+    const fb = el('span', 'summary-flyer-badge', t('summary.flyerBadge'));
+    fb.title = t('summary.flyerNote');
+    line.appendChild(fb);
+  }
   return line;
 }
 
@@ -149,9 +159,10 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   // Header: title + confidence chip + the actions (Add to cart, Watch price)
   const head = el('div', 'summary-head');
   head.appendChild(el('span', 'summary-title', t('summary.title')));
+  // Confidence: the colored dot alone (the label survives as a tooltip).
   const conf = el('span', `summary-conf conf-${s.confidence}`);
   conf.appendChild(el('span', 'conf-dot'));
-  conf.appendChild(el('span', null, CONF_LABEL[s.confidence]));
+  conf.title = CONF_LABEL[s.confidence];
   head.appendChild(conf);
   const cartBtn = el('button', 'summary-watch summary-cart');
   cartBtn.type = 'button';
@@ -185,51 +196,40 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   const thumb = listingThumb(h);
   if (thumb) row.appendChild(thumb);
   const main = el('div', 'summary-hero-main');
+  // Numbers only: no shared-by sentence (the stores are already named in the
+  // price line), no flyer paragraph (tooltip on the badge), no low-confidence
+  // paragraph (the dot's tooltip says it).
   main.appendChild(priceLine(h, { shared: s.sharedWith }));
-  if (s.sharedWith && s.sharedWith.length) {
-    main.appendChild(
-      el('div', 'summary-shared-note', t('summary.sharedBy', { count: s.sharedWith.length + 1 })),
-    );
-  }
   main.appendChild(nameLink(h));
-  if (h.source === 'flyer') {
-    main.appendChild(el('div', 'summary-note', t('summary.flyerNote')));
-  }
-  // Same product elsewhere (only when the headline itself is the verified group)
-  if (s.equivalent && h.it && s.equivalent.sorted.some((i) => i.it === h.it)) {
+  // Same product elsewhere: just store · price pairs (label in the tooltip).
+  const headInGroup =
+    s.equivalent && (s.equivalent.hasHeadline || (h.it && s.equivalent.sorted.some((i) => i.it === h.it)));
+  if (headInGroup) {
     const others = s.equivalent.sorted
-      .filter((i) => i.it !== h.it)
+      .filter((i) => i._l !== h && i.it !== h.it)
       .slice(0, 3)
       .map((i) => `${i.store.label} ${money(i.it.price)}`)
       .join(' · ');
-    if (others) main.appendChild(el('div', 'summary-others', t('summary.sameElsewhere', { others })));
-  }
-  if (s.confidence === 'low') {
-    main.appendChild(el('div', 'summary-note', t('summary.lowConfNote')));
+    if (others) {
+      const line = el('div', 'summary-others', others);
+      line.title = t('summary.sameProductTag', { stores: s.equivalent.stores });
+      main.appendChild(line);
+    }
   }
   row.appendChild(main);
   hero.appendChild(row);
   wrap.appendChild(hero);
 
-  // The lowest TOTAL price, when it is a different (smaller) item than the
-  // best buy — never hidden, honestly framed.
-  if (s.secondary) {
-    const sec = el('div', 'summary-secondary');
-    sec.appendChild(el('span', 'summary-sec-tag', t('summary.secondaryTag')));
-    sec.appendChild(priceLine(s.secondary.listing, { big: false }));
-    const nm = el('span', 'summary-sec-name');
-    nm.dir = 'auto';
-    nm.textContent = s.secondary.listing.name;
-    sec.appendChild(nm);
-    wrap.appendChild(sec);
-  }
+  // (Production Polish: the "lowest price if you need less" secondary line was
+  // removed from the collapsed card — the smaller pack still ranks in the grid,
+  // and the model keeps `secondary` for any expanded view that wants it.)
 
   // A verified same-product group that ISN'T the headline still helps ("the
   // exact same 2L milk is at these stores") — as a DISCLOSURE: the collapsed
   // row names the product, one tap expands every store with its price (each
   // row links to that store's product page), cheapest first. Actionable, not
   // a truncated teaser.
-  if (s.equivalent && !(h.it && s.equivalent.sorted.some((i) => i.it === h.it))) {
+  if (s.equivalent && !headInGroup) {
     const g = s.equivalent;
     const box = el('div', 'summary-value');
     const toggle = el('button', 'summary-value-toggle');
@@ -241,6 +241,10 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
     nm.dir = 'auto';
     nm.textContent = g.sorted[0].it.name;
     toggle.appendChild(nm);
+    // The exact package size the comparison ran over — always visible, so the
+    // user knows the stores are being compared on the same pack.
+    const gsz = sizeLabel(g.size);
+    if (gsz) toggle.appendChild(el('span', 'summary-size', gsz));
     toggle.appendChild(el('span', 'summary-value-chevron', '▾'));
     box.appendChild(toggle);
     const list = el('div', 'summary-value-list');
@@ -256,6 +260,8 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
       }
       row2.appendChild(el('span', 'sh-store', i.store.label));
       row2.appendChild(el('span', 'sh-price', money(i.it.price)));
+      const rsz = sizeLabel((i._l && i._l.size) || i.it._size);
+      if (rsz) row2.appendChild(el('span', 'summary-size', rsz));
       if (idx === 0) {
         const tag = el('span', 'sh-delta is-best', t('summary.cheapestTag'));
         row2.appendChild(tag);
@@ -271,12 +277,13 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
     wrap.appendChild(box);
   }
 
-  // Price History verdict
+  // Price History — collapsed to ONE numeric line (record low · store · date),
+  // exactly the product-page philosophy; verdict, trend, latest prices and
+  // other sizes live behind the expand toggle.
   if (s.history) {
     const hh = s.history;
     const box = el('div', `summary-history verdict-${hh.verdict}`);
-    const title = el('div', 'sh-title');
-    title.appendChild(el('span', 'sh-badge', t('summary.history.badge')));
+    const low = hh.low;
     const delta = hh.delta != null ? hh.delta.toFixed(2) : '';
     const vlabel =
       hh.verdict === 'building'
@@ -286,6 +293,28 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
         : hh.verdict === 'near-low'
         ? t('summary.history.nearLow', { delta })
         : t('summary.history.aboveLow', { delta });
+
+    const toggle = el('button', 'summary-value-toggle sh-toggle');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.title = vlabel;
+    toggle.appendChild(el('span', 'sh-badge', t('summary.history.badge')));
+    const when = low.observedAt ? fmtDateShort(low.observedAt) : low.edition || '';
+    const sizeTag = hh.variant && hh.variant.label ? ` · ${hh.variant.label}` : '';
+    toggle.appendChild(
+      el(
+        'span',
+        'sh-low',
+        `${money(low.price)} · ${storeLabelFn(low.store)}${when ? ` · ${when}` : ''}${sizeTag}`,
+      ),
+    );
+    toggle.appendChild(el('span', 'sh-dot'));
+    toggle.appendChild(el('span', 'summary-value-chevron', '▾'));
+    box.appendChild(toggle);
+
+    const detail = el('div', 'sh-detail-wrap');
+    detail.hidden = true;
+    const title = el('div', 'sh-title');
     title.appendChild(el('span', 'sh-verdict', vlabel));
     if (hh.trend && hh.verdict !== 'building') {
       title.appendChild(
@@ -300,15 +329,13 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
         ),
       );
     }
-    box.appendChild(title);
-    const low = hh.low;
-    const sizeTag = hh.variant && hh.variant.label ? ` (${hh.variant.label})` : '';
+    detail.appendChild(title);
     const lowLabel = hh.verdict === 'building' ? t('summary.history.lowestSoFar') : t('summary.history.lowestRecorded');
-    box.appendChild(
+    detail.appendChild(
       el(
         'div',
         'sh-detail',
-        `${lowLabel}${sizeTag}: ${money(low.price)} ${t('alerts.atStore', { store: storeLabelFn(low.store) })}${
+        `${lowLabel}${hh.variant && hh.variant.label ? ` (${hh.variant.label})` : ''}: ${money(low.price)} ${t('alerts.atStore', { store: storeLabelFn(low.store) })}${
           low.observedAt ? ` · ${fmtDate(low.observedAt)}` : low.edition ? ` · ${low.edition}` : ''
         }${hh.verdict === 'building' && hh.firstSeen ? ` · ${t('summary.history.recordingSince', { date: fmtDate(hh.firstSeen) })}` : ''}`,
       ),
@@ -330,7 +357,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
         prow.appendChild(d);
         list.appendChild(prow);
       }
-      box.appendChild(list);
+      detail.appendChild(list);
     }
     // Other tracked sizes — each with its own independent lowest-ever record,
     // and the date it was recorded ("6 × 1.5L 26.99 SAR · Jul 9").
@@ -350,8 +377,14 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
             .join('  ·  '),
         ),
       );
-      box.appendChild(ov);
+      detail.appendChild(ov);
     }
+    box.appendChild(detail);
+    toggle.addEventListener('click', () => {
+      detail.hidden = !detail.hidden;
+      toggle.setAttribute('aria-expanded', String(!detail.hidden));
+      toggle.classList.toggle('is-open', !detail.hidden);
+    });
     wrap.appendChild(box);
   }
 

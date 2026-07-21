@@ -39,20 +39,29 @@ import { initCartPage } from './cartPage.js';
 import { cartCount, CART_EVENT } from './cart.js';
 import { t, tn, applyI18n, initLangSwitch } from './i18n.js';
 import { initProfile } from './profile.js';
+import { BROCHURES_SOURCE_ID, splitSearchSources } from './searchSources.js';
 
 const memory = createMemory('app');
 
 // Ordered store list — drives the chips and grouped results.
 const STORES = [
-  { id: 'panda', label: 'Panda', color: '#16a34a', provider: pandaProvider },
-  { id: 'amazon', label: 'Amazon', color: '#f59e0b', provider: amazonProvider },
-  { id: 'tamimi', label: 'Tamimi', color: '#0ea5e9', provider: tamimiProvider },
-  { id: 'danube', label: 'Danube', color: '#ef4444', provider: danubeProvider },
-  { id: 'lulu', label: 'Lulu', color: '#6366f1', provider: luluProvider },
-  { id: 'noon', label: 'Noon', color: '#eab308', provider: noonProvider },
-  { id: 'ninja', label: 'Ninja', color: '#ec4899', provider: ninjaProvider },
+  { id: 'panda', kind: 'online', label: 'Panda', color: '#16a34a', provider: pandaProvider },
+  { id: 'amazon', kind: 'online', label: 'Amazon', color: '#f59e0b', provider: amazonProvider },
+  { id: 'tamimi', kind: 'online', label: 'Tamimi', color: '#0ea5e9', provider: tamimiProvider },
+  { id: 'danube', kind: 'online', label: 'Danube', color: '#ef4444', provider: danubeProvider },
+  { id: 'lulu', kind: 'online', label: 'Lulu', color: '#6366f1', provider: luluProvider },
+  { id: 'noon', kind: 'online', label: 'Noon', color: '#eab308', provider: noonProvider },
+  { id: 'ninja', kind: 'online', label: 'Ninja', color: '#ec4899', provider: ninjaProvider },
 ];
+const BROCHURES_SOURCE = {
+  id: BROCHURES_SOURCE_ID,
+  kind: 'brochures',
+  label: t('search.source.brochures'),
+  color: '#8b5cf6',
+};
+const SEARCH_SOURCES = [...STORES, BROCHURES_SOURCE];
 const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
+const SOURCE_BY_ID = Object.fromEntries(SEARCH_SOURCES.map((s) => [s.id, s]));
 // Best-effort stores get a friendlier "temporarily unavailable" message.
 const BEST_EFFORT = new Set(['amazon', 'noon']);
 
@@ -149,11 +158,11 @@ function paintCartBadge(count) {
 window.addEventListener(CART_EVENT, (e) => paintCartBadge(e.detail.count));
 paintCartBadge(cartCount());
 
-// --- store chips (the single scope control) --------------------------------
+// --- search-source chips (the single scope control) -------------------------
 // Selection is remembered across visits — this is a daily-use tool.
 const chipButtons = [];
 function renderChips() {
-  const saved = (memory.get('stores') || '').split(',').filter((id) => STORE_BY_ID[id]);
+  const saved = (memory.get('stores') || '').split(',').filter((id) => SOURCE_BY_ID[id]);
   // A newly-added store (one the user has never seen) defaults ON, so new
   // providers are discoverable without wiping the user's saved scope. Stores the
   // user has explicitly toggled off stay off. `known` records the stores the
@@ -161,12 +170,12 @@ function renderChips() {
   // knew about whatever they had saved.
   const knownRaw = memory.get('known-stores');
   const known = knownRaw != null ? new Set(knownRaw.split(',').filter(Boolean)) : new Set(saved);
-  const newStores = STORES.map((s) => s.id).filter((id) => !known.has(id));
+  const newSources = SEARCH_SOURCES.map((s) => s.id).filter((id) => !known.has(id));
   const selected = saved.length
-    ? new Set([...saved, ...newStores])
-    : new Set(STORES.map((s) => s.id));
-  memory.set('known-stores', STORES.map((s) => s.id).join(','));
-  for (const s of STORES) {
+    ? new Set([...saved, ...newSources])
+    : new Set(SEARCH_SOURCES.map((s) => s.id));
+  memory.set('known-stores', SEARCH_SOURCES.map((s) => s.id).join(','));
+  for (const s of SEARCH_SOURCES) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
@@ -199,10 +208,10 @@ function syncChips() {
   memory.set('stores', on.map((c) => c.dataset.store).join(','));
 }
 
-function selectedStores() {
+function selectedSources() {
   return chipButtons
     .filter((c) => c.getAttribute('aria-pressed') === 'true')
-    .map((c) => STORE_BY_ID[c.dataset.store]);
+    .map((c) => SOURCE_BY_ID[c.dataset.store]);
 }
 
 function selectOnlyStore(storeId) {
@@ -280,17 +289,18 @@ function setBusy(busy) {
 async function runSearch(query) {
   const q = (query || '').trim();
   if (!q) return input.focus();
-  const stores = selectedStores();
-  if (!stores.length) {
-    status.textContent = t('search.needOneStore');
+  const selected = selectedSources();
+  if (!selected.length) {
+    status.textContent = t('search.needOneSource');
     return;
   }
+  const { stores, brochures } = splitSearchSources(selected);
 
   const token = {};
   inFlight = token;
   home.hidden = true;
   setBusy(true);
-  status.textContent = tn('search.searching', stores.length);
+  status.textContent = tn('search.searching', selected.length);
   results.innerHTML = '';
   saveRecent(q);
 
@@ -314,6 +324,7 @@ async function runSearch(query) {
   const market = createMarketplace(results, stores, q, {
     sort: ['value', 'featured'].includes(savedRank) ? savedRank : 'price',
     onSort: (mode) => memory.set('rank', mode),
+    includeFlyers: brochures,
   });
   for (const s of stores) fillFlyer(market.flyerSlot(s.id), s.id, token); // best-effort
 
@@ -321,25 +332,27 @@ async function runSearch(query) {
   // the same grid as soon as the engine answers — including stores that have
   // no live search at all. The SAME relevance pipeline the comparison uses
   // (flyerListing) decides what qualifies, so grid and summary always agree.
-  searchOffers(q, OFFERS_FETCH_LIMIT)
+  const brochureSearch = brochures
+    ? searchOffers(q, OFFERS_FETCH_LIMIT)
     .then((data) => {
-      if (inFlight !== token) return;
+      if (inFlight !== token) return 0;
       if (!data) {
         market.flyersUnavailable();
-        return;
+        return 0;
       }
       const listings = (data.offers || [])
         .map((o) => flyerListing(o, q, storeLabel))
         .filter(Boolean);
-      market.addFlyers(listings);
+      return market.addFlyers(listings);
     })
     .catch(() => {
       if (inFlight === token) market.flyersUnavailable();
-    });
+      return 0;
+    })
+    : Promise.resolve(0);
 
   const tagged = []; // { store, it } across all stores — feeds the comparison
   let total = 0;
-  let finished = 0;
   await Promise.all(
     stores.map(async (s) => {
       try {
@@ -355,21 +368,20 @@ async function runSearch(query) {
         if (inFlight !== token) return;
         market.failStore(s, BEST_EFFORT.has(s.id));
         console.warn(`${s.label} search failed:`, (err && err.details) || err);
-      } finally {
-        finished += 1;
-        if (inFlight === token && finished === stores.length) {
-          setBusy(false);
-          market.finish();
-          status.textContent = tn('search.results', total, {
-            total,
-            stores: tn('search.storesInline', stores.length),
-            q,
-          });
-          fillSummary(summarySlot, q, tagged, token);
-        }
       }
     }),
   );
+  const brochureTotal = await brochureSearch;
+  if (inFlight !== token) return;
+  total += brochureTotal;
+  setBusy(false);
+  market.finish();
+  status.textContent = tn('search.results', total, {
+    total,
+    sources: tn('search.sourcesInline', selected.length),
+    q,
+  });
+  fillSummary(summarySlot, q, tagged, token, brochures);
 }
 
 // Build and render the shopping summary once all stores have answered. The
@@ -377,13 +389,13 @@ async function runSearch(query) {
 // AND this week's flyer offers — so the recommendation is source-agnostic.
 // Best-effort: flyer offers and Price History are each optional inputs; if
 // there's nothing to compare at all the slot is removed.
-async function fillSummary(slot, query, tagged, token) {
+async function fillSummary(slot, query, tagged, token, includeBrochures) {
   // Price History is catalog-wide and query-driven: ask the engine for ANY
   // query (session-cached, best-effort — null when nothing is recorded yet).
   const [prices, offersData] = await Promise.all([
-    pricesForQuery(query).catch(() => null),
+    includeBrochures ? pricesForQuery(query).catch(() => null) : null,
     // The same session-cached call the flyer panel makes — no extra request.
-    searchOffers(query, OFFERS_FETCH_LIMIT).catch(() => null),
+    includeBrochures ? searchOffers(query, OFFERS_FETCH_LIMIT).catch(() => null) : null,
   ]);
   if (inFlight !== token) return;
   const comparison = computeComparison(query, tagged, (offersData && offersData.offers) || [], prices, storeLabel);
