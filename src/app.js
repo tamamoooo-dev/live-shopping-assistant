@@ -326,7 +326,9 @@ async function runSearch(query) {
     onSort: (mode) => memory.set('rank', mode),
     includeFlyers: brochures,
   });
-  for (const s of stores) fillFlyer(market.flyerSlot(s.id), s.id, token); // best-effort
+  if (brochures) {
+    for (const s of stores) fillFlyer(market.flyerSlot(s.id), s.id, token); // best-effort
+  }
 
   // Physical-store flyer offers (the Brochure Engine's structured offers) join
   // the same grid as soon as the engine answers — including stores that have
