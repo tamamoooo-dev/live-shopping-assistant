@@ -473,6 +473,7 @@ function onlineCard(store, item, badge, up) {
               currentPrice: item.price,
               link: item.link,
               image: item.image,
+              brand: item.brand,
             }
           : {
               kind: 'grocery',
@@ -485,6 +486,7 @@ function onlineCard(store, item, badge, up) {
               currentPrice: item.price,
               link: item.link,
               image: item.image,
+              brand: item.brand,
             },
       );
     });

@@ -1321,6 +1321,33 @@ a.summary-name:hover { text-decoration: underline; }
 }
 .wd-input:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 4px var(--brand-soft); }
 .wd-current { margin: 0; font-size: 12px; color: var(--muted); }
+.wd-advanced {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.wd-advanced-title, .watch-advanced-title {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+.wd-advanced-body, .watch-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 0 12px 12px;
+}
+.wd-toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 650; }
+.wd-toggle input { accent-color: var(--brand-2); }
+.wd-advanced-hint, .watch-advanced-hint {
+  min-height: 1em;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
 .wd-error { margin: 0; font-size: 12.5px; color: var(--accent); }
 .wd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .wd-cancel, .wd-save {
@@ -1384,6 +1411,7 @@ a.summary-name:hover { text-decoration: underline; }
    🟩 green title = deal found, 🟥 red title = still watching. A matching rail
    reinforces it; the card stays otherwise neutral so the title leads. */
 .watch-row.is-deal { border-inline-start-color: var(--good); }
+.watch-row.is-close { border-inline-start-color: var(--warn); }
 .watch-row.is-watching { border-inline-start-color: var(--bad); }
 .watch-row.is-deleting { opacity: 0.5; pointer-events: none; }
 /* Product thumbnail — the watch at a glance; neutral tile when absent/broken. */
@@ -1414,6 +1442,7 @@ a.summary-name:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 .watch-row.is-deal .watch-name { color: var(--good); }
+.watch-row.is-close .watch-name { color: var(--warn); }
 .watch-row.is-watching .watch-name { color: var(--bad); }
 a.watch-name:hover { text-decoration: underline; }
 /* Secondary: the living status line — neutral, the colour is on the title. */
@@ -1440,6 +1469,38 @@ a.watch-name:hover { text-decoration: underline; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.watch-advanced { margin-top: 5px; border-top: 1px solid var(--line); }
+.watch-advanced-title { padding-inline: 0; }
+.watch-advanced-body { padding-inline: 0; padding-bottom: 3px; }
+.watch-close-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.watch-close-control input {
+  width: 84px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.watch-settings-save {
+  align-self: flex-start;
+  border: 0;
+  border-radius: var(--pill);
+  padding: 7px 12px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.watch-settings-save:disabled { opacity: 0.55; cursor: default; }
 .watch-delete {
   border: none;
   background: var(--surface-2);
@@ -1461,6 +1522,7 @@ a.watch-name:hover { text-decoration: underline; }
   padding: 12px 14px;
   box-shadow: var(--shadow-sm);
 }
+.alert-row.is-close { border-inline-start: 4px solid var(--warn); }
 .alert-row.is-unseen { border-inline-start: 4px solid var(--good); }
 .alert-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .alert-title { font-weight: 700; font-size: 13.5px; }

@@ -15,6 +15,7 @@
 import {
   listWatches,
   createWatch,
+  updateWatch,
   deleteWatch,
   listAlerts,
   markAlertsSeen,
@@ -108,6 +109,53 @@ export function openWatchDialog(opts) {
     form.appendChild(el('p', 'wd-current', t('watch.currentBest', { price: money(opts.currentPrice) })));
   }
 
+  const advanced = el('details', 'wd-advanced');
+  advanced.appendChild(el('summary', 'wd-advanced-title', t('watch.advanced')));
+  const advancedBody = el('div', 'wd-advanced-body');
+  const toggles = {};
+  if (opts.kind === 'grocery') {
+    for (const [key, labelKey] of [
+      ['matchBrand', 'watch.matchBrand'],
+      ['matchSize', 'watch.matchSize'],
+      ['matchVariant', 'watch.matchVariant'],
+    ]) {
+      const control = el('label', 'wd-toggle');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = true;
+      toggles[key] = checkbox;
+      control.append(checkbox, el('span', null, t(labelKey)));
+      advancedBody.appendChild(control);
+    }
+  }
+  const closeRow = el('label', 'wd-row');
+  closeRow.appendChild(el('span', 'wd-label', t('watch.closeThreshold')));
+  const closeInput = document.createElement('input');
+  closeInput.type = 'number';
+  closeInput.min = '0.1';
+  closeInput.max = '100';
+  closeInput.step = '0.1';
+  closeInput.placeholder = t('watch.closePlaceholder');
+  closeInput.className = 'wd-input';
+  closeRow.appendChild(closeInput);
+  advancedBody.appendChild(closeRow);
+  const advancedHint = el('p', 'wd-advanced-hint');
+  advancedBody.appendChild(advancedHint);
+  const refreshAdvancedHint = () => {
+    if (toggles.matchSize && !toggles.matchSize.checked) {
+      advancedHint.textContent = t('watch.unitPriceHint');
+    } else {
+      advancedHint.textContent = '';
+    }
+    if (toggles.matchBrand && !toggles.matchBrand.checked &&
+        !toggles.matchSize.checked && !toggles.matchVariant.checked) {
+      advancedHint.textContent = t('watch.categoryHint');
+    }
+  };
+  for (const checkbox of Object.values(toggles)) checkbox.addEventListener('change', refreshAdvancedHint);
+  advanced.appendChild(advancedBody);
+  form.appendChild(advanced);
+
   const err = el('p', 'wd-error');
   err.hidden = true;
   form.appendChild(err);
@@ -137,6 +185,12 @@ export function openWatchDialog(opts) {
       link: opts.link,
       image: opts.image,
       sizeText: opts.sizeText,
+      brand: opts.brand,
+      category: opts.category,
+      matchBrand: toggles.matchBrand ? toggles.matchBrand.checked : true,
+      matchSize: toggles.matchSize ? toggles.matchSize.checked : true,
+      matchVariant: toggles.matchVariant ? toggles.matchVariant.checked : true,
+      closeThreshold: closeInput.value === '' ? null : Number(closeInput.value),
     });
     if (res.error) {
       err.textContent = res.error;
@@ -172,9 +226,17 @@ function invalidate() {
 // Visual hierarchy — the product (thumb + name) is primary and state-coloured,
 // then the friendly status, the current best price, and the quiet
 // scope/target/checked line last.
-function watchRow(w, onDelete) {
-  const hasDeal = w.lastPrice != null && w.lastPrice <= w.targetPrice + 1e-9;
-  const row = el('div', `watch-row ${hasDeal ? 'is-deal' : 'is-watching'}`);
+function watchRow(w, onDelete, onUpdate) {
+  const unitMode = w.matchSize === false;
+  const target = unitMode && w.targetUnitPrice != null ? w.targetUnitPrice : w.targetPrice;
+  const hasDeal = w.lastPrice != null && w.lastPrice <= target + 1e-9;
+  const isClose =
+    !hasDeal &&
+    w.lastPrice != null &&
+    w.closeThreshold != null &&
+    w.lastPrice <= target * (1 + Number(w.closeThreshold) / 100) + 1e-9;
+  const state = hasDeal ? 'is-deal' : isClose ? 'is-close' : 'is-watching';
+  const row = el('div', `watch-row ${state}`);
 
   // Thumbnail — the product at a glance. Falls back to a neutral tile when
   // there's no image or it fails to load (a watch must never show a broken img).
@@ -211,7 +273,11 @@ function watchRow(w, onDelete) {
 
   // Secondary — the living status. Friendly and active, never technical. The
   // colour cue lives on the title above; this line stays neutral.
-  const status = el('div', 'watch-status', hasDeal ? t('alerts.dealFound') : t('alerts.stillWatching'));
+  const status = el(
+    'div',
+    'watch-status',
+    hasDeal ? t('alerts.dealFound') : isClose ? t('alerts.closePrice') : t('alerts.stillWatching'),
+  );
   main.appendChild(status);
 
   // Current best price — the number the user actually cares about. Shown for
@@ -220,7 +286,7 @@ function watchRow(w, onDelete) {
   if (w.lastPrice != null) {
     const store = storeLabel(w.lastStore) || w.lastStore || '';
     price.textContent =
-      money(w.lastPrice) +
+      (w.lastUnitLabel ? `${Number(w.lastPrice).toFixed(2)} ${w.lastUnitLabel}` : money(w.lastPrice)) +
       (store ? ` ${t('alerts.atStore', { store })}` : '') +
       (w.lastSource === 'flyer' ? t('alerts.flyerSuffix') : '');
     if (hasDeal) price.classList.add('is-deal');
@@ -231,15 +297,102 @@ function watchRow(w, onDelete) {
   main.appendChild(price);
 
   // Tertiary — quiet supporting details.
-  const scope =
-    w.kind === 'product'
-      ? t('alerts.scopeProduct', { store: storeLabel(w.provider) || w.provider })
+  const categoryLevel =
+    w.kind === 'grocery' &&
+    w.matchBrand === false &&
+    w.matchSize === false &&
+    w.matchVariant === false;
+  const scope = w.kind === 'product'
+    ? t('alerts.scopeProduct', { store: storeLabel(w.provider) || w.provider })
+    : categoryLevel
+      ? t('alerts.scopeCategory')
       : t('alerts.scopeAll');
-  const bits = [scope, t('alerts.target', { price: money(w.targetPrice) })];
+  const targetText = unitMode && w.unitLabel
+    ? `${Number(target).toFixed(2)} ${w.unitLabel}`
+    : money(target);
+  const bits = [scope, t('alerts.target', { price: targetText })];
+  if (w.closeThreshold != null) bits.push(t('alerts.closeWithin', { percent: w.closeThreshold }));
   bits.push(w.checkedAt ? t('alerts.checkedAt', { date: fmtDate(w.checkedAt) }) : t('alerts.firstCheck'));
   const meta = el('div', 'watch-meta', bits.join(' · '));
   meta.dir = 'auto';
   main.appendChild(meta);
+
+  {
+    const advanced = el('details', 'watch-advanced');
+    advanced.appendChild(el('summary', 'watch-advanced-title', t('watch.advanced')));
+    const body = el('div', 'watch-advanced-body');
+    const controls = {};
+    if (w.kind === 'grocery') {
+      for (const [key, labelKey] of [
+        ['matchBrand', 'watch.matchBrand'],
+        ['matchSize', 'watch.matchSize'],
+        ['matchVariant', 'watch.matchVariant'],
+      ]) {
+        const control = el('label', 'wd-toggle');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = w[key] !== false;
+        controls[key] = checkbox;
+        control.append(checkbox, el('span', null, t(labelKey)));
+        body.appendChild(control);
+      }
+    }
+    const close = el('label', 'watch-close-control');
+    close.appendChild(el('span', null, t('watch.closeThreshold')));
+    const closeInput = document.createElement('input');
+    closeInput.type = 'number';
+    closeInput.min = '0.1';
+    closeInput.max = '100';
+    closeInput.step = '0.1';
+    closeInput.value = w.closeThreshold ?? '';
+    closeInput.placeholder = t('watch.closePlaceholder');
+    close.appendChild(closeInput);
+    body.appendChild(close);
+    const hint = el('p', 'watch-advanced-hint');
+    const refreshHint = () => {
+      if (!controls.matchBrand) {
+        hint.textContent = '';
+        return;
+      }
+      hint.textContent = !controls.matchBrand.checked &&
+        !controls.matchSize.checked &&
+        !controls.matchVariant.checked
+        ? t('watch.categoryHint')
+        : !controls.matchSize.checked
+          ? t('watch.unitPriceHint')
+          : '';
+    };
+    for (const checkbox of Object.values(controls)) checkbox.addEventListener('change', refreshHint);
+    refreshHint();
+    body.appendChild(hint);
+    const save = el('button', 'watch-settings-save', t('watch.saveSettings'));
+    save.type = 'button';
+    const saveError = el('p', 'wd-error');
+    saveError.hidden = true;
+    save.addEventListener('click', async () => {
+      save.disabled = true;
+      save.textContent = t('watch.saving');
+      const res = await updateWatch(w.id, {
+        ...(w.kind === 'grocery' ? {
+          matchBrand: controls.matchBrand.checked,
+          matchSize: controls.matchSize.checked,
+          matchVariant: controls.matchVariant.checked,
+        } : {}),
+        closeThreshold: closeInput.value === '' ? null : Number(closeInput.value),
+      });
+      if (res.error) {
+        saveError.textContent = res.error;
+        saveError.hidden = false;
+        save.disabled = false;
+        save.textContent = t('watch.saveSettings');
+        return;
+      }
+      onUpdate(res.watch, row);
+    });
+    body.append(save, saveError);
+    advanced.appendChild(body);
+    main.appendChild(advanced);
+  }
 
   row.appendChild(main);
 
@@ -256,14 +409,17 @@ function watchRow(w, onDelete) {
 function alertRow(a, watchById, onDelete) {
   const row = el('div', 'alert-row');
   if (!a.seen) row.classList.add('is-unseen');
+  if (a.alertType === 'close') row.classList.add('is-close');
   const w = watchById.get(a.watchId);
 
   const main = el('div', 'alert-main');
   const title = el('div', 'alert-title');
   title.dir = 'auto';
-  title.textContent = t('alerts.hit', {
+  title.textContent = t(a.alertType === 'close' ? 'alerts.closeHit' : 'alerts.hit', {
     label: w ? w.label || w.query : a.name || t('alerts.watchedProduct'),
-    price: money(a.price, a.currency),
+    price: a.unitLabel
+      ? `${Number(a.price).toFixed(2)} ${a.unitLabel}`
+      : money(a.price, a.currency),
   });
   main.appendChild(title);
   const detail = el('div', 'alert-detail');
@@ -271,7 +427,11 @@ function alertRow(a, watchById, onDelete) {
   const bits = [];
   if (a.name) bits.push(a.name);
   bits.push(t('alerts.atStore', { store: storeLabel(a.store) || a.store || '—' }));
-  bits.push(t('alerts.targetWas', { price: money(a.targetPrice, a.currency) }));
+  bits.push(t('alerts.targetWas', {
+    price: a.unitLabel
+      ? `${Number(a.targetPrice).toFixed(2)} ${a.unitLabel}`
+      : money(a.targetPrice, a.currency),
+  }));
   if (a.source) bits.push(sourceLabel(a.source));
   detail.textContent = bits.join(' · ');
   main.appendChild(detail);
@@ -341,12 +501,16 @@ export async function initAlertsPage(force = false) {
     const list = el('div', 'watch-list');
     for (const w of watchData.watches) {
       list.appendChild(
-        watchRow(w, async (watch, row) => {
-          row.classList.add('is-deleting');
-          const okDel = await deleteWatch(watch.id);
-          if (okDel) row.remove();
-          else row.classList.remove('is-deleting');
-        }),
+        watchRow(
+          w,
+          async (watch, row) => {
+            row.classList.add('is-deleting');
+            const okDel = await deleteWatch(watch.id);
+            if (okDel) row.remove();
+            else row.classList.remove('is-deleting');
+          },
+          () => initAlertsPage(true),
+        ),
       );
     }
     root.appendChild(list);

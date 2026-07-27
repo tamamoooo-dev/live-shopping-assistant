@@ -306,7 +306,7 @@ export async function loadBrochureCover(b) {
 // flyer" framing and the click-through to the flyer itself. Cached per query
 // for the page session. Never throws.
 const offersCache = new Map();
-export function searchOffers(query, limit = 24) {
+export function searchOffers(query, limit = 50) {
   const q = (query || '').trim();
   if (!q) return Promise.resolve(null);
   const key = `${q}:${limit}`;
@@ -450,6 +450,24 @@ export async function createWatch(body) {
     return { watch: j.watch };
   } catch {
     return { error: t('watch.createError') };
+  }
+}
+
+export async function updateWatch(id, settings) {
+  try {
+    const r = await fetch(
+      `${ENGINE_BASE}/watches?id=${encodeURIComponent(id)}&profile=${encodeURIComponent(profileId())}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      },
+    );
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return { error: j.error || `HTTP ${r.status}` };
+    return { watch: j.watch };
+  } catch {
+    return { error: t('watch.updateError') };
   }
 }
 
