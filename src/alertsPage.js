@@ -264,14 +264,14 @@ function watchRow(w, onDelete, onUpdate) {
   const name = el('a', 'watch-name');
   name.dir = 'auto';
   name.textContent = w.label || w.query;
-  const target = notificationTarget(w, {
+  const navTarget = notificationTarget(w, {
     store: w.lastStore || w.provider,
     source: w.lastSource,
     name: w.lastName,
     link: w.lastLink || w.link,
   });
-  name.href = target.href;
-  if (target.kind === 'external') {
+  name.href = navTarget.href;
+  if (navTarget.kind === 'external') {
     name.target = '_blank';
     name.rel = 'noopener';
   }
