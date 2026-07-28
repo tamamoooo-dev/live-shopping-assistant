@@ -435,6 +435,10 @@ export function createSheet(host, ctx) {
     /* Watch — the engine's Price Monitoring, via the existing dialog. */
     const seed = historyQuery(offer);
     sheet.querySelector('.ps-watch').addEventListener('click', () => {
+      const localBrochureLink =
+        `#/brochures?brochure=${encodeURIComponent(ctx.brochure.id)}` +
+        `&page=${encodeURIComponent(ctx.currentSourceIndex())}` +
+        `&offer=${encodeURIComponent(offer.offerId || offer.id)}`;
       openWatchDialog({
         kind: 'grocery',
         query: seed || title,
@@ -442,7 +446,8 @@ export function createSheet(host, ctx) {
         sizeText: `${offer.name || ''} ${offer.nameAr || ''}`,
         suggestedPrice: offer.price,
         currentPrice: offer.price,
-        link: offer.sourceUrl || null,
+        link: localBrochureLink,
+        image: offer.imageUrl || entry.cropUrl || null,
       });
     });
 
