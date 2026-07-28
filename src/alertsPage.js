@@ -19,11 +19,10 @@ import {
   deleteWatch,
   listAlerts,
   markAlertsSeen,
-  loadBrochures,
   storeLabel,
 } from './brochure.js';
-import { openBrochureViewer } from './viewer.js';
 import { t } from './i18n.js';
+import { notificationTarget } from './notificationNavigation.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -47,35 +46,6 @@ function fmtDate(iso) {
 // Alert source label — a translated label for known sources, else the raw
 // source string the engine sent (never a bare i18n key).
 const sourceLabel = (s) => (s === 'online' || s === 'flyer' ? t(`alerts.source.${s}`) : s);
-
-function localBrochureTarget(link) {
-  const raw = String(link || '');
-  if (!raw.startsWith('#/brochures?')) return null;
-  const params = new URLSearchParams(raw.slice(raw.indexOf('?') + 1));
-  const brochureId = params.get('brochure');
-  if (!brochureId) return null;
-  const page = Number(params.get('page'));
-  return {
-    brochureId,
-    pageIndex: Number.isInteger(page) ? page : null,
-    offerId: params.get('offer') || null,
-  };
-}
-
-async function openLocalBrochure(target) {
-  const byStore = await loadBrochures();
-  const brochure = Object.values(byStore)
-    .flat()
-    .find((item) => item.id === target.brochureId);
-  if (!brochure) {
-    location.hash = '#/brochures';
-    return;
-  }
-  openBrochureViewer(brochure, storeLabel(brochure.store), {
-    targetPageIndex: target.pageIndex,
-    targetOfferId: target.offerId,
-  });
-}
 
 // --- the unseen-alerts badge (topbar + tab bar) --------------------------------
 export function setAlertsBadge(n) {
@@ -291,23 +261,19 @@ function watchRow(w, onDelete, onUpdate) {
 
   // Primary — the product name, the thing the eye should land on; its colour
   // carries the state (green = deal, red = watching).
-  const name = el(w.lastLink || w.link ? 'a' : 'span', 'watch-name');
+  const name = el('a', 'watch-name');
   name.dir = 'auto';
   name.textContent = w.label || w.query;
-  const localWatchTarget = localBrochureTarget(w.link);
-  const href = localWatchTarget ? w.link : w.lastLink || w.link;
-  if (href) {
-    name.href = href;
-    const localTarget = localWatchTarget || localBrochureTarget(href);
-    if (localTarget) {
-      name.addEventListener('click', (event) => {
-        event.preventDefault();
-        openLocalBrochure(localTarget);
-      });
-    } else {
-      name.target = '_blank';
-      name.rel = 'noopener';
-    }
+  const target = notificationTarget(w, {
+    store: w.lastStore || w.provider,
+    source: w.lastSource,
+    name: w.lastName,
+    link: w.lastLink || w.link,
+  });
+  name.href = target.href;
+  if (target.kind === 'external') {
+    name.target = '_blank';
+    name.rel = 'noopener';
   }
   main.appendChild(name);
 
@@ -482,11 +448,14 @@ function alertRow(a, watchById, onDelete) {
 
   const side = el('div', 'alert-side');
   side.appendChild(el('span', 'alert-when', fmtDate(a.observedAt)));
-  if (a.link) {
+  {
     const go = el('a', 'alert-link', t('alerts.view'));
-    go.href = a.link;
-    go.target = '_blank';
-    go.rel = 'noopener';
+    const target = notificationTarget(w || {}, a);
+    go.href = target.href;
+    if (target.kind === 'external') {
+      go.target = '_blank';
+      go.rel = 'noopener';
+    }
     side.appendChild(go);
   }
   row.appendChild(side);
