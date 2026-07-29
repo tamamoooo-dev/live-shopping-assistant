@@ -149,8 +149,6 @@ async function openFlyer(item, btn) {
     }
     if (found) {
       openBrochureViewer(found, storeLabel(found.store), { targetPageIndex: item.pageIndex });
-    } else if (item.sourceUrl) {
-      window.open(item.sourceUrl, '_blank', 'noopener');
     } else {
       btn.textContent = t('cart.flyerExpired');
     }

@@ -6,7 +6,21 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-07-17 · Latest change: **Local Profile**
+> **Last updated:** 2026-07-26 · Latest change: **English-primary structured
+> product + Arabic Builder** (HISTORY §47) — the post-extraction lexicon's
+> second phase. The ENGLISH extraction is now the primary source of truth
+> (measured: usable on **99%** of production observations), and the Arabic
+> product name is **generated deterministically from it** rather than trusted
+> from OCR. Four new pure modules in `brochure-engine/src/lexicon/`:
+> `shopping.js` (242 categories / 126 descriptors, phrase-level, longest-match
+> head-noun rule), `packageSize.js` (the PRINTED size + its Arabic label),
+> `structuredProduct.js` (the authoritative English record) and
+> `arabicBuilder.js` (category → descriptors → flavour → brand → size).
+> Built name coverage **61.1%** on the 1000-row corpus, **100% Latin-free**.
+> ⚠️ **ADDITIVE ONLY** — `applyEnrichment()` still serves the observed
+> `name_ar`; the built name rides alongside for validation (§11 TODO -2b).
+> No column, no migration. Ships in the SAME undeployed diff as §44/§45.
+> Previous change: **Local Profile**
 > (HISTORY §37) — every browser gets a silent per-browser identity
 > (`lsa.profile.v1`, frontend `src/profile.js`, created at boot; all local
 > `lsa.*` user data adopted in place, `profileGet/profileSet` slots for
@@ -131,6 +145,15 @@ Cloudflare account `tamamoooo@gmail.com`. Engine bindings: D1 `brochure-engine`
 (`38b0639256a34d1ebd7d96dcb55d0a9b`), `SELF` (fan-out), `CONNECTOR` (price
 capture). Engine design doc: `brochure-engine/ARCHITECTURE.md` (older; where it
 conflicts with this file, this file wins).
+
+**Permanent engine contracts** (each is the source of truth for its own domain;
+where they conflict with this file, *they* win — they are narrower and newer):
+
+| Contract | Governs |
+|---|---|
+| `brochure-engine/VISION-PIPELINE.md` | Vision ingestion pipeline: stage boundaries S0–S10, admission, the S4 acceptance gate, and the queue-driven recovery boundary (C-8). Decision log in §11, implementation status in §12 |
+| `brochure-engine/QUALITY-SCORES.md` | Builder Score (Identity Readiness) and Commerce Score: independent axes, never combined, never user-facing |
+| `brochure-engine/IDENTITY-OWNERSHIP.md` | Product identity, `pr_*` minting, what may never be identity evidence |
 
 ## 3. Hard rules (each has broken something before — do not bend)
 
@@ -326,15 +349,23 @@ building"** instead of claiming a record. Guarded `POST
 2026-07-04: ~13.6k identities+points from 15.8k offers). Retention:
 identities unseen >365 days are pruned with their points.
 
-**Price monitoring** (`monitor.js`): watches are `product` (provider + stable
-result id, re-found by id/link match) or `grocery` (sweeps all 7 connector
-stores + current flyer offers in D1, then resolves the pool through the
-SHARED gate ladder at the 'alert' tier — rule 10: stage band, family, type,
-fresh-produce, same interpretation as the Shopping Summary; an emptied pool
-means SILENCE, never a wrong product). Alert-only extras (declared in
-monitor.js, only ever narrowing): relevance floor 50, reference-size
-comparability ±25%, flyer NAME-tier matches only. Alerts fire on a
-downward **crossing** of the target (re-arms above); no-data never re-arms.
+**Price monitoring** (`monitor.js`, `brochure-engine/PRICE-WATCH.md`): a watch is
+ANCHORED in exactly one of two ways, never to a retailer reference —
+`registry_product_id` (`pr_`, "THIS product, wherever it is sold") or `spec`
+(pinned identity dimensions, "any product of THIS class", e.g.
+`{"family":"chicken","cut":"breast"}`). `scope` is `store` (one retailer) or
+`market` (all 7 connector stores + current flyer offers). Identity is resolved
+ONCE at creation, in the FOREGROUND, by the shared registry resolver
+(`identity/verify.js` for strict, `identity/spec.js` for flexible); ambiguity
+asks the user and never guesses. Retrieval is still lexical — a query string is
+how a store search finds anything — but the DECISION never is. Unknown evidence
+ABSTAINS for a strict watch and does NOT satisfy a pin for a flexible one; both
+count and report their exclusions. EVERY check writes `last_resolution` +
+reason (`checked_at` says a check ran, `resolved_at` says it succeeded), so a
+watch that has stopped resolving is visible instead of silently rendering as
+"still watching". Alerts fire on a downward **crossing** of the target (re-arms
+above); no-data never re-arms. A flyer-side re-evaluation runs on ingest
+completion at zero subrequest cost and may only ever improve a watch.
 **PROFILE-SCOPED** (Local Profile milestone): every watch belongs to one
 browser's local profile (`watches.profile_id`; alerts scope through their
 watch). User-facing routes require the profile (`?profile=` / body
@@ -360,6 +391,10 @@ plus the NOT-YET-MIGRATED registry set: `offer_enrichments`
 (migrate-2026-07-enrichments.sql), `products`/`product_tokens`/
 `product_sightings` (migrate-2026-07-registry.sql), and `vision_jobs`
 (migrate-2026-07-vision-jobs.sql — Background Manual Vision, §40) — §11 TODO 0.
+**PENDING (§44, 2026-07-25):** `migrate-2026-07-25-expanded-extraction.sql` adds
+the nullable `offer_enrichments.extraction_json` column for the Expanded JSON
+observation. Additive; apply BEFORE deploying the new extraction baseline —
+§11 TODO -2.
 
 **Browse** (engine `src/browse/`, BROWSE-DESIGN.md Rev 3): read-only views
 over the offers+history substrate, speaking ONLY canonical ids. `taxonomy.js`
@@ -390,11 +425,120 @@ changes. Tests: `node src/browse/browse.test.mjs`.
 engine repo — every change must cite a design section). Enrichment reads each
 offer's own flyer crop with Mistral vision (`MISTRAL_API_KEY` secret; absent ⇒
 whole feature inert, fail-soft) into the `offer_enrichments` side-car; gate on
-`corroboration()` ONLY (model confidence is measured-useless). **English-first
-extraction** (Milestone 2, §40): the `PROMPT` is a strict LITERAL-EXTRACTION
-contract — English canonical + verbatim, Arabic an independent verbatim read
-(never translated to fill a gap, never modifies English), product-boundary
-isolation; Vision extracts, the Registry normalizes. Output schema unchanged.
+`corroboration()` ONLY (model confidence is measured-useless). Vision extracts
+literally, the Registry normalizes — extraction never rewrites, translates or
+"improves" what the crop prints.
+**FROZEN production extraction baseline (§43 decision, §44 integration,
+2026-07-25) — this is what the code runs:** `mistral-medium-latest` +
+the **Verbatim Prompt** (`VISION_PROMPT`, sha256 `e643b2a1…`, asserted by
+`enrich.test.mjs` against the benchmark's own frozen file) + Expanded JSON (11
+fields) + temperature 0 / top_p 1 / reasoning `none` / `json_object`, one request
+per crop, no OCR. Frozen record:
+`brochure-engine/benchmarks/mistral-medium-production-validation-50-2026-07-25/PRODUCTION-PROMPT.md`;
+the code's own copy of the settings is `PRODUCTION_EXTRACTION_BASELINE`.
+⚠️ **PROMPT OPTIMIZATION IS CLOSED** — do not edit, reflow, merge or experiment
+against that prompt without an explicit request; replacing it needs a larger
+production validation plus an explicit decision. **Quality improvements now
+belong DOWNSTREAM of extraction** (brand lexicon, phrase lexicon,
+canonicalization, product identity, search), never in the prompt.
+
+**Vision Model Selection Policy (2026-07-25, engine
+`src/offers/visionModel.js`).** ⚠️ Permanent. **Medium is the production
+baseline** for all Vision extraction and the model canonical product data is
+built from; it sends `mistral-medium-latest` (the alias the frozen baseline was
+validated under — `mistral-medium-3.5` is recorded, never sent). **Small
+(`mistral-small-2603`, pinned to the version actually measured, not the drifting
+`-latest` alias) is a supported MANUAL fallback**, for when API limits or budget
+become a concern — enabled by an operator in the Ops Console → Vision → Vision
+Model, which shows the warning "Budget Mode enabled. Extraction quality may
+decrease, especially for package size and brand recognition."
+⚠️ **NEVER SWITCH MODELS AUTOMATICALLY** — no size gate, no cost router, no
+small-first-then-escalate. That design was measured (§46,
+`benchmarks/small-first-routing-30-2026-07-25`) and REJECTED: 0% escalation
+because no validator has coverage, 16.7% defect rate for the 91% saving. The
+selection lives in the object store (`ops/settings/vision-model.json`), NOT D1 —
+no migration, no redeploy, and every failure path (no store, missing key, corrupt
+bytes, unknown tier) resolves to Medium by construction, so a bad read can only
+be too good, never silently degraded. `POST /enrich` (engine.js) is the single
+place the selection is read: the enrich cron, the ops Vision Drain and the
+background Vision job all reach Mistral through it. Every stored row and every
+ops audit row records the model that produced it. Future model comparisons must
+use identical prompts, samples, scoring and methodology.
+Tests: `node src/offers/visionModel.test.mjs`.
+**Expanded JSON mapping (§44):** `smartExtraction.js`
+`OBSERVATION_FIELD_ALIASES`/`readObservationField` read `size` ← `size` |
+`package_size` and `pack_count` ← `pack_count` | `packCount` | `quantity`, legacy
+key first — no validation rule changed. `unit`, `package_type`, `attributes` (and
+the verbatim pre-validation names/size) are preserved in
+`offer_enrichments.extraction_json`; nothing reads it yet.
+
+**Brand Lexicon (§45, engine `src/lexicon/brands.js`)** — the first downstream
+layer, scoped to ONE field. `resolveBrand(observed)` is a pure alias → canonical
+lookup (a `Map` built once at load, 299 keys / 98 brands) returning
+`{ observed_brand, brand_id, canonical_brand, display_en, display_ar,
+matched_alias, status, lexicon_version }`. **No LLM, no embedding, no fuzzy
+repair — exact key or nothing**; an unknown brand returns `brand_id: null` with
+`canonical_brand` = the observation unchanged (failure mode: "no brand", never
+"wrong brand"). `brand_id` IS the Browse slug and the canonical names come from
+`browse/brands.js` `BRANDS` — ONE brand namespace, not two; the lexicon owns only
+the variants (`BRAND_ALIASES`). The fold already collapses case, ®/™, Latin
+accents, Arabic letter variants and (via a second space-free pass) `Al Marai`↔
+`Almarai`, so **add an alias only for what the fold cannot reach** (word order,
+dropped conjunction, different transliteration, company suffix). Adding a whole
+new BRAND means editing `BRANDS`, which also feeds `detectBrand()` — inherit its
+precision guards (`depts`, VETO_PREV/VETO_NEXT, `noStrip`). Two ids claiming one
+key are recorded in `BRAND_ALIAS_COLLISIONS` and fail the tests, never silently
+shadow. ⚠️ Trademark marks are stripped BEFORE NFKC on purpose (NFKC turns `™`
+into the letters `TM`). **Nothing is persisted and no migration exists:**
+resolution is pure, so `brand_id` is derivable from the stored `brand` column on
+read; `enrich.js` attaches it additively (`brandIdentity` / `brand_identity`) and
+`enrichStore` binds columns explicitly, so it never reaches D1. Tests:
+`node src/lexicon/brands.test.mjs`.
+**Shopping Lexicon + Structured Product + Arabic Builder (§47, engine
+`src/lexicon/shopping.js`, `packageSize.js`, `structuredProduct.js`,
+`arabicBuilder.js`)** — the second downstream layer, and the phase where
+**ENGLISH became the primary source of truth** (measured 2026-07-26: a usable
+English name is present on 99% of production observations, 990/1000). The
+Arabic product name is now GENERATED from the English structure; the observed
+Arabic OCR text is a FALLBACK source only. Pipeline: Vision → English name →
+Brand Lexicon → Shopping Lexicon → Package Size Parser → Descriptor Parser →
+Structured Product → Arabic Builder.
+**The head-noun rule:** category = *longest phrase wins, ties break RIGHTMOST*
+("Chocolate Milk" is milk, "Milk Chocolate" is chocolate). Phrase-level ON
+PURPOSE — `matching.js productFamily()` is single-token and measurably wrong on
+English names ("Ice Cream" → the dairy `cream` family), and it is a MIRRORED
+file, so it was left untouched. Brand and size tokens are removed BEFORE the
+head noun is chosen. **The head-final guard:** a matched category with ≥2
+unknown content words still AFTER it is refused — found by measurement
+("Milk/Wheat Rusk" built as حليب), costs 3.4 points of coverage, prevents the
+"wrong category" failure the layer exists for. Every category carries the
+matching mirror's `family` id and a Browse `aisle` id — ONE namespace, asserted
+by test, same discipline as §45's `brand_id` = Browse slug.
+**The Arabic name is a PRESENTATION layer (user directive 2026-07-26):** the
+structured ENGLISH record stays authoritative for identity/search/matching, and
+anything with no Arabic term is DROPPED, never transliterated or left in Latin
+(measured: 100% of built names are Latin-free). No category ⇒ NO built name ⇒
+caller falls back to the observed Arabic. `packageSize.js` renders the size the
+flyer PRINTED (1 لتر, not 1000 مل) while carrying `parseSize()`'s output verbatim
+as `canonical` — still exactly one size interpretation project-wide; it honours
+parseSize's `count-weak` trust marker, without which the model code NRF110N26S
+becomes a 26-piece pack. §44's preserved `package_type`/`attributes` finally
+have a reader here.
+⚠️ **ADDITIVE, UNPERSISTED, NOT SWITCHED ON.** `enrich.js` attaches
+`structured_product`/`arabic_name` beside `brand_identity`; `enrichStore` binds
+columns explicitly so none of it reaches D1 (no column, no migration).
+`applyEnrichment()` still serves the observed `name_ar`. The built name becomes
+the default display only after its quality is validated on real rows (§11 TODO
+-2b). Standing measurement: `node validation/shopping-lexicon-coverage.mjs`
+(also prints the ranked vocabulary backlog). Tests:
+`node src/lexicon/shopping.test.mjs`, `packageSize.test.mjs`,
+`structuredProduct.test.mjs`.
+⚠️ **Prices are observed but QUARANTINED:** `preservedObservation()` strips
+`current_price`/`old_price` from every servable write, because the measured
+current-price ROLE INVERSION (2/50 crops, 0.99+ self-confidence, both prompts)
+makes a **deterministic price guard mandatory before any extracted price may
+reach a shopper** — and it is not built yet (§11 TODO). The full reply, prices
+included, stays auditable per offer in `offer_extraction_attempts.output`.
 **Resilient drain** (§40): a per-offer crop/parse error is skipped and the batch
 CONTINUES (only an auth/rate/transient WALL stops it); `maxRateRetries` 3 and
 `withFailover` honors `Retry-After`; 429 rate-limit headers are captured
@@ -651,7 +795,9 @@ external product images — verify via `preview_eval` DOM inspection; preview
   is MIXING two products' histories: never loosen the identity gates (≥2
   name tokens, size in the key) to "fix" a short series.
 - **Panda product watches** created before the variety-id fix (2026-07-03)
-  won't re-find their product; re-create them.
+  won't re-find their product; re-create them. (Ordinary catalog-id rotation
+  no longer needs this: since 2026-07-28 a product watch re-anchors on its
+  stable identity and rewrites the cached id itself.)
 - A first request to a **freshly created** workers.dev subdomain can return
   `error code: 1042` for a few seconds — retry, don't debug.
 - **/browse is cached twice**: 1h at the edge (Cache API; the guarded write
@@ -672,6 +818,165 @@ external product images — verify via `preview_eval` DOM inspection; preview
   neither.
 
 ## 11. Open TODOs (priority order)
+
+-3. **Deploy the PRODUCT-ANCHORED Price Watch** (code complete 2026-07-29,
+   `brochure-engine/PRICE-WATCH.md` — NOT committed or deployed). A watch is now
+   anchored to a registry product (`pr_`) or to a declared class (`spec`), and
+   identity is resolved ONCE at creation, in the foreground, by the shared
+   resolver. The attribute-tuple matcher is deleted.
+
+   ⚠️ **The 2026-07-28 identity-anchor migration is SUPERSEDED and must NOT be
+   applied.** It was never run; its file was retired from the repo. Applying it
+   only adds three unused columns.
+
+   Deploy order — the migration MUST land before the engine, because
+   `watchStore.create` writes `registry_product_id`, `scope` and `spec`:
+
+   1. `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-29-watch-product-anchor.sql`
+      Purely additive. It also stamps every unanchored row `pending-migration`,
+      so no row is ever left meaning "unknown".
+   2. `npm test && npx wrangler deploy` (from `brochure-engine/`).
+   3. Freeze automated registry merge for the migration window — it is the one
+      irreversible registry operation and it runs unattended. From /__ops:
+      `POST /__ops/op {"op":"registry/merge","enabled":false,"reason":"watch migration","confirm":true}`
+      Re-arm with `"enabled":true` once the registry looks right.
+   4a. DRY RUN FIRST — writes nothing, reports exactly what would happen:
+      `curl -X POST -H "X-Ingest-Secret: $INGEST_SECRET" "$ENGINE/watches/resolve-legacy?dryRun=1"`
+      Review `minted[]` — one line per product that WOULD be created, with the
+      watch that caused it and the identity evidence. Mints survive an engine
+      rollback, so this is the moment to look.
+   4b. Run the ONE-TIME backfill (idempotent):
+      `curl -X POST -H "X-Ingest-Secret: $INGEST_SECRET" "$ENGINE/watches/resolve-legacy"`
+      Confirm `stillPending === 0` in the response. Review `minted` — those are
+      products created from watch labels, and they SURVIVE an engine rollback
+      (the only non-reversible side effect; benign, no sightings attached).
+   5. Deploy the frontend (`live-shopping-assistant`) for the
+      needs-confirmation state and the confirmation picker.
+
+   Verify: `/__ops` "Watch System" shows `N monitored · 0 awaiting anchor`; the
+   first daily check (05:45Z) writes `last_resolution` on every watch. The
+   invariant, which must return zero rows:
+   `SELECT COUNT(*) FROM watches WHERE registry_product_id IS NULL AND spec IS NULL AND last_resolution IS NULL;`
+
+   Rollback: the target is the DEPLOYED worker, not the working tree. The
+   migration is additive and nothing is dropped, so a rolled-back build reads
+   the new rows unchanged (`watchMigration.test.mjs` asserts this).
+
+   DEFERRED (not blocking; revisit after real usage):
+   • no /__ops BUTTONS for the two new ops — both are callable as
+     POST /__ops/op with {"op":"registry/merge"} / {"op":"watches/resolve-legacy"};
+   • confirming a watch does not teach the registry, though human
+     confirmation is high-quality evidence (PRICE-WATCH.md §4);
+   • `watches.kind` is vestigial once the previous deployment is retired;
+     dropping it (and the v2 identity columns) is a much-later cleanup.
+
+-2. **Deploy the wired-in FROZEN extraction baseline** (code complete
+   2026-07-25, HISTORY §44 — NOT yet committed or deployed). `src/offers/
+   enrich.js` now runs `mistral-medium-latest` + the Verbatim Prompt + Expanded
+   JSON, tests green (29/29 files) and `wrangler deploy --dry-run` builds.
+   ⚠️ The **Brand Lexicon** (§45) and the **Shopping Lexicon / Structured
+   Product / Arabic Builder** (§47) are in the same undeployed diff — neither
+   needs a migration or a deploy step of its own, but both ship with this.
+   Both are additive and inert on the serving path (nothing reads the built
+   Arabic name yet), so this deploy's behaviour change is still only the
+   extraction baseline.
+   To ship, in this order:
+   (a) apply the additive migrations FIRST —
+   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-25-expanded-extraction.sql`
+   (adds `offer_enrichments.extraction_json`; re-running errors harmlessly with
+   "duplicate column name"), then
+   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-26-acceptance-verdicts.sql`
+   (creates `offer_acceptance_verdicts` for the S4 verdicts, TODO -1.7(b); pure
+   `CREATE TABLE/INDEX IF NOT EXISTS`, so re-running is a no-op), then
+   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-27-extraction-source-open.sql`
+   and
+   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-27-recovery-queue.sql`
+   (the S5 Recovery Platform tables, plus the one-time fold-in of
+   `offer_ocr_queue`; also idempotent). The order among these does not matter,
+   but all must precede the deploy: the verdict write is skipped silently while
+   its table is absent, so deploying first means throwing away every verdict
+   until the migration lands. `report.acceptance.persisted` staying 0 while
+   `judged` climbs is exactly that symptom. Recovery reports itself unavailable
+   (rather than half-working) until BOTH the verdict and recovery tables exist.
+   ⚠️ For a NEW database — staging, or a rebuild — apply `schema.sql` instead:
+   it now carries every table above, so `wrangler deploy` against a fresh D1 no
+   longer produces a Worker with no Recovery Platform;
+   (b) `npm run deploy` (NOT bare `npx wrangler deploy` — the npm script runs
+   the full unit suite first via `predeploy`, which is the deployment gate);
+   (c) watch the next `10,30,50` enrich cron and confirm `report.enriched` and
+   the stored `model` column read `mistral-medium-latest`;
+   (d) on the same cron, read the new `report.acceptance` block —
+   `judged`/`accepted`/`rejected`, `persisted` (must equal `judged` once the
+   migration is applied) and the per-condition `missing` tallies. Then call
+   `enrichStore.acceptanceSummary()` for the cumulative view. This is the R5
+   calibration data; read it before tuning the mandatory set or sizing recovery
+   spend. Expect `countDebris` to DROP at the same time — that is R4 removing
+   offers that could never have been accepted, not a regression.
+   **Cost:** Medium is ≈10× Small per crop ($0.00205 vs ~$0.0002). Steady-state
+   ingestion rises by that multiple from the moment it deploys; a full 54k
+   re-enrichment would be ~$110 and is NOT part of this change — existing rows
+   keep their old-model values until an explicitly decided re-enrichment.
+
+-2b. **Validate the built Arabic name, then make it the default display**
+   (HISTORY §47). The user's directive is explicit: the additive phase exists
+   ONLY for validation, and once coverage and quality are proven the built name
+   becomes the default *because* it is generated deterministically from the
+   higher-quality English extraction. In order:
+   (a) grow vocabulary against the RANKED HEAD-NOUN backlog from
+   `node validation/unbuilt-breakdown.mjs` — **31.5 of the 38.9 unbuilt points
+   are vocabulary**, and the script's projection (which re-runs the real
+   resolver, not a word count) reads top-20 → 68.9%, top-100 → 80.1%,
+   top-200 → 90.1%. ⚠️ The tail is FLAT — 77% of missing head nouns occur
+   exactly once — so plan the pass by tiers, not by "finish the list". Add a
+   term only at the HEAD-FINAL position it was measured in, and apply curation
+   rule 1 (a bare ambiguous word like `notebook` = laptop *or* stationery
+   belongs as a phrase or not at all). Re-measure after each pass; the brand
+   half of the gap is TODO 0c;
+   (b) adjudicate a real sample by eye (the §43/§46 method) — built vs observed
+   Arabic, on production rows, before any switch;
+   (c) only then change `applyEnrichment()` to prefer the built name.
+   ⚠️ Step (c) is NOT cosmetic: `offer.nameAr` feeds Browse cards, search match
+   text, watches and the registry's token profiles, so switching it re-keys
+   product identity — it needs its own measured step, never a drive-by edit.
+
+-1.7. **Vision Pipeline increment 3** (architecture SETTLED; increments 1 and 2
+   code-complete 2026-07-26, HISTORY §48/§49 — NOT committed, NOT deployed).
+   `brochure-engine/VISION-PIPELINE.md` §12 is the live status table.
+   ~~(a) **R4**~~ and ~~(b) **R5/R6**~~ are **DONE 2026-07-26** (§49): the S1
+   price predicate is in SQL as `enrichStore.USABLE_PRICE_SQL` across
+   `listDebris`/`countDebris`/`coverage`, and every S4 verdict — accepted AND
+   rejected — persists to `offer_acceptance_verdicts` with its per-condition
+   `missing` list. Remaining, in dependency order:
+   (c) **S6** — widen the `offer_extraction_attempts` `source` CHECK
+   constraint so a primary and a recovery Vision read can coexist (additive);
+   (d) **S5 — the Recovery Queue, per C-8** (⚠️ user decision 2026-07-26 —
+   recovery is **queue-driven, not pipeline-driven**; the automatic ladder /
+   `RUN|TERMINATE|HOLD` router is **WITHDRAWN**). S4 ends the extraction
+   pipeline; a reject is written to one durable processor-agnostic queue
+   (`offer_id, processor, status, attempts, next_attempt_at, last_error`)
+   carrying the verdict + `missing[]`, and **nothing is invoked**. The queue
+   needs an execution mode — **Manual** (default: items wait for the operator)
+   and **Auto** (self-drains when the operator judges the API budget allows) —
+   plus per-processor arming. Vision Medium and OCR are processors ATTACHED to
+   the queue, not stages: both cost materially more than a Vision Small read,
+   so the spend decision belongs to the operator, never the pipeline;
+   (e) **S7** — the Developer Review surface, LAST, and the terminal processor.
+   Extend the Vision Inspector (R12) rather than building a new surface; by
+   then (b)'s verdict data will show how much human review the queue generates.
+   ⚠️ Ships in the same undeployed diff as TODO -2. **R4 is the first item here
+   with a live production effect** (priceless offers leave the extraction
+   queue, so queue depth and spend both drop); everything else is additive.
+   ⚠️ `migrate-2026-07-26-acceptance-verdicts.sql` must be applied or verdicts
+   are silently discarded — see TODO 0.
+
+-1.5. **Deterministic current-price guard — still owed** (measured 2/50 under
+   BOTH prompts: the crossed-out price returned as the selling price at 0.99+
+   self-reported confidence). Until it exists, extracted prices must not reach
+   shoppers; §44 enforces that structurally by keeping prices out of
+   `offer_enrichments` entirely (`preservedObservation()`), so this TODO gates
+   any future use of extracted prices, not today's serving path. Shape when
+   built: when two prices are visible, current must be the LOWER; when a crop
+   shows two prices and the model returns one, reject rather than accept.
 
 -1. **Legacy watch adoption pending** (profile-scoped watches deployed +
    production-verified 2026-07-17, HISTORY §37): the 19 pre-profile
@@ -720,6 +1025,23 @@ external product images — verify via `preview_eval` DOM inspection; preview
    `SELECT brand_slug, COUNT(*) FROM offers WHERE valid_to >= date('now')
    AND brand_slug IN ('hana','kdd','puck','galaxy') GROUP BY 1` — hana must
    be 0, the others should drop vs their 2026-07-16 audit counts (22/62/34).
+0c. **Brand Lexicon vocabulary** (HISTORY §45; the machinery is done and
+   tested — this is data work). Measured coverage of the 98-brand list:
+   **20% of unique brand strings / 17% by volume** on the 1000-crop
+   2026-07-21 production sample, **24% of unique** on the frozen-baseline
+   50-crop sample. The misses are real brands simply absent from `BRANDS`:
+   Najjar, Siniora, Nikai, Clikon, Hershey's, Olay, Listerine, Whiskas,
+   Saudia, Ferrero, Fujifilm, Zoflora, Rasasi, Babyjoy, Finish, Nongshim, …
+   Re-measure before and after with `brandIdFor` over
+   `validation/ocr-first-production-validation-1000-2026-07-21/
+   observations.json`. ⚠️ Adding a brand edits `browse/brands.js` `BRANDS`,
+   which ALSO feeds Browse's `detectBrand()` — apply its precision guards
+   (`depts`, VETO_PREV/VETO_NEXT, `noStrip`) per entry; a name that is an
+   ordinary word but safe in a brand-typed field goes in `LEXICON_ONLY_BRANDS`
+   instead. Do not bulk-import a brand list without that pass. Deferred by
+   design: sub-brand hierarchy (`Fine Baby` → Fine, `Nescafe Gold` → Nescafe)
+   needs a parent/child model, not a silent alias.
+
 1. **Journey Coherence V2** (HISTORY §34 follow-ups, in this order): (a)
    harvest ONLINE price observations into price history from the daily watch
    sweep — the sweep already fetches all 7 stores, so it closes "a Search

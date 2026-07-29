@@ -1,2 +1,5 @@
 .DS_Store
 Thumbs.db
+
+# Agent tooling (dev-server launch config), not project source
+.claude/

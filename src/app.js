@@ -33,7 +33,7 @@ import { initBrowsePage } from './browsePage.js';
 import { rankItems as smartRank, relevance as matchRelevance, isRelevant, isPrimaryMatch, sizeLabel } from './match.js';
 import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
-import { createMarketplace } from './marketplace.js';
+import { createMarketplace, openFlyerOffer } from './marketplace.js';
 import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.js';
 import { initCartPage } from './cartPage.js';
 import { cartCount, CART_EVENT } from './cart.js';
@@ -103,6 +103,7 @@ const pageAlerts = $('page-alerts');
 const pageCart = $('page-cart');
 
 let inFlight = null; // token so a newer search cancels an older one's rendering
+let activeSearchDeepLink = null;
 
 // --- router ----------------------------------------------------------------
 // Two routes, hash-based (works on GitHub Pages, deep-linkable, back-button
@@ -145,6 +146,17 @@ function route() {
   if (name === 'brochures') initBrochuresPage(); // idempotent, lazy first render
   if (name === 'alerts') initAlertsPage(true); // fresh state on every visit
   if (name === 'cart') initCartPage(); // local data, re-rendered per visit
+  if (name !== 'search') {
+    activeSearchDeepLink = null;
+  } else {
+    const query = new URLSearchParams(hash.split('?')[1] || '').get('q')?.trim();
+    if (query && activeSearchDeepLink !== hash) {
+      activeSearchDeepLink = hash;
+      selectAllSources();
+      input.value = query;
+      runSearch(query);
+    }
+  }
 }
 window.addEventListener('hashchange', route);
 
@@ -218,6 +230,11 @@ function selectedSources() {
 
 function selectOnlyStore(storeId) {
   for (const c of chipButtons) c.setAttribute('aria-pressed', String(c.dataset.store === storeId));
+  syncChips();
+}
+
+function selectAllSources() {
+  for (const c of chipButtons) c.setAttribute('aria-pressed', 'true');
   syncChips();
 }
 
@@ -409,6 +426,9 @@ async function fillSummary(slot, query, tagged, token, includeBrochures) {
   }
   slot.replaceChildren(
     summaryElement(comparison, storeLabel, {
+      onOpenListing: (listing) => {
+        if (listing.source === 'flyer' && listing.offer) openFlyerOffer(listing.offer);
+      },
       onWatch: (model) => {
         const h = model.headline.listing;
         openWatchDialog({
@@ -418,7 +438,7 @@ async function fillSummary(slot, query, tagged, token, includeBrochures) {
           sizeText: h.name, // the reference size for the engine's size gate
           suggestedPrice: h.price,
           currentPrice: h.price,
-          link: h.link,
+          link: h.source === 'online' ? h.link : null,
         });
       },
     }),

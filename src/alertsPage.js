@@ -20,8 +20,12 @@ import {
   listAlerts,
   markAlertsSeen,
   storeLabel,
+  watchCandidates,
+  confirmWatchProduct,
+  diagnoseWatch,
 } from './brochure.js';
 import { t } from './i18n.js';
+import { notificationTarget } from './notificationNavigation.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -187,6 +191,23 @@ export function openWatchDialog(opts) {
       sizeText: opts.sizeText,
       brand: opts.brand,
       category: opts.category,
+      // THE LISTING the user is actually looking at. The engine resolves
+      // identity from this, in the foreground, at creation. Sending the
+      // structured fields (brand, size) rather than only a label is what lets
+      // the resolver bind the right product instead of asking — the retailer's
+      // own brand and size columns are the strongest evidence available.
+      listing: opts.listing || {
+        id: opts.productId,
+        name: opts.label || opts.query,
+        brand: opts.brand || null,
+        size: opts.sizeText || null,
+        link: opts.link || null,
+        image: opts.image || null,
+      },
+      // Unchecking any of these asks for a CLASS rather than a product. The
+      // ENGINE turns them into a spec, using the same extractor that will
+      // classify candidates at check time — deriving the spec here instead
+      // would pin it in one vocabulary and test it in another.
       matchBrand: toggles.matchBrand ? toggles.matchBrand.checked : true,
       matchSize: toggles.matchSize ? toggles.matchSize.checked : true,
       matchVariant: toggles.matchVariant ? toggles.matchVariant.checked : true,
@@ -226,16 +247,119 @@ function invalidate() {
 // Visual hierarchy — the product (thumb + name) is primary and state-coloured,
 // then the friendly status, the current best price, and the quiet
 // scope/target/checked line last.
+// The confirmation picker. Deliberately inline and minimal — this is a
+// single-user tool, and the question ("which of these is it?") does not need a
+// modal. Candidates come from the engine; "none of these" is not offered
+// because minting a product from a name the resolver already rejected would
+// re-create exactly the ambiguity the user is here to settle.
+async function openConfirmPicker(w, cta, onUpdate) {
+  if (cta.dataset.open === '1') return;
+  cta.dataset.open = '1';
+  cta.disabled = true;
+  const list = el('div', 'watch-candidates');
+  list.appendChild(el('div', 'watch-candidates-title', t('alerts.confirmTitle')));
+  cta.after(list);
+
+  const candidates = await watchCandidates(w.id);
+  if (!candidates.length) {
+    list.appendChild(el('div', 'watch-candidates-empty', t('alerts.confirmNone')));
+    cta.disabled = false;
+    cta.dataset.open = '0';
+    return;
+  }
+  for (const c of candidates) {
+    const btn = el('button', 'watch-candidate');
+    btn.type = 'button';
+    btn.dir = 'auto';
+    btn.textContent = [c.name, c.brand, c.size].filter(Boolean).join(' · ');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const res = await confirmWatchProduct(w.id, c.productId);
+      if (res.error) {
+        btn.disabled = false;
+        list.appendChild(el('div', 'watch-candidates-empty', res.error));
+        return;
+      }
+      list.replaceChildren(el('div', 'watch-candidates-empty', t('alerts.confirmed')));
+      if (onUpdate) onUpdate();
+    });
+    list.appendChild(btn);
+  }
+}
+
+// Is this watch actually monitoring? A watch with no product anchor is not,
+// and must never render as if it were. `unanchored` carries the ENGINE's own
+// explanation (last_resolution + reason) rather than a guess made here.
+// "Why is this quiet?" — shown on demand for a watch that IS anchored but is
+// not finding its product. The engine reports each live candidate with the
+// resolver's own rejection reason; this only renders it.
+async function openDiagnostics(w, cta) {
+  if (cta.dataset.open === '1') return;
+  cta.dataset.open = '1';
+  cta.disabled = true;
+  const panel = el('div', 'watch-diagnostics');
+  panel.appendChild(el('div', 'watch-candidates-title', t('alerts.diagnoseTitle')));
+  cta.after(panel);
+
+  const d = await diagnoseWatch(w.id);
+  cta.disabled = false;
+  cta.dataset.open = '0';
+  if (!d) {
+    panel.replaceChildren(el('div', 'watch-candidates-empty', t('alerts.diagnoseFailed')));
+    return;
+  }
+  panel.replaceChildren(el('div', 'watch-candidates-title', t('alerts.diagnoseTitle')));
+  panel.appendChild(el(
+    'div', 'watch-candidates-empty',
+    t('alerts.diagnoseSummary', { seen: d.seen ?? 0, matched: d.matched ?? 0 }),
+  ));
+  for (const c of (d.candidates || []).slice(0, 8)) {
+    const row = el('div', `watch-diag-row ${c.matched ? 'is-match' : ''}`);
+    row.dir = 'auto';
+    row.textContent = `${c.matched ? '✓' : '✕'} ${c.name || '—'} · ${c.store || ''}`
+      + (c.reason ? ` · ${c.reason}` : '');
+    panel.appendChild(row);
+  }
+  for (const note of (d.notes || []).slice(0, 3)) {
+    panel.appendChild(el('div', 'watch-candidates-empty', note));
+  }
+}
+
+// A watch's spec, parsed. Stored as JSON text by the engine.
+function parseWatchSpec(w) {
+  if (!w || !w.spec) return null;
+  if (typeof w.spec === 'object') return w.spec;
+  try { return JSON.parse(w.spec); } catch { return null; }
+}
+
+function anchorState(w) {
+  if (w.registryProductId || w.spec) return null;
+  const resolution = w.lastResolution || 'pending-migration';
+  if (resolution === 'needs-confirmation') {
+    return { kind: 'needs-confirmation', label: t('alerts.needsConfirmation'), actionable: true };
+  }
+  if (resolution === 'unresolvable') {
+    return { kind: 'unresolvable', label: t('alerts.unresolvable'), actionable: false };
+  }
+  return { kind: 'pending', label: t('alerts.notWatching'), actionable: false };
+}
+
 function watchRow(w, onDelete, onUpdate) {
-  const unitMode = w.matchSize === false;
+  // The comparison basis is DERIVED from the anchor, exactly as the engine
+  // derives it: a Flexible Watch that leaves size free compares per unit.
+  const spec = parseWatchSpec(w);
+  const unitMode = spec ? spec.size == null : false;
   const target = unitMode && w.targetUnitPrice != null ? w.targetUnitPrice : w.targetPrice;
-  const hasDeal = w.lastPrice != null && w.lastPrice <= target + 1e-9;
+  const unanchored = anchorState(w);
+  const hasDeal = !unanchored && w.lastPrice != null && w.lastPrice <= target + 1e-9;
   const isClose =
     !hasDeal &&
     w.lastPrice != null &&
     w.closeThreshold != null &&
     w.lastPrice <= target * (1 + Number(w.closeThreshold) / 100) + 1e-9;
-  const state = hasDeal ? 'is-deal' : isClose ? 'is-close' : 'is-watching';
+  const state = unanchored
+    ? `is-unanchored is-${unanchored.kind}`
+    : hasDeal ? 'is-deal' : isClose ? 'is-close' : 'is-watching';
   const row = el('div', `watch-row ${state}`);
 
   // Thumbnail — the product at a glance. Falls back to a neutral tile when
@@ -260,12 +384,17 @@ function watchRow(w, onDelete, onUpdate) {
 
   // Primary — the product name, the thing the eye should land on; its colour
   // carries the state (green = deal, red = watching).
-  const name = el(w.lastLink || w.link ? 'a' : 'span', 'watch-name');
+  const name = el('a', 'watch-name');
   name.dir = 'auto';
   name.textContent = w.label || w.query;
-  const href = w.lastLink || w.link;
-  if (href) {
-    name.href = href;
+  const navTarget = notificationTarget(w, {
+    store: w.lastStore || w.provider,
+    source: w.lastSource,
+    name: w.lastName,
+    link: w.lastLink || w.link,
+  });
+  name.href = navTarget.href;
+  if (navTarget.kind === 'external') {
     name.target = '_blank';
     name.rel = 'noopener';
   }
@@ -276,14 +405,49 @@ function watchRow(w, onDelete, onUpdate) {
   const status = el(
     'div',
     'watch-status',
-    hasDeal ? t('alerts.dealFound') : isClose ? t('alerts.closePrice') : t('alerts.stillWatching'),
+    unanchored
+      ? unanchored.label
+      : hasDeal ? t('alerts.dealFound') : isClose ? t('alerts.closePrice') : t('alerts.stillWatching'),
   );
   main.appendChild(status);
 
-  // Current best price — the number the user actually cares about. Shown for
-  // both states when a price is known; a gentle note while we're still looking.
+  // The engine's own reason, verbatim. A quiet watch must be able to say why
+  // it is quiet — that is the difference between this design and the one it
+  // replaced, and paraphrasing it here would put the explanation back out of
+  // sync with the check that produced it.
+  if (unanchored && w.lastResolutionReason) {
+    const why = el('div', 'watch-reason', w.lastResolutionReason);
+    why.dir = 'auto';
+    main.appendChild(why);
+  }
+
+  // An ANCHORED watch that keeps reporting something other than 'ok' is the
+  // case diagnostics exists for: the anchor is fine, so the real question is
+  // which candidates the resolver saw and why it rejected each one.
+  if (!unanchored && w.lastResolution && w.lastResolution !== 'ok') {
+    const why = el('button', 'watch-diagnose', t('alerts.diagnoseCta'));
+    why.type = 'button';
+    why.addEventListener('click', () => openDiagnostics(w, why));
+    main.appendChild(why);
+  }
+
+  // Only 'needs-confirmation' has a user action: the resolver found more than
+  // one plausible product and is asking rather than guessing.
+  if (unanchored?.actionable) {
+    const cta = el('button', 'watch-confirm', t('alerts.confirmCta'));
+    cta.type = 'button';
+    cta.addEventListener('click', () => openConfirmPicker(w, cta, onUpdate));
+    main.appendChild(cta);
+  }
+
+  // Current best price — the number the user actually cares about. An
+  // unanchored watch has no current price by definition: showing the last one
+  // it ever found would be the stale-number bug the redesign removed.
   const price = el('div', 'watch-price');
-  if (w.lastPrice != null) {
+  if (unanchored) {
+    price.textContent = t('alerts.pendingMigration');
+    price.classList.add('is-pending');
+  } else if (w.lastPrice != null) {
     const store = storeLabel(w.lastStore) || w.lastStore || '';
     price.textContent =
       (w.lastUnitLabel ? `${Number(w.lastPrice).toFixed(2)} ${w.lastUnitLabel}` : money(w.lastPrice)) +
@@ -297,12 +461,11 @@ function watchRow(w, onDelete, onUpdate) {
   main.appendChild(price);
 
   // Tertiary — quiet supporting details.
-  const categoryLevel =
-    w.kind === 'grocery' &&
-    w.matchBrand === false &&
-    w.matchSize === false &&
-    w.matchVariant === false;
-  const scope = w.kind === 'product'
+  // A spec-anchored watch covers a CLASS; a product-anchored one covers one
+  // product. That is now readable straight off the anchor rather than inferred
+  // from three booleans that no longer drive anything.
+  const categoryLevel = Boolean(spec);
+  const scope = (w.scope || (w.kind === 'product' ? 'store' : 'market')) === 'store'
     ? t('alerts.scopeProduct', { store: storeLabel(w.provider) || w.provider })
     : categoryLevel
       ? t('alerts.scopeCategory')
@@ -442,11 +605,14 @@ function alertRow(a, watchById, onDelete) {
 
   const side = el('div', 'alert-side');
   side.appendChild(el('span', 'alert-when', fmtDate(a.observedAt)));
-  if (a.link) {
+  {
     const go = el('a', 'alert-link', t('alerts.view'));
-    go.href = a.link;
-    go.target = '_blank';
-    go.rel = 'noopener';
+    const target = notificationTarget(w || {}, a);
+    go.href = target.href;
+    if (target.kind === 'external') {
+      go.target = '_blank';
+      go.rel = 'noopener';
+    }
     side.appendChild(go);
   }
   row.appendChild(side);

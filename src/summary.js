@@ -61,17 +61,30 @@ const KICKER = {
   cheapest: t('summary.kicker.cheapest'),
 };
 
-function nameLink(l) {
-  const a = l.link ? document.createElement('a') : document.createElement('span');
-  a.className = 'summary-name';
-  a.dir = 'auto';
-  a.textContent = l.name;
-  if (l.link) {
-    a.href = l.link;
-    a.target = '_blank';
-    a.rel = 'noopener';
+function nameLink(l, onOpenListing) {
+  // Flyer links are source provenance, not storefront destinations. Route the
+  // Best Price pick through the same local-only opener as every flyer card so
+  // brochure identity, pageRef, and offerId remain available to the viewer.
+  if (l.source === 'flyer' && l.offer && onOpenListing) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'summary-name';
+    button.dir = 'auto';
+    button.textContent = l.name;
+    button.addEventListener('click', () => onOpenListing(l));
+    return button;
   }
-  return a;
+
+  const node = l.link ? document.createElement('a') : document.createElement('span');
+  node.className = 'summary-name';
+  node.dir = 'auto';
+  node.textContent = l.name;
+  if (l.link) {
+    node.href = l.link;
+    node.target = '_blank';
+    node.rel = 'noopener';
+  }
+  return node;
 }
 
 // The recommendation's product image (Task 5: a Best Buy should be recognizable
@@ -134,6 +147,8 @@ function cartItemFor(l) {
     currency: l.currency || 'SAR',
     image: l.image || null,
     sourceUrl: l.link || null,
+    brochureId: l.source === 'flyer' ? l.offer.brochureId || null : null,
+    pageIndex: l.source === 'flyer' && Number.isInteger(l.offer.pageIndex) ? l.offer.pageIndex : null,
     validTo: l.source === 'flyer' ? l.offer.validTo || null : null,
   };
 }
@@ -200,7 +215,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   // price line), no flyer paragraph (tooltip on the badge), no low-confidence
   // paragraph (the dot's tooltip says it).
   main.appendChild(priceLine(h, { shared: s.sharedWith }));
-  main.appendChild(nameLink(h));
+  main.appendChild(nameLink(h, opts.onOpenListing));
   // Same product elsewhere: just store · price pairs (label in the tooltip).
   const headInGroup =
     s.equivalent && (s.equivalent.hasHeadline || (h.it && s.equivalent.sorted.some((i) => i.it === h.it)));

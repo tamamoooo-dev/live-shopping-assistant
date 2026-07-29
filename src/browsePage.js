@@ -126,6 +126,8 @@ function browseCard(offer) {
       currency: offer.currency || 'SAR',
       image: offer.imageUrl || null,
       sourceUrl: offer.sourceUrl || null,
+      brochureId: offer.brochureId || null,
+      pageIndex: Number.isInteger(offer.pageIndex) ? offer.pageIndex : null,
       validTo: offer.validTo || null,
     });
     cartBtn.textContent = '✓';
@@ -154,7 +156,7 @@ function browseCard(offer) {
       sizeText: `${offer.name || ''} ${offer.nameAr || ''}`,
       suggestedPrice: offer.price,
       currentPrice: offer.price,
-      link: offer.sourceUrl || null,
+      link: null,
       image: offer.imageUrl || null,
     });
   });

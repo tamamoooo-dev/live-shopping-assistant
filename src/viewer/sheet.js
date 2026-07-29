@@ -367,8 +367,7 @@ export function createSheet(host, ctx) {
           <h4>${esc(t('sheet.availableElsewhere'))}</h4>
           <div class="ps-compare-body"></div>
         </div>
-        <p class="ps-note">${esc(t('sheet.note'))}
-          ${offer.sourceUrl ? `<a href="${esc(offer.sourceUrl)}" target="_blank" rel="noopener">${esc(t('sheet.verify'))}</a>` : ''}</p>
+        <p class="ps-note">${esc(t('sheet.note'))}</p>
         <div class="ps-related" hidden>
           <h4>${esc(t('sheet.similar'))}</h4>
           <div class="ps-rel-strip"></div>
@@ -435,6 +434,10 @@ export function createSheet(host, ctx) {
     /* Watch — the engine's Price Monitoring, via the existing dialog. */
     const seed = historyQuery(offer);
     sheet.querySelector('.ps-watch').addEventListener('click', () => {
+      const localBrochureLink =
+        `#/brochures?brochure=${encodeURIComponent(ctx.brochure.id)}` +
+        `&page=${encodeURIComponent(ctx.currentSourceIndex())}` +
+        `&offer=${encodeURIComponent(offer.offerId || offer.id)}`;
       openWatchDialog({
         kind: 'grocery',
         query: seed || title,
@@ -442,7 +445,8 @@ export function createSheet(host, ctx) {
         sizeText: `${offer.name || ''} ${offer.nameAr || ''}`,
         suggestedPrice: offer.price,
         currentPrice: offer.price,
-        link: offer.sourceUrl || null,
+        link: localBrochureLink,
+        image: offer.imageUrl || entry.cropUrl || null,
       });
     });
 

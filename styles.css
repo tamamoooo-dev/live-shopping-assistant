@@ -721,12 +721,18 @@ button { font-family: inherit; }
 .summary-name {
   display: block;
   margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   font-size: 13px;
   color: var(--text);
   text-decoration: none;
+  text-align: start;
   unicode-bidi: plaintext;
 }
-a.summary-name:hover { text-decoration: underline; }
+.summary-name:is(a, button) { cursor: pointer; }
+.summary-name:is(a, button):hover { text-decoration: underline; }
 .summary-others { margin-top: 6px; font-size: 12.5px; color: var(--muted); }
 .summary-note {
   margin-top: 8px;
@@ -1413,6 +1419,12 @@ a.summary-name:hover { text-decoration: underline; }
 .watch-row.is-deal { border-inline-start-color: var(--good); }
 .watch-row.is-close { border-inline-start-color: var(--warn); }
 .watch-row.is-watching { border-inline-start-color: var(--bad); }
+/* UNANCHORED — the watch is not monitoring anything. Deliberately NOT red:
+   red means "watching, price still above target", which is a healthy state.
+   This is a different thing (nothing is being watched at all) and must not be
+   mistaken for it at a glance. */
+.watch-row.is-unanchored { border-inline-start-color: var(--warn); }
+.watch-row.is-unanchored .watch-name { color: var(--muted); }
 .watch-row.is-deleting { opacity: 0.5; pointer-events: none; }
 /* Product thumbnail — the watch at a glance; neutral tile when absent/broken. */
 .watch-thumb {
@@ -1459,6 +1471,77 @@ a.watch-name:hover { text-decoration: underline; }
 }
 .watch-price.is-deal { color: var(--good); }
 .watch-price.is-pending { color: var(--muted); font-weight: 500; }
+/* The engine's own explanation for a quiet watch, verbatim. Small and calm —
+   it is an explanation, not an error. */
+.watch-reason {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+  margin-block-start: 2px;
+}
+.watch-confirm {
+  align-self: flex-start;
+  margin-block-start: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2, transparent);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.watch-confirm:disabled { opacity: 0.6; cursor: default; }
+.watch-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-block-start: 8px;
+}
+.watch-candidates-title { font-size: 12px; font-weight: 700; color: var(--muted); }
+.watch-candidates-empty { font-size: 12px; color: var(--muted); }
+.watch-candidate {
+  text-align: start;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2, transparent);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.watch-candidate:disabled { opacity: 0.6; cursor: default; }
+/* "Why is this quiet?" — a quiet, secondary affordance on a healthy-looking
+   watch that is not finding its product. Deliberately less prominent than the
+   confirmation CTA: that one is a required action, this one is an inspection. */
+.watch-diagnose {
+  align-self: flex-start;
+  margin-block-start: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.watch-diagnose:disabled { opacity: 0.6; cursor: default; }
+.watch-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-block-start: 8px;
+}
+.watch-diag-row {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.watch-diag-row.is-match { color: var(--good); }
 /* Tertiary: quiet supporting details. */
 .watch-meta {
   font-size: 11.5px;

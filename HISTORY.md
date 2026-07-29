@@ -4545,3 +4545,658 @@ backlog with no vision work (exactly the repair's state) never drained —
 src/index.js now runs a D1-only resolution pass in that branch (deployed
 51d79c46). Backlog drains ~100/fire; the old-week Nadec offers re-bind last
 (newest-first feed).
+
+## §43 · Extraction prompt frozen: Mistral Medium + the Verbatim Prompt (2026-07-25)
+
+A 50-crop final validation of **Mistral Medium (Expanded JSON, no OCR, reasoning
+off)** was run on an entirely new sample — 17 retailers, 50 distinct categories,
+every image excluded from all prior benchmarks (exclusion built from the 1,613
+images actually PROCESSED by earlier runs, deliberately NOT from the
+`candidate-snapshot.json` pool files, which would have wrongly eliminated two
+whole retailers). Artifacts:
+`brochure-engine/benchmarks/mistral-medium-production-validation-50-2026-07-25/`.
+
+The baseline prompt scored English name 24.0%, brand 93.9%, current price 92.0%,
+previous price 75.5%, quantity 94.0%. The name figure was misleading: 24 of 38
+misses were pure DECOMPOSITION — the model split the caption into
+name + brand + package_size, so every printed token survived somewhere in its own
+output and ~74% of captions were reconstructible by fusion.
+
+Three prompt variants were then tested on frozen bytes with only the `name_en`
+instruction changed:
+
+- **Verbatim** ("copy the complete title… do not remove the brand… do not remove
+  the size"): 6/10 then 9/10 on two disjoint failure subsets.
+- **Brochure-title** ("extract only the title shown in the brochure, ignore
+  package text"): 5/10 — a REGRESSION. It restores the brand reliably but reads
+  "return only the title" as *title minus size*, cutting the size clause out of
+  captions that contain it. The two directives fix different halves and neither
+  is complete alone.
+
+Full frozen-50 re-run under Verbatim (same bytes, model, temperature, schema,
+scorer, truth): **English name 24.0% → 86.0%**, brand 93.9% → 95.9%, current
+price 92.0% (unchanged), previous price 75.5% → 77.6%, quantity 94.0% → 96.0%.
+31 crops gained on the name, **zero regressed**; exact McNemar p ≈ 9.3 × 10⁻¹⁰.
+Exactly one crop-level reversal in the whole benchmark (crop 32 brand
+`LuLu FRESH` → null). Cost $0.00186 → $0.00205/crop (+10%), latency 1.78 → 1.83 s.
+
+**Decision (user, 2026-07-25): adopted and FROZEN as the production baseline** —
+`mistral-medium-latest` + Verbatim Prompt (sha256 `e643b2a1…`) + Expanded JSON +
+reasoning `none`. Manual review established that nearly all remaining scored
+failures are not extraction failures but ENRICHMENT — brand placed ahead of the
+title, extra on-pack information carried, an obvious brochure misprint corrected,
+or simply more identity than the ground truth expected. For Super Search those
+are acceptable or preferable, so the benchmark's exact-caption metric is a FLOOR.
+The only genuine failure class is failing to detect the English title at all
+(crop 37 `Balasham` → null). Prompt optimization is CLOSED; further prompt
+experiments require an explicit request, and replacement requires a larger
+production validation. Focus moves downstream: brand lexicon, phrase lexicon,
+canonicalization, product identity, search quality.
+
+Three constraints survive the prompt change because they are model properties,
+not prompt properties:
+- **Current-price role inversion, 2/50 (4%)** — the crossed-out price returned as
+  the selling price, at 0.99+ self-confidence, identical under both prompts. A
+  deterministic price guard remains MANDATORY before extracted prices reach
+  shoppers.
+- **Self-confidence is uncalibrated** — 0.997 mean on wrong names vs 1.000 on
+  correct. Never gate acceptance on it (consistent with §40/§41).
+- **Temperature 0 is not deterministic** — re-running the identical prompt over 20
+  already-run crops produced 2 different outputs, one of which flipped its score.
+  Treat 86% as ±2 points of run-to-run noise.
+
+⚠️ This is a DOCUMENTATION decision, not a deployment. `src/offers/enrich.js`
+still runs `mistral-small-latest` with the older 6-field `VISION_PROMPT`. Wiring
+the frozen config in is a separate, explicitly-approved change: swap the model and
+prompt constants, map Expanded JSON onto the stored schema (`package_size` →
+`size`, `quantity` → `pack_count`, decide whether price/unit/package_type/
+attributes persist), and review cost — Medium is ~10× Small per crop, so
+re-enriching the 54k-offer corpus is on the order of $110 with steady-state
+ingestion rising by the same multiple. See `PRODUCTION-PROMPT.md`.
+
+**→ That wiring was done the next day: see §44.** The paragraph above describes
+the state on 2026-07-25 before integration, and is kept as the record of it.
+
+## §44 · The frozen baseline wired into the pipeline (2026-07-25)
+
+§43's decision became the running configuration. Scope was deliberately narrow:
+adopt the validated configuration exactly as tested, change nothing else. No
+lexicon, canonicalization, identity or search work rode along.
+
+**What changed.** `src/offers/enrich.js` now runs `DEFAULT_MODEL =
+'mistral-medium-latest'` and a `VISION_PROMPT` that is byte-identical to
+`benchmarks/…-2026-07-25/production-prompt.txt` (sha256 `e643b2a1…`). The prompt
+is built as an array joined with an explicit `'\n'`, so the frozen hash cannot
+drift when a tool rewrites this CRLF file's line endings. `buildVisionRequest`
+sends the validated settings — temperature 0, **top_p 1**, **reasoning_effort
+'none'**, `json_object` — and passes the crop as a bare `data:` URL string,
+which is the form the 50-crop run actually used (the OpenAI-style `{ url }`
+object is equivalent for Mistral but was not the measured one). A new
+`PRODUCTION_EXTRACTION_BASELINE` object keeps the configuration in one place
+instead of scattered literals.
+
+**Expanded JSON → stored schema.** The adopted prompt returns 11 fields where the
+old one returned 6. Rather than rewrite the validators, `smartExtraction.js`
+gained an ordered alias reader (`OBSERVATION_FIELD_ALIASES` /
+`readObservationField`): `size` ← `size`, `package_size`; `pack_count` ←
+`pack_count`, `packCount`, `quantity`. Legacy key first, so stored observations
+and the OCR path validate exactly as before — **not one validation rule changed**.
+
+**Nothing the model returns is discarded.** `unit`, `package_type`, `attributes`
+(plus the model's verbatim names/size, useful because they show what it said
+before validation) are preserved in a new nullable `offer_enrichments.
+extraction_json` column — `migrate-2026-07-25-expanded-extraction.sql`, additive,
+apply BEFORE deploying. Nothing reads it yet; downstream identity work is
+expected to.
+
+**Prices are observed but QUARANTINED.** The side-car has never held a price and
+still does not: `preservedObservation()` strips `current_price`/`old_price` (and
+near-miss keys) from every write any read path can serve, because §43's measured
+**current-price role inversion** (2/50, at 0.99+ self-confidence, under both
+prompts) means a deterministic price guard is mandatory first — and it does not
+exist yet. The complete unedited reply, prices included, is still journaled per
+offer in `offer_extraction_attempts.output`, so the information is kept, just not
+reachable. `enrich.test.mjs` asserts both halves: no price in the row, both prices
+in the journal.
+
+**Verification.** 20/20 test files pass; `wrangler deploy --dry-run` builds.
+`enrich.test.mjs` now compares the live prompt against the benchmark's own frozen
+file (not a restated copy), so a reworded prompt fails even if someone updates
+both. A live 3-crop run through the real `enrichOffer` path on real flyer crops
+returned valid 11-field JSON on 3/3, correct `package_size`→`size` mapping,
+corroboration 1, and no price leak — e.g. `NAJJAR INSTANT COFFEE RED / GOLD 190G`
+with `package_type: "jar"`, `attributes: ["INSTANT COFFEE","RED","GOLD"]`.
+
+**Known, not fixed here** (all downstream work): the deterministic price guard is
+still owed before any extracted price may be used; `unit` is unreliable (one live
+crop returned `"SAR"`, i.e. the currency, not `ml`); Medium is ~10× Small per
+crop, so a full 54k re-enrichment is ~$110 and steady-state ingestion cost rises
+by the same multiple — no re-enrichment was triggered, new offers simply pick the
+baseline up as the drain reaches them.
+
+## §45 · Brand Lexicon: one canonical brand identity (2026-07-25)
+
+§44 froze extraction and moved quality work downstream. This is the first
+downstream layer, and its scope was deliberately one field: `brand`. No phrase
+lexicon, no package parser, no canonicalization, no product identity, no search
+or ranking change, no prompt change, no migration.
+
+**The problem.** The extractor returns whatever the crop prints, verbatim and by
+design: `Lurpak`, `LURPAK`, `lurpak`, `لورباك`, `لورباك®` are five strings for
+one company. Every phase after extraction — canonicalization, product identity,
+price history, search — needs them to be one thing, and needs that mapping to be
+boringly deterministic rather than a second model call.
+
+**The module.** `src/lexicon/brands.js`, pure and dependency-light. A brand
+string resolves through a pre-built `Map` (299 keys over 98 brands, built once at
+module load — no consumer ever scans the brand list) to a block:
+
+```
+observed_brand · brand_id · canonical_brand · display_en · display_ar
+matched_alias · status · lexicon_version
+```
+
+`status` is `resolved` | `unknown` | `empty`. There is no LLM call, no embedding,
+no similarity score, and no fuzzy repair anywhere in it.
+
+**`brand_id` IS the Browse slug.** The canonical bilingual names are read from
+`browse/brands.js` `BRANDS`, which stays the single truth for "which brands
+exist and what are they called"; the lexicon owns only the VARIANTS of those
+names. So the project has one brand identifier — Browse rails, the Registry and
+the lexicon all say `lurpak` — instead of a second namespace that a later phase
+would have to reconcile. `LEXICON_ONLY_BRANDS` is the documented escape hatch for
+a brand that belongs in a brand-typed FIELD but must never enter Browse's
+name-scanning index; it is empty today.
+
+**Most variants need no alias at all**, because the fold does the work: NFKC,
+the engine's bilingual `normalizeText` (lowercase, Arabic alef/hamza/taa-marbuta/
+alef-maqsura unification, Farsi glyph folding, punctuation → space), then NFKD +
+combining-mark removal. That collapses `LURPAK`/`Lurpak®`/`Nestlé`/`Ülker` on its
+own, and a second lookup pass over the space-free key adds `Al Marai`↔`Almarai`,
+`Kit Kat`↔`KitKat`, `Lay's`↔`Lays` — still an exact hit on a pre-built key, never
+an edit distance. `BRAND_ALIASES` therefore stays small and holds only what the
+fold genuinely cannot reach: different word order, a dropped conjunction, a
+different transliteration, a company suffix.
+
+**One ordering bug worth remembering:** trademark marks must be stripped BEFORE
+NFKC, because NFKC compatibility-decomposes `™` into the letters `TM` (and `℠`
+into `SM`) — folding first turned `Lurpak™` into the key `lurpaktm` and lost the
+brand. Caught by a test, fixed by ordering; the test stays.
+
+**The Arabic definite article is grammar, not identity.** Production observations
+print both `سنبلة` and `السنبلة` for one company, so the index also carries the
+article-carrying form of every single-word Arabic name — the Arabic counterpart
+of case-insensitivity, the same name with one more spelling. The REVERSE is
+deliberately not done: `browse/brands.js` measured that bare forms are frequently
+ordinary words (`صافي` = net, `ربيع` = spring, `الكبير` = the big one), so
+stripping would trade a safe miss for a possible wrong brand.
+
+**Unknown brands are never guessed** — `brand_id: null`, `canonical_brand` = the
+observation unchanged. `Lurpakk` does not become Lurpak, `Fine Baby` does not
+become Fine (sub-brands are out of scope), and `Lurpak Butter` does not resolve
+at all. A wrong mapping silently merges two companies' products for every phase
+downstream; a miss costs nothing that adding an alias later cannot fix.
+
+**Two ids can never claim one key.** Declaration order wins deterministically and
+the clash is RECORDED in `BRAND_ALIAS_COLLISIONS` rather than swallowed;
+`brands.test.mjs` asserts it stays empty, so a bad alias fails the tests instead
+of shadowing a brand in production. It is empty today.
+
+**Nothing was persisted, and no migration is needed.** `resolveBrand()` is pure,
+so `brand_id` is derivable from the stored `brand` column on read at any time —
+storing it is a denormalization decision that belongs to whichever later phase
+wants to index on it. The resolution rides along additively in memory:
+`enrich.js` attaches `brandIdentity` to the observation record and
+`brand_identity` to the canonical row, and because `enrichStore` binds columns
+explicitly, neither reaches D1. The `brand` column keeps the model's verbatim
+string, which remains the source of truth.
+
+**Verification.** 63 assertions in `src/lexicon/brands.test.mjs` (English
+aliases, Arabic aliases, case, trademark symbols, near-miss non-resolution,
+unknown brands, nulls, empty strings, non-strings, index integrity, contract
+stability, idempotency) plus 4 in `enrich.test.mjs` proving the block reaches a
+real `enrichOffer` record and never overwrites `brand`. All 29 test files across
+both repos pass; `wrangler deploy --dry-run` builds.
+
+**The honest limitation — vocabulary, not machinery.** Measured against real
+observations, the lexicon resolves **20% of unique brand strings (17% by volume)**
+on the 1000-crop 2026-07-21 production sample and **24% of unique strings** on the
+frozen-baseline 50-crop sample. The machinery is not the constraint; the 98-brand
+list is. The long tail is real brands simply absent from `BRANDS` — Najjar,
+Siniora, Nikai, Clikon, Hershey's, Olay, Listerine, Whiskas, Saudia, Ferrero,
+Fujifilm, Zoflora, Rasasi, Babyjoy, Finish, Nongshim. Growing that list is
+ordinary, low-risk vocabulary work (HANDOFF §11), but it is Browse-scoped —
+every addition also feeds `detectBrand()`, so it inherits the precision-guard
+discipline (`depts`, VETO_PREV/VETO_NEXT, `noStrip`) and must not be done in
+bulk without checking those.
+
+**Also known, not fixed here:** sub-brands and product lines (`Fine Baby`,
+`Nescafe Gold`) resolve to nothing rather than to their parent — a real
+hierarchy needs a parent/child model, which is a later phase's decision, not a
+silent alias; and a multi-word observation that merely CONTAINS a brand
+(`Lurpak Butter`) stays unknown by design, because splitting a brand-typed field
+into tokens is detection, and detection already lives in `browse/brands.js`.
+
+## §47 · English-primary structured product + Arabic Builder (2026-07-26)
+
+> §46 is reserved for the small-first routing REJECTION recorded in HANDOFF §5
+> (`benchmarks/small-first-routing-30-2026-07-25`); its narrative was never
+> written up. This is the next milestone number, not a gap.
+
+§45 moved quality work downstream and normalized ONE field. This phase reads the
+whole product: **the English extraction becomes the primary source of truth, and
+the Arabic name is GENERATED from it** instead of trusted from OCR.
+
+**The premise was measured first, not assumed.** On both production corpora a
+usable English name is present on **99%** of observations (990/1000) and 96% of
+the frozen 50 — so "English-primary" is not a trade, it is nearly free. Two
+measurements shaped the design more than the brief did:
+
+1. **The existing family lexicon already classifies half the catalog** (50.7% of
+   English names via `matching.js productFamily`), which made reusing the
+   project's ids obvious rather than minting a third namespace.
+2. **`productFamily()` is single-token, and on English names that is measurably
+   wrong**: "Ice Cream" resolves to the dairy `cream` family, and the brief's own
+   example "Baskin Ice Cream Vanilla with Chocolate" resolves to `chocolate`
+   because the derived tier fires on the FLAVOUR word. That is what forced a
+   phrase-level lexicon rather than a wrapper around the mirror.
+
+**Four new pure modules**, all in `src/lexicon/`, none of them touching
+`matching.js` (a MIRRORED file — rule 2) or the frozen prompt:
+
+| module | answers |
+|---|---|
+| `shopping.js` | what the product IS (242 categories) and what is said about it (126 descriptors, 8 roles), plus 12 package types |
+| `packageSize.js` | the printed sale size, and its Arabic label |
+| `structuredProduct.js` | one authoritative English record, assembled |
+| `arabicBuilder.js` | that record, composed into an Arabic name |
+
+**THE HEAD-NOUN RULE.** Category resolution is: *longest phrase wins; ties break
+RIGHTMOST*. English retail names are head-final noun compounds, so the last noun
+is what the product IS — "Chocolate Milk" is milk and "Milk Chocolate" is
+chocolate, out of ONE rule, with no scoring and no model. Longest-first is what
+makes "Ice Cream" beat "cream" and "Basmati Rice" beat "rice". Brand and size
+tokens are removed BEFORE the head noun is chosen, so a brand called "Cream" can
+never name the product.
+
+**THE HEAD-FINAL GUARD — found by measuring, not by reasoning.** The first
+coverage run built `Deligos Milk/Wheat Rusk` as **حليب** and `Fluffy Chocolate
+Pancake` as **شوكولاتة**: when the true head noun is absent from the lexicon, a
+MODIFIER wins by default. That is exactly the "wrong category" failure the layer
+exists to prevent. A matched category with **two or more unknown content words
+still after it** is now refused. Two, not one: a single trailing unknown is
+usually a variant word ("Rice Sella", "Diaper (Pants)"), and refusing on one
+would discard correct names to avoid a rarer wrong one. It cost 3.4 points of
+built-name coverage and is worth every one of them.
+
+**Namespace reuse, exactly as §45 did it.** `brand_id` is still the Browse slug;
+now every category entry also carries the matching mirror's `family` id and a
+Browse `aisle` id, and a test asserts every declared aisle exists in
+`browse/taxonomy.js`. The project keeps ONE set of identifiers.
+
+**The Arabic name is a PRESENTATION layer, by explicit user directive.** The
+structured English record stays authoritative for identity, search and matching;
+the Arabic name is composed in a fixed order — *category → descriptors → flavour
+phrase → brand → size* — so every product of the same kind reads the same way.
+Anything with no Arabic term is **DROPPED, never transliterated or left in Latin
+script** (the user's decision, weighed against keeping untranslated fragments
+inline). Measured result: **100% of built names contain no Latin characters at
+all**. What was dropped is always reported in `dropped`, so the lossiness is
+measurable rather than silent. Flavours join the way the brief specified —
+`فانيليا` + `شوكولاتة` → **`فانيليا بالشوكولاتة`** (two join with بـ, three or
+more with و).
+
+**It refuses rather than guesses.** No category ⇒ no built name ⇒ the caller
+falls back to the observed Arabic OCR, which is the fallback the brief asks for
+and the reason no coverage threshold is needed anywhere.
+
+**Sizes keep the unit the flyer printed.** `parseSize()` answers a COMPARISON
+question and converts everything to one base unit, which is the wrong answer for
+a label: a shopper reading "١٠٠٠ مل" when the bottle says 1 Ltr is worse off. So
+`packageSize.js` reads the printed magnitude for display and carries
+`parseSize()`'s output verbatim as `canonical` — there is still exactly ONE size
+interpretation in the project. Arabic numeral agreement is real grammar and is
+implemented (3–10 plural, otherwise singular: "6 حبات" but "40 حبة"). One
+measured trap is locked by a test: `parseSize` marks a bare "…26s" suffix
+`count-weak`, and without honouring that ladder the model code **NRF110N26S**
+becomes a 26-piece pack on a product card.
+
+**§44's preserved fields finally have a reader.** `package_type` and
+`attributes` — stored in `extraction_json` since §44 and consumed by nothing —
+now feed the package-type table and a second descriptor pass. That immediately
+produced a duplication (`INSTANT COFFEE` as both category and attribute →
+"قهوة سريعة التحضير سريع التحضير"), fixed by skipping any attribute descriptor
+already inside the category's own phrase.
+
+**Additive, unpersisted, and deliberately not switched on.** `enrich.js` attaches
+`structured_product` + `arabic_name` beside §45's `brand_identity`;
+`enrichStore` binds columns explicitly, so none of it reaches D1 — **no column,
+no migration**. `applyEnrichment()` still serves the observed `name_ar`. Per the
+user's directive this additive phase exists ONLY for validation: once quality is
+proven on real rows the built name becomes the default display, because it is
+generated deterministically from the higher-quality English extraction.
+
+**Measured result** (`node validation/shopping-lexicon-coverage.mjs`, the
+standing instrument, re-run after every vocabulary change):
+
+| | frozen 50 | production 1000 |
+|---|---|---|
+| usable English name | 96.0% | 99.0% |
+| **Arabic name BUILT** | 68.0% | **61.1%** |
+| …free of Latin script | 100% | **100%** |
+| …carrying a size | 79.4% | 85.1% |
+| …carrying a brand | 26.5% | 27.5% |
+| mean lexical coverage | 0.584 | 0.529 |
+
+The brand figure is low for a known reason, not a new one: it is HANDOFF §11
+TODO 0c, the Brand Lexicon's measured 20–26% vocabulary coverage.
+
+**WHY 61.1% AND NOT THE ~90% THE PRE-ESTIMATE SUGGESTED.** The pre-estimate
+counted names *containing* one of the top-N frequent words ANYWHERE — an upper
+bound, flagged as such at the time, and the wrong metric: a word appearing
+anywhere in an English retail name is usually a MODIFIER, and only the HEAD NOUN
+can name a product. Measured on the 1000-row corpus: 372 unbuilt names contain a
+learnable word somewhere, but only **313** have one in the head-final position.
+`node validation/unbuilt-breakdown.mjs` sorts the whole corpus into mutually
+exclusive buckets that sum to 100%:
+
+| | share | fix |
+|---|---|---|
+| BUILT | 61.1% | — |
+| missing head noun, nothing understood | 16.4% | vocabulary |
+| missing head noun, descriptors understood | 15.1% | vocabulary |
+| refused by the head-final guard | 5.7% | none — this is the guard working |
+| no usable English name | 1.0% | upstream extraction |
+| opaque text (phone SKUs, model codes) | 0.4% | none |
+| brand + size only, no product word | 0.3% | none |
+
+So **31.5 of the 38.9 missing points (81%) are vocabulary** — data work, exactly
+as scoped. The script projects it honestly by ADDING the top-N missing head
+nouns and re-running the resolver rather than counting word occurrences:
+top-20 → 68.9%, top-50 → 74.9%, top-100 → 80.1%, top-200 → **90.1%**, all 223 →
+92.4%. The ~90% is real; it costs ~200 curated terms. ⚠️ The tail is FLAT, not
+steep: **171 of 223 missing head nouns (77%) occur exactly once**, so the last
+ten points are ~170 terms at ~1 product each — and the projection still credits
+every added term with a CORRECT categorization, which only human adjudication
+can confirm.
+
+**The guard also caught a bad term of ours.** `notebook` → دفتر would have built
+for "HP Victus Gaming Notebook 15-FA0212NX Core i5"; only the head-final guard
+stopped it. Bare `notebook` is a laptop as often as it is stationery in a
+hypermarket flyer, so the entry was narrowed to `note book` / `exercise book`
+per curation rule 1 (prefer the phrase, drop the ambiguous bare word). The guard
+refusals are dominated by exactly this class — `SOUP SET WITH METAL STAND`,
+`Ladies Hand Bag + Ladies Wallet` — which is why its 5.7% is a feature.
+
+**Two brands were added to `LEXICON_ONLY_BRANDS`** (empty until now): `arwa` and
+`baskin-robbins`, both needed by the brief's own examples and both unsafe for
+Browse's NAME scanner — "أروى" is also an ordinary given name and "Baskin" is a
+short form `detectBrand()` would have to guess at. In a field the extractor
+already labelled "brand" they are unambiguous, which is precisely the case that
+escape hatch was documented for.
+
+**Verification.** 25/25 engine test files pass (3 new: shopping, packageSize,
+structuredProduct incl. the Arabic Builder, plus new assertions in
+`enrich.test.mjs` proving the block reaches a real `enrichOffer` record, is built
+from English, and never replaces the observed `name_ar`).
+`wrangler deploy --dry-run` builds. The brief's two examples are locked as tests:
+
+```
+Arwa Bottled Water 330 ml               -> مياه معبأة أروى 330 مل
+Baskin Ice Cream Vanilla with Chocolate -> آيس كريم فانيليا بالشوكولاتة باسكن روبنز
+```
+
+---
+
+## §48 · Vision Pipeline: the architecture around extraction (2026-07-26)
+
+§47 finished the *content* work — English-primary structure, a generated Arabic
+name. This milestone settles the **pipeline that surrounds Vision extraction**:
+where a stage begins and ends, who owns which fact, and what happens when a read
+comes back incomplete. Extraction itself is untouched and stays a frozen black
+box (§43/§44).
+
+The contract is `brochure-engine/VISION-PIPELINE.md`. It adds exactly four
+things to the deployed system — an explicit **Extraction Admission** stage, an
+explicit **Business Acceptance Gate**, an ordered **Recovery Ladder** ending in
+a human rung, and a named **Developer Review** stage. Everything else in it is a
+written contract for behaviour that already ships.
+
+### The four conflicts the review found
+
+The original brief contradicted shipped invariants in three places, and review
+surfaced a fourth. None was designed around silently:
+
+**C-1 · "Small is the default extractor" inverted a PERMANENT directive.** The
+resolution is to name **roles** — `PRIMARY EXTRACTOR`, `RECOVERY EXTRACTOR` —
+and let `visionModel.js` bind them, so a Budget profile (Primary = Small) and a
+Quality profile (Primary = Medium) are both supported without touching the
+architecture. Recorded explicitly: Budget is a **conscious operator decision,
+not the recommended production configuration**. It buys −91.1% inference cost
+for a measured 16.7% defect rate, and those defects are *silent* — escalation
+fired 0/30, because a presence gate recovers ABSENT fields and cannot recover
+WRONG ones. That is this architecture's known ceiling and it is written down
+rather than discovered later.
+
+**C-2 · The price mandate could not come from Vision.** Prices are structurally
+quarantined (§44), and the guard that would license extracted prices does not
+exist (TODO -1.5). Resolved by reading the **authoritative offer row** at S1 —
+before any model call — and re-asserting it at S4. Validated rather than
+asserted: the exact S1/S4 predicate passes **1000/1000** on the frozen corpus,
+with **0 role inversions**, against **2/50 (4%)** inversions in Vision-extracted
+prices at 0.99+ confidence. The offer row is not merely adequate; it is
+measurably the better source. Strictly cheaper too — a priceless offer never
+costs a model call.
+
+**C-3 · The stated stage order was not executable.** `Builder Score → Commerce
+Score → Arabic Builder` is not a sequence. S8e, S8f and S8g are **siblings**
+under the Structured Product, in any order or in parallel.
+
+**C-4 · Builder Score does not measure what its name claimed.** The sharpest
+finding of the review, and it came from reading the code rather than the
+document. `calculateBuilderScore` accepts the built name as a parameter and
+**never reads `built.name`, `built.parts` or `built.lines`**. Even the
+dropped-fragment deduction is a pure function of the Structured Product —
+`arabicBuilder.js` builds `dropped` from `residual_en` + `brand` *before*
+composition runs, and returns it even on the no-category path. Its position
+after the builder was a call-graph accident.
+
+So the score was renamed to what it has always computed: an **Identity
+Readiness** metric — *"does the Structured Product hold enough deterministic
+information to build a high-quality Arabic identity?"* — explicitly **not** a
+rendering-quality metric. `QUALITY-SCORES.md` was amended to match. **No formula
+changed, so no new score version**: rule 7 binds versioning to formula changes,
+and `builder-score-v1` stands.
+
+Deliberately *not* done: a second Render Fidelity score. The Arabic Builder is
+today a filter-and-join that is lossy by **drop**, never by **guess**, so such a
+score would return the same value on every row — which rule 8 rightly forbids.
+It is recorded as a future possibility only, for the day the builder acquires
+real linguistic decisions. Naming the first score honestly now means that gap
+will appear as a *visibly missing* score rather than a silently wrong one.
+
+### Three decisions taken to close the design
+
+**C-5 · The mandatory set is exactly three conditions** — price, comparable
+quantity, English name. Each earns its place by a different argument, which is
+the test for whether a set is right. Brand is the load-bearing exclusion: at 20%
+lexicon coverage a mandatory brand would reject ~80% of the catalogue for a
+vocabulary gap. A fourth condition is `v2`, never an edit of v1.
+
+**C-6 · OCR is retained as recovery rung R1**, by explicit act rather than
+omission. Retiring it would leave Mode A with no automated rung and send every
+rejection straight to human review — the one rung that does not scale.
+
+**C-7 · Accepted-field immutability binds MACHINE rungs only.** The invariant as
+written said "every rung, human included" — but the defects that matter most
+*are* accepted fields (the `10 KG` hallucination against a printed `5kg` was
+accepted at 0.98 confidence). Taken literally, the review tool could fill blanks
+and never correct a lie. P6's real purpose is stopping a weaker automated source
+from clobbering a stronger one; the human is not a competing source but the
+authority the ladder escalates *to*. Bounded by three constraints: the override
+is additive, it is recorded (previous value + previous provenance), and machine
+immutability is untouched.
+
+### Increment 1 — code
+
+Four modules, all pure, additive and **inert in production**:
+
+| Module | What |
+|---|---|
+| `lexicon/comparableQuantity.js` | `comparable-quantity-v1`. A projection over existing parser outputs, never a third interpretation of a size. `unitPriceComparable` stays a separate bit from `status`, so a `container` basis can be admitted without anything computing a price per "1 bag" |
+| `offers/businessAcceptance.js` | `business-acceptance-v1` (S4) + `isExtractionCandidate` (S1). A conjunction, never a score — a weighted threshold would be compensatory *and* circular |
+| `src/usableEnglish.js` | One definition of the ≥2-Latin-letter bar, closing a duplication that lived in two modules with comments promising to match. A dependency-free leaf on purpose |
+| R1 · `Human` provenance | `EXTRACTION_PROVENANCE`, `applyHumanReview`, and the corroboration fix. **This was a real correctness bug**: `accepted.Human` did not exist, so a developer-approved row was written NON-SERVABLE and the review tool would have silently accomplished nothing |
+
+30 suites / 935 assertions green. Two tests pin things future readers will want
+to "fix": a `container`-basis product passes S4 *and* scores 0 on Commerce
+Score's `package_size` (acceptance is a floor, the score is a measurement), and
+`HONOR 5G` projects as a well-formed **5 g** because `parseSize` reads the model
+designator as a measure. The second documents a measured ceiling, not desired
+behaviour — M2 answers *resolved*, never *correct*.
+
+### One recommendation withdrawn on evidence
+
+**R7 (add `oz` to the package parser) was withdrawn — its premise was false.**
+It claimed `matching.js SIZE_PATTERN` accepts `oz` while `packageSize` does not.
+There is no `SIZE_PATTERN` identifier, and `matching.js` has no ounce support
+anywhere: `parseSize('', '12 oz')` returns `{unit: null}`. So there was no
+inconsistency to close — `oz` is uniformly unsupported, which is coherent, and
+yields "no size", the documented failure mode. Measured before deciding:
+`oz`/`ounce` appears in **0 of 1,000** production rows. Adding it would mean
+editing the comparison path that watch matching and unit-price ranking depend
+on, and resolving `oz`(weight) vs `fl oz`(volume), for a unit that does not
+occur in a metric market.
+
+### Deferred, deliberately
+
+R4 (S1 predicate into SQL), R5/R6 (persist verdicts with per-condition reasons),
+S6 (`source` CHECK widening), S5 (one durable rung-agnostic recovery queue), and
+S7 (the Developer Review surface). Order and rationale in HANDOFF §11 TODO -1.7;
+live status in `VISION-PIPELINE.md` §12.
+
+> **Superseded by §49 (2026-07-26):** R4 and R5/R6 are built. S5's automatic
+> ladder was **withdrawn** by the C-8 user decision — recovery is queue-driven,
+> not pipeline-driven.
+
+## §49 · The gate starts measuring: S1 in SQL, S4 verdicts on the record (2026-07-26)
+
+§48 settled the architecture around extraction and built the pieces as pure
+functions — a gate that computed verdicts nothing consumed. This increment wires
+two of them to production reality: the admission predicate moves into SQL, and
+every acceptance verdict is written down, rejections included. It also records a
+**user decision that redraws the recovery boundary** (C-8) before any of it was
+built.
+
+### R4 · The S1 price predicate moves into SQL
+
+`hasUsableCommercePrice` now has a SQL twin, `enrichStore.USABLE_PRICE_SQL`,
+applied by `listDebris`, `countDebris` **and** `coverage`. A priceless offer can
+never pass S4, so paying a model call to discover that is pure waste; filtering
+in the WHERE clause both cuts spend and makes queue depth an honest number.
+
+**All three queries had to move together**, which was the non-obvious part.
+`coverage`'s comment already asserted `remaining == countDebris('all')`.
+Filtering the work queue alone would have left priceless offers sitting in the
+denominator forever — permanently uncovered, capping coverage% below 100 and
+turning an Ops number into a slow lie.
+
+**The real risk was translation fidelity, and it was not theoretical.** A hand
+translation of a JS predicate into SQL rots silently, and no test that mocks D1
+can catch SQLite disagreeing with JavaScript about what a number is. So the
+predicate is pinned by a differential test that executes the real fragment
+against real SQLite (`node:sqlite`) over 21 adversarial rows and asserts
+row-for-row agreement. It caught two divergences before they shipped:
+
+- **NBSP-padded currency** (`'SAR '`). JS `String.trim()` strips U+00A0;
+  SQLite's bare `TRIM` strips ASCII space only. SQL was **stricter** than JS —
+  the dangerous direction, silently starving an extractable offer of its one
+  model call. Fixed by spelling out the trim character set.
+- **`Infinity`**. `typeof(price)` is `'real'` but `Number.isFinite` is false, so
+  SQL was more permissive. Unreachable through the sanity-gated ingest path, and
+  excluded anyway so the twin stays exact rather than approximately exact.
+
+The fragment therefore uses `typeof(price) IN ('integer','real')` and **not**
+`CAST(price AS REAL) > 0`: SQLite columns are dynamically typed, so a non-numeric
+string can sit in a REAL column, and `CAST('12abc' AS REAL)` is `12.0` while
+`Number('12abc')` is `NaN`. CAST would have admitted offers JS calls priceless.
+
+### R5/R6 · Every verdict on the record, rejections included
+
+New table `offer_acceptance_verdicts` (one additive migration), written from
+inside `saveVisionOutcome`'s existing atomic batch, so no offer can carry a
+verdict describing an extraction that was rolled back — nor an extraction with no
+verdict.
+
+**Rejections are the point.** A stored reject with its per-condition `missing`
+list is the only thing that can calibrate the mandatory set against real traffic;
+without it the sole signal is queue depth, which cannot distinguish a well-tuned
+gate from one rejecting everything for a single reason. There is deliberately no
+`if (accepted)` in the write path, and a test asserts its absence.
+
+**S4 runs on both drain branches.** The gate judges Quality-Gate rejects too, not
+only passes — and a Quality-Gate reject is the *likeliest* S4 reject, so scoring
+only the passes would have blinded the data to the population that matters most.
+The branches differ only in where Comparable Quantity comes from: a passed row
+has a Structured Product, a rejected one has none, so the gate falls back to the
+preserved observation. That fallback existed already; this is what it was for.
+
+**Per-condition, never aggregated (R6).** `acceptanceSummary()` reports
+`missingByCondition` (overlapping — one offer short of two conditions counts in
+both) plus an `onlyCondition` view isolating offers a *single* condition is
+keeping out, which is the actionable number: it is what would change if that
+condition were dropped. The condition list is imported from the gate, so a future
+`v2` cannot be silently missing from reports, and verdicts carry their version so
+v1 and v2 are never averaged together.
+
+**Migration-tolerant on purpose.** The store probes once per instance for the
+table and omits the statement when absent. Because the write rides inside the
+atomic batch, a hard dependency there would have turned a missing migration into
+*lost extraction work* — so a calibration record is never allowed to fail an
+extraction. `report.acceptance.persisted` staying 0 while `judged` climbs is the
+intended signal that the migration has not been applied.
+
+### C-8 · Recovery becomes queue-driven, not pipeline-driven (user decision)
+
+Taken mid-implementation, before S5 existed, and it **withdraws the automatic
+recovery ladder** the brief originally specified (the `RUN | TERMINATE | HOLD`
+router and the automatic Mode A / Mode B progression).
+
+**Business Acceptance now ends the extraction pipeline.** A rejected product is
+written to a Recovery Queue with its verdict and `missing` conditions, and the
+pipeline stops. Nothing is invoked as a consequence. The queue is the permanent
+architectural boundary; **Vision Medium and OCR are recovery processors attached
+to it, not mandatory stages.** Two execution modes, both operator-owned: Manual
+(default — items wait) and Auto (self-drains when the operator judges the budget
+allows).
+
+**The reasoning is about who commits money.** Recovery is the expensive half of
+the system — Vision Medium and OCR both cost materially more per offer than a
+Vision Small read. An automatic ladder commits spend as a side effect of an
+extraction verdict, which puts the pipeline in charge of the budget. C-8 inverts
+it: the pipeline decides *what needs recovery*, the operator decides *whether to
+pay*. Queue depth becomes a budget forecast instead of an invoice already
+incurred — and R5/R6, built in this same increment, is exactly the queue's input
+contract.
+
+**It does not reopen the small-first rejection**, but it does change one premise
+behind it, and that is recorded rather than left to be inferred. Small-first was
+rejected partly on a measured **0/30** escalation rate — no validator had the
+coverage to trigger a re-read. Under C-8 the escalation trigger is an operator
+working a queue, not a validator, which is a real answer to that failure. The
+ceiling is still unchanged: the §46 defects *pass* S4, so they are never queued,
+and no operator diligence at the queue surfaces an error the gate did not catch.
+Medium remains the baseline; Budget remains a conscious act under C-1.
+
+### State
+
+33 test suites / 970 assertions green, plus the full `dev.mjs selftest` including
+a live 1,057-offer D4D ingest. **NOT committed, NOT deployed.** R4 is the first
+item in this whole arc with a live production effect — priceless offers leave the
+extraction queue, so both queue depth and spend drop the moment it ships.
+Everything else is additive.
+
+⚠️ `migrate-2026-07-26-acceptance-verdicts.sql` must be applied **before** the
+deploy, or verdicts are silently discarded until it lands. Runbook in HANDOFF §11
+TODO -2(a); remaining pipeline work (S6, then S5's Recovery Queue per C-8, then
+S7) in TODO -1.7; live status in `VISION-PIPELINE.md` §12.

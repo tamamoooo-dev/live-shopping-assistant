@@ -22,7 +22,7 @@
 //     from Amazon" failure mode).
 
 import { openBrochureViewer } from './viewer.js';
-import { brochureForOffer, storeLabel, storeColor } from './brochure.js';
+import { localLandingForOffer, storeLabel, storeColor } from './brochure.js';
 import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, queryTokens, stageBand } from './match.js';
 import { featuredScore, featuredContext, recordChoice, isPrimaryPriceTier } from './featured.js';
 import { unitPriceLabel } from './compare.js';
@@ -537,6 +537,8 @@ function flyerCard(listing, badge, up) {
       currency: offer.currency || 'SAR',
       image: offer.imageUrl || null,
       sourceUrl: offer.sourceUrl || null,
+      brochureId: offer.brochureId || null,
+      pageIndex: Number.isInteger(offer.pageIndex) ? offer.pageIndex : null,
       validTo: offer.validTo || null,
     });
     cartBtn.textContent = '✓';
@@ -572,22 +574,21 @@ function flyerCard(listing, badge, up) {
 }
 
 // The ONE "open a flyer offer" behaviour (search grid + Browse share it).
-// Prefer the in-app viewer when the engine holds this offer's edition — the
-// user never leaves Super Search (the viewer handles page images AND stored
-// PDFs); it lands on the offer's page (pageRef), flies to the hotspot carrying
-// this offerId, pulses it and opens the product sheet — degrading level by
-// level (page-only -> page 1) when an older edition lacks the data. Otherwise
-// the offer's own flyer page opens externally.
+// Open only a verified LOCAL offer landing. D4D's sourceUrl is provenance for
+// ingestion and explicit verification tooling; it is never a storefront
+// navigation fallback. Requiring a page-level resolution also prevents the old
+// "some brochure from this store, page 1" substitution.
 export async function openFlyerOffer(offer) {
-  const b = await brochureForOffer(offer).catch(() => null);
-  if (b && (b.sourceType === 'images' || b.sourceType === 'pdf')) {
-    openBrochureViewer(b, storeLabel(offer.store), {
-      targetPageId: offer.pageRef,
-      targetOfferId: offer.offerId,
+  const landing = await localLandingForOffer(offer).catch(() => null);
+  if (landing) {
+    openBrochureViewer(landing.brochure, storeLabel(offer.store), {
+      targetPageId: landing.targetPageId,
+      targetPageIndex: landing.targetPageIndex,
+      targetOfferId: landing.targetOfferId,
     });
-  } else if (offer.sourceUrl) {
-    window.open(offer.sourceUrl, '_blank', 'noopener,noreferrer');
+    return true;
   }
+  return false;
 }
 
 // --- the factory -----------------------------------------------------------------
