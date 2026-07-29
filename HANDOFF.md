@@ -712,9 +712,31 @@ Local: connector `node dev.mjs` (:8787); engine `node dev.mjs` /
 `node src/providers/amazon.test.mjs`, `node src/providers/panda.test.mjs`.
 
 **Secrets** (per Worker, `npx wrangler secret put <NAME>`):
-- `INGEST_SECRET` (engine) — guards ingest/check/prune. Value is uncommitted
-  and effectively unknown between sessions: **rotate it whenever you need it**
-  (harmless; allow a few seconds' propagation before hammering guarded routes).
+- `INGEST_SECRET` (engine) — guards ingest/check/prune/resolve/watch routes.
+  **`serverless-connector/brochure-engine/.ingest.secret` is the CANONICAL
+  LOCAL CACHE of the current production value.** It is gitignored (`*.secret`)
+  and must never be committed. `local-secrets.mjs` reads it, and the same value
+  is in the `PRODUCTION_INGEST_SECRET` user environment variable for
+  `deploy-registry.ps1`.
+
+  **Whenever this secret is rotated, refresh all three together** — write the
+  new value to `.ingest.secret` FIRST, then rotate production *from that file*
+  so they cannot diverge, then update the env var:
+
+  ```
+  node -e "require('fs').writeFileSync('.ingest.secret',require('crypto').randomBytes(48).toString('base64url'))"
+  cat .ingest.secret | npx wrangler secret put INGEST_SECRET
+  # PowerShell: [Environment]::SetEnvironmentVariable('PRODUCTION_INGEST_SECRET',(Get-Content -Raw .ingest.secret).Trim(),'User')
+  ```
+
+  Rotation is safe: nothing outside the Worker's own `env` consumes it (no CI,
+  no frontend, no other service), and the cron fan-out reads the same binding
+  its receiving routes compare against, so sender and receiver rotate together.
+  Avoid rotating within a minute of 05:45 UTC or 06:00 UTC Tue/Wed/Fri. Allow
+  ~1–2 minutes for edge propagation — a stale colo returns 403 briefly.
+
+  With this in place a maintenance session should never need to ask for the
+  secret again unless it has been deliberately rotated.
 - `NTFY_TOPIC` (engine, **unset**) — set to an unguessable topic to enable
   phone push (user subscribes to it in the ntfy app).
 - `PAAPI_ACCESS_KEY/SECRET_KEY/PARTNER_TAG` (connector, **unset**) — would
@@ -861,6 +883,19 @@ external product images — verify via `preview_eval` DOM inspection; preview
    Rollback: the target is the DEPLOYED worker, not the working tree. The
    migration is additive and nothing is dropped, so a rolled-back build reads
    the new rows unchanged (`watchMigration.test.mjs` asserts this).
+
+   KNOWN DEFECT (found in production 2026-07-29, NOT fixed — needs its own pass):
+   • `variety` is not canonicalised across languages. priceWatch.VARIANT_PHRASES
+     lists both 'full fat' and 'كامل الدسم' as separate surface forms, so an
+     Arabic listing yields variety='كامل الدسم' while its English twin yields
+     'full fat'. The resolver then vetoes the pair (variety-not-evidenced) and
+     the two never match. Same root cause as the processing double-count fixed
+     this session, but the fix is bigger: VARIANT_PHRASES/VARIANT_WORDS are flat
+     lists and would need to become surface-form -> canonical-value maps.
+     Impact: a watch anchored from an Arabic listing matches Arabic listings
+     only. Degraded, not broken — most KSA retailer listings are Arabic.
+     Evidence: pr_ad70c315cab4 "milk كامل الدسم", pr_4e03f5927215
+     "nadec milk خالي الدسم".
 
    DEFERRED (not blocking; revisit after real usage):
    • no /__ops BUTTONS for the two new ops — both are callable as
