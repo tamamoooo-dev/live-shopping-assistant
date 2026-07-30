@@ -213,6 +213,19 @@ function lowConfidence(count, trusted) {
   return untrusted >= 2 && untrusted >= trusted;
 }
 
+// The brand mentioned in a title, for the sheet's Brand chip. Unlike the OCR
+// path below, this only READS — it never removes the words it matched, because
+// on a Vision title the brand is part of the product's actual name.
+function detectBrand(text) {
+  for (const tok of String(text || '').split(/\s+/)) {
+    const clean = tok.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    if (!clean || isNoise(clean)) continue;
+    const b = matchBrand(clean);
+    if (b) return b;
+  }
+  return null;
+}
+
 /* --- the normalizer --------------------------------------------------------------- */
 // structureOfferName(offer) -> { en, ar, brand, fallback }
 //   en/ar     the cleaned per-language name lines ('' when nothing survives)
@@ -227,6 +240,35 @@ export function structureOfferName(offer) {
   const fallback = cleanOfferName(raw);
   let brand = (offer && offer.brand && String(offer.brand).trim()) || null;
   const brandNorm = brand ? new Set(norml(brand).split(' ')) : null;
+
+  // --- VISION NAMES ARE NOT OCR DEBRIS -----------------------------------------
+  // Everything below this point exists to repair machine-merged flyer OCR. An
+  // ENRICHED offer did not come from that: its name is the product title read
+  // verbatim off the package by Vision and passed through the engine's servable
+  // gate. Running the repair pipeline over it does not clean it — it destroys
+  // it, and every step does its own damage. Measured on the live Panda flyer:
+  //
+  //   "Puck Processed Analogue Cream Cheese Spread (2 x 500g)"  -> "Cream"
+  //   "Coopoliva Black / Green SLICED Olives (Per Kg/ 936g)"    -> "Canned Strips"
+  //   "Doritos Tortilla Chips (12 x 25g)"                       -> "Chips"
+  //   "Moussy Beer Classic (6 x 330ml)"                         -> "Beer Classic"
+  //   "Al Marai Unsalted Natural Butter"    -> "Marai …" ('al' is a debris word)
+  //   Arabic "أيس تي ربيع" (iced tea)       -> "آيس كريم" (ICE CREAM)
+  //
+  // The last two are the clearest proof this pipeline must not see a good name:
+  // the confidence gate cannot tell an unfamiliar-but-correct title from
+  // garbage, so it swaps a true name for a canonical guess, and the guess can
+  // be a different product. "Sliced" became "Strips" the same way.
+  //
+  // So: a Vision reading is shown EXACTLY as extracted, brand included — the
+  // brand belongs in the title, not only in its own chip. The chip is still
+  // populated (below) because it is useful, but detection no longer REMOVES the
+  // words it matched. The OCR path stays fully intact for un-enriched offers.
+  if (offer && offer.enriched) {
+    const en = String(offer.name || '').trim();
+    const ar = String(offer.nameAr || '').trim();
+    return { en, ar, brand: brand || detectBrand(en) || detectBrand(ar), fallback };
+  }
 
   // Tokenize (front debris already trimmed), drop noise, pull the brand out.
   // Survivors group into RUNS: consecutive same-script words with nothing

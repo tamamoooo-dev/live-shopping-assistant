@@ -297,6 +297,58 @@ function recordingHandlers(log) {
   console.log('product name normalization ✅');
 }
 
+/* --- enriched offers bypass the OCR repair pipeline entirely ----------------------- */
+{
+  // REGRESSION PIN (2026-07-30). Every fixture here is a REAL payload the engine
+  // served for the Panda 2026-W31 flyer, with the sheet output that was actually
+  // rendered on top of it. This module was built to repair merged flyer OCR; a
+  // Vision reading is a verbatim package title and must not be touched.
+  const vision = (name, nameAr, category) =>
+    structureOfferName({ name, nameAr, category, enriched: true });
+
+  const puck = vision(
+    'Puck Processed Analogue Cream Cheese Spread (2 x 500g)',
+    'شيبية جبنة كريم مطبوخة (2 × 500 جم)', 'cheese-creame',
+  );
+  ok('vision english is shown verbatim', puck.en === 'Puck Processed Analogue Cream Cheese Spread (2 x 500g)');
+  ok('vision arabic is shown verbatim', puck.ar === 'شيبية جبنة كريم مطبوخة (2 × 500 جم)');
+  ok('brand chip still populated', puck.brand === 'Puck');
+  ok('name is not collapsed to its family', puck.en !== 'Cream');
+
+  // The brand belongs IN the title, not only in its own chip.
+  const moussy = vision('Moussy Beer Classic (6 x 330ml)', 'شراب شعير موصي', 'malt-beverages');
+  ok('brand stays inside the name', moussy.en.startsWith('Moussy'));
+  ok('brand chip is still set', moussy.brand === 'Moussy');
+
+  // 'al' is an INLINE_DEBRIS word — it used to eat the front of this brand.
+  const almarai = vision(
+    'Al Marai Unsalted Natural Butter (3 x 100g)',
+    'زبدة طبيعية غير مملحة المراعي (٣ × ١٠٠ جرام)', 'butter-margarine',
+  );
+  ok('leading Al survives on a vision name', almarai.en === 'Al Marai Unsalted Natural Butter (3 x 100g)');
+
+  // The two cases that prove the confidence gate must never see a good name:
+  // it swapped a TRUE title for a canonical guess of a DIFFERENT product.
+  const iceTea = vision('Rabea Ice Tea (6 x 320ml)', 'أيس تي ربيع (6 × 320 مل)', 'tea-coffee');
+  ok('iced tea is not relabelled ice cream', iceTea.ar === 'أيس تي ربيع (6 × 320 مل)');
+  ok('iced tea arabic is never آيس كريم', !iceTea.ar.includes('آيس كريم'));
+
+  const olives = vision(
+    'Coopoliva Black / Green Sliced Olives (Per Kg/ 936g)',
+    'زيتون أسود / أخضر شرائح (الكيلو ٩٣٦ جرام)', 'canned-packeted',
+  );
+  ok('sliced olives keep their real name', olives.en === 'Coopoliva Black / Green Sliced Olives (Per Kg/ 936g)');
+  ok('"Sliced" is never rewritten to "Strips"', !/strips/i.test(olives.en));
+
+  // And the OCR path is untouched: the same garbage still gets repaired.
+  const stillRepaired = structureOfferName({
+    name: 'محمد عجم عايلي خبير frozen imily pack seara افتتاح ملاعبه من et سال صدور دجاج',
+    category: 'frozen-chicken-poultry',
+  });
+  ok('un-enriched OCR garbage is still repaired', stillRepaired.en === 'Frozen Chicken Breast');
+  console.log('vision names bypass OCR repair ✅');
+}
+
 /* --- confidence gate: reject OCR garbage, fall back to a canonical name ------------- */
 {
   // THE production bug: merged banner / person-name / football garbage. The
