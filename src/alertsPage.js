@@ -26,9 +26,11 @@ import {
   declineWatchCandidates,
   diagnoseWatch,
   repairWatch,
+  refreshWatch,
 } from './brochure.js';
 import { t } from './i18n.js';
 import { notificationTarget } from './notificationNavigation.js';
+import { manualRefreshReason } from './watchRefresh.js';
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -492,6 +494,26 @@ function watchRow(w, onDelete, onUpdate) {
     why.type = 'button';
     why.addEventListener('click', () => openDiagnostics(w, why));
     main.appendChild(why);
+  }
+
+  // A manual retry is exceptional: provider failure, first evaluation, or a
+  // check older than the daily schedule plus grace. The endpoint enforces the
+  // same gate. A successful evaluation repaints the row without this button.
+  if (!unanchored && manualRefreshReason(w)) {
+    const refresh = el('button', 'watch-refresh', t('alerts.refreshNow'));
+    refresh.type = 'button';
+    refresh.addEventListener('click', async () => {
+      refresh.disabled = true;
+      refresh.textContent = t('alerts.refreshing');
+      const result = await refreshWatch(w.id);
+      if (result.error) {
+        refresh.disabled = false;
+        refresh.textContent = result.error;
+        return;
+      }
+      if (onUpdate) onUpdate(result.watch, row);
+    });
+    main.appendChild(refresh);
   }
 
   // Only 'needs-confirmation' has a user action: the resolver found more than

@@ -158,6 +158,8 @@ const STRINGS = {
     'alerts.diagnoseFailed': 'Could not check right now.',
     'alerts.repairCta': 'Try to repair',
     'alerts.repairing': 'Checking identity…',
+    'alerts.refreshNow': 'Refresh now',
+    'alerts.refreshing': 'Refreshing...',
     'alerts.atStore': 'at {store}',
     'alerts.flyerSuffix': ' (flyer)',
     'alerts.scopeProduct': '{store} · this product',
@@ -545,6 +547,8 @@ const STRINGS = {
     'alerts.view': 'عرض ↗',
     'alerts.source.online': 'متجر إلكتروني',
     'alerts.source.flyer': 'نشرة هذا الأسبوع',
+    'alerts.refreshNow': 'تحديث الآن',
+    'alerts.refreshing': 'جارٍ التحديث...',
 
     // Watch dialog
     'watch.title': 'متابعة هذا السعر',

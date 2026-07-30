@@ -1493,6 +1493,20 @@ a.watch-name:hover { text-decoration: underline; }
   cursor: pointer;
 }
 .watch-confirm:disabled { opacity: 0.6; cursor: default; }
+.watch-refresh {
+  align-self: flex-start;
+  margin-block-start: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--good);
+  background: transparent;
+  border: 1px solid var(--good);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.watch-refresh:disabled { opacity: 0.6; cursor: default; }
 .watch-candidates {
   display: flex;
   flex-direction: column;

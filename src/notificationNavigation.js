@@ -2,6 +2,8 @@
 // when a price was observed. Retailer and brochure URLs expire; a fresh Super
 // Search does not. Amazon exact-product watches are the sole exception.
 
+import { structuredSearchQuery } from './structuredSearchQuery.js';
+
 const clean = (value) =>
   String(value || '')
     .replace(/[\u0000-\u001f\u007f]+/g, ' ')
@@ -42,9 +44,10 @@ function searchQuery(watch = {}, observation = {}) {
   // The ANCHOR names the destination. registryProductId is it for every watch
   // now; a legacy kind:'registry' row carried the same pr_ id in product_id.
   const registry = /^pr_[a-z0-9]+$/i.test(anchorProductId(watch));
+  const identityQuery = structuredSearchQuery(watch, observation);
   const candidates = registry
-    ? [watch.label, observation.name, watch.query]
-    : [watch.query, watch.label, observation.name];
+    ? [identityQuery, watch.label, observation.name, watch.query]
+    : [identityQuery, watch.query, watch.label, observation.name];
   return clean(candidates.find((value) => clean(value)));
 }
 

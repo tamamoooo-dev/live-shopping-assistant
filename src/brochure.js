@@ -588,6 +588,19 @@ export async function repairWatch(id) {
   }
 }
 
+export async function refreshWatch(id) {
+  try {
+    const r = await fetch(
+      `${ENGINE_BASE}/watches/refresh?id=${encodeURIComponent(id)}&profile=${encodeURIComponent(profileId())}`,
+      { method: 'POST' },
+    );
+    const j = await r.json().catch(() => ({}));
+    return r.ok ? j : { error: j.error || `HTTP ${r.status}` };
+  } catch {
+    return { error: t('watch.updateError') };
+  }
+}
+
 export async function deleteWatch(id) {
   try {
     const r = await fetch(
