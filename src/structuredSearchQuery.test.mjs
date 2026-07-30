@@ -38,4 +38,14 @@ assert.equal(
 );
 assert.equal(sadia.label, before, 'query generation must not mutate the displayed title');
 
-console.log('structuredSearchQuery.test: 6 passed, 0 failed');
+const legacySadia = {
+  label: 'Fresh Boneless Premium Sadia Chicken Breast Tender 1 kg',
+  registryProductId: 'pr_sadia1',
+  searchIdentity: { family: 'Chicken', cut: 'breast', brand: 'Sadia' },
+};
+assert.equal(
+  notificationTarget(legacySadia, { store: 'panda' }).href,
+  '#/search?q=Chicken+Breast+Sadia&product=pr_sadia1',
+);
+
+console.log('structuredSearchQuery.test: 7 passed, 0 failed');
