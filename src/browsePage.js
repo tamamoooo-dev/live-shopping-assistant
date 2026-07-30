@@ -151,6 +151,9 @@ function browseCard(offer) {
     e.stopPropagation();
     openWatchDialog({
       kind: 'grocery',
+      provider: offer.store,
+      productId: offer.id,
+      registryProductId: offer.productId || null,
       query: historyQuery(offer) || name,
       label: name,
       sizeText: `${offer.name || ''} ${offer.nameAr || ''}`,
@@ -158,6 +161,15 @@ function browseCard(offer) {
       currentPrice: offer.price,
       link: null,
       image: offer.imageUrl || null,
+      listing: {
+        id: offer.id,
+        provider: offer.store,
+        name: offer.name || name,
+        nameAr: offer.nameAr || null,
+        image: offer.imageUrl || null,
+        link: offer.sourceUrl || null,
+        registryProductId: offer.productId || null,
+      },
     });
   });
   card.appendChild(bell);

@@ -22,7 +22,10 @@ import {
   storeLabel,
   watchCandidates,
   confirmWatchProduct,
+  confirmWatchSource,
+  declineWatchCandidates,
   diagnoseWatch,
+  repairWatch,
 } from './brochure.js';
 import { t } from './i18n.js';
 import { notificationTarget } from './notificationNavigation.js';
@@ -186,6 +189,7 @@ export function openWatchDialog(opts) {
       targetPrice,
       provider: opts.provider,
       productId: opts.productId,
+      registryProductId: opts.registryProductId,
       link: opts.link,
       image: opts.image,
       sizeText: opts.sizeText,
@@ -198,6 +202,7 @@ export function openWatchDialog(opts) {
       // own brand and size columns are the strongest evidence available.
       listing: opts.listing || {
         id: opts.productId,
+        provider: opts.provider,
         name: opts.label || opts.query,
         brand: opts.brand || null,
         size: opts.sizeText || null,
@@ -260,21 +265,45 @@ async function openConfirmPicker(w, cta, onUpdate) {
   list.appendChild(el('div', 'watch-candidates-title', t('alerts.confirmTitle')));
   cta.after(list);
 
-  const candidates = await watchCandidates(w.id);
-  if (!candidates.length) {
+  const result = await watchCandidates(w.id);
+  if (!result.candidates.length || !result.version) {
     list.appendChild(el('div', 'watch-candidates-empty', t('alerts.confirmNone')));
     cta.disabled = false;
     cta.dataset.open = '0';
     return;
   }
-  for (const c of candidates) {
+  if (result.reason) list.appendChild(el('div', 'watch-candidates-empty', result.reason));
+  for (const c of result.candidates) {
     const btn = el('button', 'watch-candidate');
     btn.type = 'button';
     btn.dir = 'auto';
-    btn.textContent = [c.name, c.brand, c.size].filter(Boolean).join(' · ');
+    if (c.image) {
+      const img = document.createElement('img');
+      img.src = c.image;
+      img.alt = '';
+      img.loading = 'lazy';
+      btn.appendChild(img);
+    }
+    const size = c.size?.value && c.size?.unit
+      ? `${c.count && c.count > 1 ? `${c.count} × ` : ''}${c.size.value} ${c.size.unit}`
+      : c.size || null;
+    const copy = el('span', 'watch-candidate-copy');
+    copy.appendChild(el('strong', null, c.name || c.nameAr || c.productId));
+    copy.appendChild(el(
+      'span',
+      null,
+      [c.brand, size, (c.providers || []).map(storeLabel).filter(Boolean).join(', ')]
+        .filter(Boolean)
+        .join(' · '),
+    ));
+    const evidence = c.runnerEvidence || c.evidence || [];
+    if (evidence.length) copy.appendChild(el('small', null, evidence.join(' · ')));
+    btn.appendChild(copy);
     btn.addEventListener('click', async () => {
       btn.disabled = true;
-      const res = await confirmWatchProduct(w.id, c.productId);
+      const res = c.type === 'source'
+        ? await confirmWatchSource(w.id, c.provider, c.productId, result.version)
+        : await confirmWatchProduct(w.id, c.productId, result.version);
       if (res.error) {
         btn.disabled = false;
         list.appendChild(el('div', 'watch-candidates-empty', res.error));
@@ -285,6 +314,28 @@ async function openConfirmPicker(w, cta, onUpdate) {
     });
     list.appendChild(btn);
   }
+  const actions = el('div', 'watch-candidate-actions');
+  const none = el('button', 'watch-confirm', t('alerts.confirmNoneAction'));
+  none.type = 'button';
+  none.addEventListener('click', async () => {
+    none.disabled = true;
+    const res = await declineWatchCandidates(w.id, result.version);
+    if (res.error) {
+      none.disabled = false;
+      list.appendChild(el('div', 'watch-candidates-empty', res.error));
+      return;
+    }
+    if (onUpdate) onUpdate();
+  });
+  const later = el('button', 'watch-diagnose', t('alerts.confirmLater'));
+  later.type = 'button';
+  later.addEventListener('click', () => {
+    list.remove();
+    cta.disabled = false;
+    cta.dataset.open = '0';
+  });
+  actions.append(none, later);
+  list.appendChild(actions);
 }
 
 // Is this watch actually monitoring? A watch with no product anchor is not,
@@ -333,15 +384,20 @@ function parseWatchSpec(w) {
 }
 
 function anchorState(w) {
-  if (w.registryProductId || w.spec) return null;
-  const resolution = w.lastResolution || 'pending-migration';
-  if (resolution === 'needs-confirmation') {
+  const state = w.anchorState || (
+    w.registryProductId ? 'anchored_registry' :
+      w.spec ? 'anchored_spec' :
+        w.lastResolution === 'needs-confirmation' ? 'confirmation_required' :
+          w.lastResolution === 'unresolvable' ? 'unresolvable' : 'resolving'
+  );
+  if (['anchored_registry', 'anchored_source', 'anchored_spec'].includes(state)) return null;
+  if (state === 'confirmation_required') {
     return { kind: 'needs-confirmation', label: t('alerts.needsConfirmation'), actionable: true };
   }
-  if (resolution === 'unresolvable') {
+  if (state === 'unresolvable') {
     return { kind: 'unresolvable', label: t('alerts.unresolvable'), actionable: false };
   }
-  return { kind: 'pending', label: t('alerts.notWatching'), actionable: false };
+  return { kind: 'resolving', label: t('alerts.resolving'), actionable: false };
 }
 
 function watchRow(w, onDelete, onUpdate) {
@@ -415,8 +471,9 @@ function watchRow(w, onDelete, onUpdate) {
   // it is quiet — that is the difference between this design and the one it
   // replaced, and paraphrasing it here would put the explanation back out of
   // sync with the check that produced it.
-  if (unanchored && w.lastResolutionReason) {
-    const why = el('div', 'watch-reason', w.lastResolutionReason);
+  const identityReason = w.identityResolutionReason || w.lastResolutionReason;
+  if (unanchored && identityReason) {
+    const why = el('div', 'watch-reason', identityReason);
     why.dir = 'auto';
     main.appendChild(why);
   }
@@ -424,7 +481,13 @@ function watchRow(w, onDelete, onUpdate) {
   // An ANCHORED watch that keeps reporting something other than 'ok' is the
   // case diagnostics exists for: the anchor is fine, so the real question is
   // which candidates the resolver saw and why it rejected each one.
-  if (!unanchored && w.lastResolution && w.lastResolution !== 'ok') {
+  if (!unanchored && w.monitoringHealth &&
+      !['ok', 'unchecked'].includes(w.monitoringHealth)) {
+    if (w.monitoringHealthReason) {
+      const healthReason = el('div', 'watch-reason', w.monitoringHealthReason);
+      healthReason.dir = 'auto';
+      main.appendChild(healthReason);
+    }
     const why = el('button', 'watch-diagnose', t('alerts.diagnoseCta'));
     why.type = 'button';
     why.addEventListener('click', () => openDiagnostics(w, why));
@@ -439,13 +502,32 @@ function watchRow(w, onDelete, onUpdate) {
     cta.addEventListener('click', () => openConfirmPicker(w, cta, onUpdate));
     main.appendChild(cta);
   }
+  if ((unanchored && !unanchored.actionable) ||
+      (!unanchored && ['anchor_unavailable', 'not_found'].includes(w.monitoringHealth))) {
+    const repair = el('button', 'watch-diagnose', t('alerts.repairCta'));
+    repair.type = 'button';
+    repair.addEventListener('click', async () => {
+      repair.disabled = true;
+      repair.textContent = t('alerts.repairing');
+      const result = await repairWatch(w.id);
+      if (result.error) {
+        repair.disabled = false;
+        repair.textContent = result.error;
+        return;
+      }
+      if (onUpdate) onUpdate();
+    });
+    main.appendChild(repair);
+  }
 
   // Current best price — the number the user actually cares about. An
   // unanchored watch has no current price by definition: showing the last one
   // it ever found would be the stale-number bug the redesign removed.
   const price = el('div', 'watch-price');
   if (unanchored) {
-    price.textContent = t('alerts.pendingMigration');
+    price.textContent = unanchored.kind === 'resolving'
+      ? t('alerts.resolvingPrice')
+      : t('alerts.pendingMigration');
     price.classList.add('is-pending');
   } else if (w.lastPrice != null) {
     const store = storeLabel(w.lastStore) || w.lastStore || '';

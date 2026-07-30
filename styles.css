@@ -1502,6 +1502,9 @@ a.watch-name:hover { text-decoration: underline; }
 .watch-candidates-title { font-size: 12px; font-weight: 700; color: var(--muted); }
 .watch-candidates-empty { font-size: 12px; color: var(--muted); }
 .watch-candidate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   text-align: start;
   padding: 8px 10px;
   font: inherit;
@@ -1511,6 +1514,28 @@ a.watch-name:hover { text-decoration: underline; }
   border: 1px solid var(--line);
   border-radius: 10px;
   cursor: pointer;
+}
+.watch-candidate img {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
+.watch-candidate-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.watch-candidate-copy span,
+.watch-candidate-copy small { color: var(--muted); }
+.watch-candidate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 4px;
 }
 .watch-candidate:disabled { opacity: 0.6; cursor: default; }
 /* "Why is this quiet?" — a quiet, secondary affordance on a healthy-looking

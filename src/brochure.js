@@ -511,7 +511,7 @@ export async function createWatch(body) {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return { error: j.error || `HTTP ${r.status}` };
-    return { watch: j.watch };
+    return j;
   } catch {
     return { error: t('watch.createError') };
   }
@@ -543,9 +543,11 @@ export async function watchCandidates(id) {
       `${ENGINE_BASE}/watches/candidates?id=${encodeURIComponent(id)}&profile=${encodeURIComponent(profileId())}`,
     );
     const j = await r.json().catch(() => ({}));
-    return r.ok ? j.candidates || [] : [];
+    return r.ok && Array.isArray(j.candidates)
+      ? { version: j.version || null, reason: j.reason || null, candidates: j.candidates }
+      : { version: null, reason: null, candidates: [] };
   } catch {
-    return [];
+    return { version: null, reason: null, candidates: [] };
   }
 }
 
@@ -564,8 +566,27 @@ export async function diagnoseWatch(id) {
 }
 
 // The user's answer: bind this watch to that product. Reuses the PATCH route.
-export const confirmWatchProduct = (id, registryProductId) =>
-  updateWatch(id, { registryProductId });
+export const confirmWatchProduct = (id, registryProductId, candidateVersion) =>
+  updateWatch(id, { registryProductId, candidateVersion });
+
+export const confirmWatchSource = (id, sourceProvider, sourceProductId, candidateVersion) =>
+  updateWatch(id, { sourceProvider, sourceProductId, candidateVersion });
+
+export const declineWatchCandidates = (id, candidateVersion) =>
+  updateWatch(id, { confirmationAction: 'none', candidateVersion });
+
+export async function repairWatch(id) {
+  try {
+    const r = await fetch(
+      `${ENGINE_BASE}/watches/repair?id=${encodeURIComponent(id)}&profile=${encodeURIComponent(profileId())}`,
+      { method: 'POST' },
+    );
+    const j = await r.json().catch(() => ({}));
+    return r.ok ? j : { error: j.error || `HTTP ${r.status}` };
+  } catch {
+    return { error: t('watch.updateError') };
+  }
+}
 
 export async function deleteWatch(id) {
   try {

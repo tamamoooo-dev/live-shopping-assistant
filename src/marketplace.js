@@ -477,6 +477,8 @@ function onlineCard(store, item, badge, up) {
             }
           : {
               kind: 'grocery',
+              provider: store.id,
+              productId: String(item.id),
               query: watchQueryFor(item),
               label: item.name,
               // Reference size for the engine's size gate — name usually carries

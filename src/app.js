@@ -433,12 +433,32 @@ async function fillSummary(slot, query, tagged, token, includeBrochures) {
         const h = model.headline.listing;
         openWatchDialog({
           kind: 'grocery',
+          provider: h.store?.id || h.store || null,
+          productId: h.source === 'online' ? h.it?.id : h.offer?.id,
+          registryProductId: h.productId || null,
           query,
           label: `${query}${sizeLabel(h.size) ? ` · ${sizeLabel(h.size)}` : ''}`,
           sizeText: h.name, // the reference size for the engine's size gate
           suggestedPrice: h.price,
           currentPrice: h.price,
           link: h.source === 'online' ? h.link : null,
+          image: h.image || null,
+          brand: h.brand || null,
+          listing: h.source === 'online'
+            ? {
+                ...h.it,
+                provider: h.store?.id || h.store || null,
+                registryProductId: h.productId || null,
+              }
+            : {
+                id: h.offer?.id,
+                provider: h.store?.id || h.store || h.offer?.store || null,
+                name: h.offer?.name || h.name,
+                nameAr: h.offer?.nameAr || null,
+                image: h.offer?.imageUrl || h.image || null,
+                link: h.offer?.sourceUrl || null,
+                registryProductId: h.productId || null,
+              },
         });
       },
     }),
