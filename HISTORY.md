@@ -5200,3 +5200,292 @@ Everything else is additive.
 deploy, or verdicts are silently discarded until it lands. Runbook in HANDOFF §11
 TODO -2(a); remaining pipeline work (S6, then S5's Recovery Queue per C-8, then
 S7) in TODO -1.7; live status in `VISION-PIPELINE.md` §12.
+
+## §50 · Comparable Quantity v4: one denominator, three orthogonal facts (2026-08-02)
+
+### The report
+
+> "Many products are missing the unit price even though the flyer clearly
+> provides it. For example, products in the Fresh section with prices expressed
+> as **SAR/kg** are not being recognized as unit prices."
+
+With one constraint attached, and it is the important part: *use Fresh as a case
+study, do not build a Fresh fix.* Everything below is category-blind.
+
+### The root cause
+
+**The system had no representation for a price that states its own
+denominator.** It modelled a price as a scalar and a size as a property of the
+package, then computed the unit price as a DIVISION — `price ÷ package size` —
+in two mirrored places (`priceWatch.unitPriceFor`, the frontend's `match.js
+unitPrice`).
+
+Saudi flyers price in two modes:
+
+| mode | flyer prints | what the price means |
+|---|---|---|
+| PACK pricing | `ALMARAI HALLOUMI 200 g — 12.95` | the price **of** the package |
+| BASIS pricing | `APPLE ROYAL GALA — PER KG — 7.99` | the price **per** unit |
+
+In basis pricing there is no package. The printed price already *is* the unit
+price. The pipeline asked "what size is this package?", was told "none", and
+returned null — for the field the flyer had stated **more** explicitly than in
+the pack case.
+
+Extraction was never the problem. The model reads the basis correctly and the
+pipeline then routes it into a field that cannot hold it. Production row
+`nesto:central:d4d:93210819`:
+
+```
+offers.price           = 7.99
+offers.name_ar         = "…تفاح رويال جالا برازيلي للكيلو apple royal gala brazil per kg"
+offer_enrichments.name = "Apple Royal Gala Brazil"
+offer_enrichments.size = "Per Kg"      ← the BASIS, stored in the SIZE field
+```
+
+`package_size → size` (enrich.js) hands `"Per Kg"` to `parsePackageSize()`, which
+searches for `NUM + UNIT`, finds no number, and reports no size. The Expanded
+JSON `unit` field — populated on 4,844 production rows with exactly `"KG"`,
+`"Per Kg"`, `"KILO"` — was preserved and, as §44 said in as many words,
+*"consumed by nothing"*.
+
+The damage then cascaded through four more layers: `projectComparableQuantity`
+had four bases and all four were *package* bases, so it returned ABSENT; the
+Business Acceptance Gate makes `comparable_quantity` mandatory, so the offer was
+**rejected outright, not merely unpriced**; Commerce Score deducted the full
+25/25 `package_size` component; and `rowToOffer` carried no size at all, so even
+the basis text that survived into D1 could not reach a client.
+
+Fresh is not a category bug. Fresh is where basis pricing is the norm — deli,
+butchery, fish, nuts, dates and loose confectionery fail identically.
+
+### Measured before touching anything (production D1, 43,854 enriched offers)
+
+| | |
+|---|---|
+| offers with no unit price | **12,011 (27.4%)** |
+| …of those, carrying a legible basis marker | **1,701** |
+| offers hard-REJECTED on `comparable_quantity` ABSENT | **4,747** |
+| offers served a unit price wrong by 30–320× | **144** |
+
+The last row mattered most. `Sea Bream 200-300 /Kg` is a fish grade;
+`CASHEW W320/KG` is a kernel grade; `FRESH SHRIMPS 40 / 60 (KG)` is pieces per
+kilo. `parseSize` read each second number as a package mass and served
+`0.09 SAR/kg` for a 26.99 SAR/kg sea bream. A wrong unit price is worse than an
+absent one.
+
+### v3, and why it was replaced before it ever shipped
+
+The first design introduced a **price basis as a second PRICING MODE**, with a
+`pricing` bit (`per_pack` | `per_unit`) telling consumers which arithmetic to
+apply. It worked, it was tested, and it was wrong — the user's review caught it:
+
+> "Could the same objective be achieved by treating the printed reference
+> quantity (1 kg, 1 pc, 100 g, 1 L, etc.) as a unified comparable quantity
+> instead of introducing a separate pricing concept?"
+
+Yes. Measured on the corpus, both branches reduce to ONE division once the
+quantity is expressed in the unit a shopper compares in; the bit existed only
+because `parseSize` stores grams/millilitres while a basis stores
+kilograms/litres. Seven of eight sample cases were byte-identical under
+`price / reference`.
+
+**And the mode framing had already produced a real defect.** `quantityForOffer`
+scaled the price by a multi-buy while refusing to scale a "stated denominator",
+so `buy 2 get 1` on a per-kilo product reported **8.00 SAR/kg against an
+undiscounted 4.00** — a promotion that doubled the advertised unit price. Under
+a unified reference the bug is unrepresentable: pay 8, receive 3 kg, 2.67/kg.
+
+A second objection of the first design — that "priced per kg" must stay distinct
+from "contains 1 kg" for the cart, the Registry and price history — was also
+wrong, and the user named why: that conflates the DENOMINATOR with the SELLING
+MODE. A 1.7 kg bag has a 1.7 kg reference *and* a discrete selling mode; loose
+potatoes have a 1 kg reference *and* a continuous one. Neither says how much the
+shopper buys. The cart's problem was a missing concept, not a reason to split
+the denominator.
+
+### v4 · the model
+
+Three facts that vary independently, and nothing encoded twice:
+
+```js
+reference:   { quantity, unit } | null   // THE DENOMINATOR — the only input to a unit price
+sellingMode: 'discrete' | 'continuous' | null
+evidence:    'measure' | 'count' | 'price_basis' | 'container' | 'unit' | 'contradicted'
+```
+
+**Reference quantity** is how much of the comparison unit one printed price
+buys. `unitPrice = price / reference.quantity`, for every product, with no
+branch. It is null whenever arithmetic would be dishonest — a container word, a
+television, a weak count, a contradiction — and `unitPriceComparable` is now
+DERIVED from `reference != null`, so it can no longer contradict the thing it
+describes. It used to: a `40's` pack reported `unitPriceComparable: true` while
+the pricing function refused the same product as a weak count. Two layers, two
+answers, one product.
+
+It reads `canonical` (`parseSize` output), not the printed magnitude beside it,
+for two measured reasons: it keeps the arithmetic identical to what the engine
+already served, and canonical is simply more correct on a whole class — a bonus
+pack `10 + 2 rolls` prints as 2 and canonicalises to 12, and 661 rows (2.1%)
+differ that way. Printed stays what the shopper SEES; canonical stays what the
+shopper COMPARES on.
+
+**Selling mode** is discrete (you buy whole things) or continuous (you buy an
+amount you choose) — what a cart needs to know: count stepper or measure input.
+Deliberately NOT four values. The user proposed
+`package | weight | volume | piece`; the cross-tab settled it:
+
+| mode | kg | L | piece | none |
+|---|---|---|---|---|
+| weight | **1880** | 0 | 0 | 0 |
+| volume | 0 | **2** | 0 | 0 |
+| piece | 0 | 0 | **120** | 0 |
+| package | 18954 | 10147 | 2958 | 623 |
+
+`weight` and `volume` are one-to-one with `reference.unit` — the measurement
+dimension spelled a second time. Only the discrete/continuous split spreads
+across every unit. Whether a discrete thing is a bag, a carton or a bare lettuce
+is `package_type`'s question, already answered elsewhere: **"Garlic Bag Small
+/Pc" is a live offer that is a BAG priced PER PIECE**, and a mode value of
+`piece` would have mis-stated it.
+
+**Evidence** is where the reference came from. Renamed from `basis` because it
+was answering a provenance question all along, and calling it a "basis" beside a
+"price basis" made two ideas share a word. The values are unchanged, so
+`offer_acceptance_verdicts.quantity_basis` keeps its meaning and needs no
+migration.
+
+### REFUSE RATHER THAN GUESS
+
+The sixth evidence value, `contradicted`, is the rule the user asked for by
+name:
+
+> "A missing unit price is recoverable. A fabricated unit price damages trust."
+
+When a stated basis and a printed package magnitude come from different fields
+**and disagree**, the product is admitted and **no reference is emitted**.
+Measured on the 65 live offers where the two rules give different answers,
+preferring the package is right 40 times and wrong 22; preferring the basis
+inverts that. Both ship a confidently wrong SAR/kg on about a third of the
+population — `Pears Rosemary Per KG` at 1.00 SAR/kg because the `10 KG` in its
+size field is a **purchase limit**, or `Sea Bream 200-300 /Kg` at 0.09 because
+`٣٠٠ كيلو` is OCR debris.
+
+**Agreement is not contradiction.** The first cut of this rule refused all 261
+non-same-field pairs. Measurement showed **204 of them agree**: `BLACK CHANA
+/KG` beside `size: "1 kg"` is one fact stated twice, both readings giving 5.99
+SAR/kg. Refusing those is loss, not caution. The rule fires only on genuine
+disagreement, at the 3% tolerance `matching.js sizeContradicts()` already uses —
+one tolerance for "these agree", not a second one invented here.
+
+`contradicted` is recorded as its own value rather than as a silent null so the
+population stays countable in `acceptanceSummary` and `quantity_basis`. It is
+the measurable backlog for whatever eventually adjudicates it: a purchase-limit
+reader, a second extraction, or the human rung.
+
+Two guards ship on the same argument. The **same-field rule**: a basis displaces
+a magnitude only when both came out of one expression — `CASHEW W 320 /KG` with
+`size: "320 /KG"` cannot both weigh 320 kg and be priced per kilo. And the
+classifier is an **ALLOW-LIST**, because the production `unit` field also holds
+`SAR` (32), `AED`, `watts` (13), `mah`, `oz`, `btu`, `sqft` and `inch`; a
+permissive reader emits `SAR/SAR` and `SAR/watt` on shopper cards. Bare `g`,
+`ml`, `gm`, `l` are size units, never a per-gram price.
+
+### Parser consistency fixes
+
+Four objective defects, isolated from the precedence work at the user's request
+so their impact could be attributed separately. `parsePackageSize` was refusing
+spellings `matching.js unitFor()` has always accepted, so the PRINTED reader and
+the COMPARISON reader disagreed about whether a size **exists**:
+
+| spelling | before | after |
+|---|---|---|
+| `450 غ` | none | 450 g |
+| `700 GRM` | none | 700 g |
+| `360ml×24` | none | 24 × 360 ml |
+| `٤٠٠ جرام*٢` | none | 2 × 400 g |
+
+The multiplier cases were a `(?![a-z])` guard on `MEASURE_PACK_RE`:
+`foldSizeText` turns `×`/`*` into the ASCII letter `x`, which the guard read as
+the start of a longer unit word. Removed there only — the required `x<digits>`
+suffix already provides that boundary — and kept on the plain measure, where it
+still stops `g` matching inside `gram`. A test now pins the invariant directly:
+the two readers must never disagree about whether a size exists.
+
+### What was built and withdrawn
+
+A **grade-range guard** (`N-N UNIT` is not a magnitude) was written, measured,
+and withdrawn: it corrected 2 offers and broke 2, because `Ethiopian Lamb Whole
+(7 - 9 Kg)` and `Alyoum Fresh Chicken (1100/1200g)` use identical notation for
+the true weight of a single item sold as an item. Structurally
+indistinguishable; the residual is written into `packageSize.js` rather than
+hidden. Most of the class is already handled without a parser change, because
+wherever the grade sits beside an explicit marker the basis outranks the
+fabricated magnitude.
+
+### Measured after
+
+Against what a shopper actually saw before any of this work:
+
+| | before | after |
+|---|---|---|
+| unit price on the wire | 46.2% | **~76%** |
+| corrected values | — | **186** |
+| rejected offers flipping to accepted on a basis | — | **808 (17.0%)** |
+
+The 808 span 12+ categories — meat 115, fresh fruit 113, fish 96, cheese 89,
+vegetables 75, canned 45, dates 44, pulses 33, deli 26 — which is the evidence
+that the fix is system-level and not the Fresh patch that was explicitly not
+wanted.
+
+The two final changes, attributed independently as requested:
+
+```
+                       unit price | RESOLVED
+v4 refactor only            32958 | 39830
++ refuse-when-contradicted  32901 | 39830    57 withdrawn, 0 gained, 0 changed, 0 acceptance
++ parser consistency        32927 | 39934    0 withdrawn, 26 gained, 0 changed, +104 acceptance
+```
+
+All 104 acceptance changes are `ABSENT → RESOLVED (null → measure)` — monotonic
+in the safe direction, no offer loses admission. The refusal rule changes
+admission by zero rows, by design: the gate and the ranker answer different
+questions, and withholding a denominator must never un-admit a product that has
+a price and a name.
+
+### The last mile
+
+`applyEnrichment` — the ONE canonical-identity gate — now also derives
+`offer.unitPrice { value, unit, source: 'printed'|'derived' }`,
+`offer.priceBasis`, `offer.sellingMode` and `offer.size`, from the SAME
+projection the gate uses. Derived on read, not stored, following `brand_id` and
+the Arabic builder: the reader is pure, so **no column and no migration**.
+
+`src/priceBasis.js` mirrors the reader into the frontend (rule 2), because
+online listings never pass through the engine. `match.js unitPrice` is a
+three-rung ladder — the engine's answer, a locally-read basis, the size division
+— all three now ending in the same single division.
+
+⚠️ ONE DELIBERATE DIVERGENCE between the mirrors, asserted in both test files
+rather than left to be discovered: the client refuses `Sea Bream 200-300 /Kg`
+where the engine resolves it. The engine knows the basis and the bogus 300 kg
+came from the same expression; `parseSize` records no field provenance, so the
+client cannot tell that from a deli line genuinely sold in a 500 g tub. It
+refuses — the safe direction — and for flyer offers the shopper still sees
+26.99 SAR/kg because the engine's answer wins at rung 1.
+
+### State
+
+Engine 62/63 test suites green (`src/ops/recoveryOps.test.mjs` fails on the
+pre-existing tree, unrelated — verified by stashing); frontend 8/8. 40
+assertions in `comparableQuantity.test`, 296 in `match.test`, 21 in
+`priceBasis.test`, plus the new invariant block in `packageSize.test`.
+
+Gate at `business-acceptance-v3`, projection at `comparable-quantity-v4` — both
+bumped per R3, because the same apple is v2-ABSENT and v3-RESOLVED and the two
+verdicts must stay distinguishable forever.
+`enrichStore.reconcilePriceBasisAcceptance()` re-judges stale Recovery rows at
+zero model cost and resolves ONLY rows whose comparable quantity is a price
+basis, so no row is retired under a justification that does not explain it.
+
+**No migration required.**

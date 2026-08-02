@@ -22,10 +22,23 @@ export function historyQuery(offer) {
 }
 
 // The offer's parsed package size + per-unit price, for the meta line.
+//
+// A per-kilo product has a unit price and NO package size, so the two are asked
+// for separately: returning early on a missing size used to drop the unit price
+// of every loose item in the flyer, which is the whole of fresh produce, deli,
+// butchery and fish.
 export function offerSize(offer) {
   const sz = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, '');
-  if (!sz || !sz.unit || !sz.total) return { size: null, label: '', unit: null };
-  const up = unitPrice({ _size: sz, price: offer.price });
+  const sized = !!(sz && sz.unit && sz.total);
+  const up = unitPrice({
+    _size: sized ? sz : null,
+    price: offer.price,
+    name: offer.name,
+    nameAr: offer.nameAr,
+    size: offer.size || '',
+    unitPrice: offer.unitPrice || null,
+  });
+  if (!sized) return { size: null, label: '', unit: up };
   return { size: sz, label: sizeLabel(sz), unit: up };
 }
 

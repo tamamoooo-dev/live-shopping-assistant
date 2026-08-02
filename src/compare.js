@@ -150,7 +150,18 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
   if (rel < REL_FLOOR) return null;
   if (!coversQuery(probe, query)) return null;
   const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, '');
-  const item = { name, price: offer.price, _size: size };
+  // `unitPrice` and `size` are the engine's own answers (offers/enrich.js
+  // applyUnitPrice): it read the extractor's `unit` field and the retailer's
+  // Arabic text, neither of which reaches this module. match.js `unitPrice`
+  // prefers them and falls back to its own reading — see the trust ladder there.
+  const item = {
+    name,
+    price: offer.price,
+    _size: size,
+    size: offer.size || '',
+    nameAr: offer.nameAr || null,
+    unitPrice: offer.unitPrice || null,
+  };
   return {
     source: 'flyer',
     store: { id: offer.store, label: storeLabelFn(offer.store) },
@@ -192,7 +203,18 @@ function canonicalFlyerListing(offer, query, storeLabelFn = (x) => x) {
   const name = arQuery ? offer.nameAr || offer.name : offer.name || offer.nameAr;
   if (!name) return null;
   const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, '');
-  const item = { name, price: offer.price, _size: size };
+  // `unitPrice` and `size` are the engine's own answers (offers/enrich.js
+  // applyUnitPrice): it read the extractor's `unit` field and the retailer's
+  // Arabic text, neither of which reaches this module. match.js `unitPrice`
+  // prefers them and falls back to its own reading — see the trust ladder there.
+  const item = {
+    name,
+    price: offer.price,
+    _size: size,
+    size: offer.size || '',
+    nameAr: offer.nameAr || null,
+    unitPrice: offer.unitPrice || null,
+  };
   return {
     source: 'flyer',
     store: { id: offer.store, label: storeLabelFn(offer.store) },

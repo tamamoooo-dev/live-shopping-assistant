@@ -12,6 +12,12 @@
 //  2. Never treat different pack sizes / quantities / variants as the same
 //     product — so a "lowest price" is only ever claimed for equivalents.
 
+import {
+  PRICE_BASIS_STATUS,
+  adoptEngineUnitPrice,
+  resolvePriceBasis,
+} from './priceBasis.js';
+
 // --- Arabic + English text normalization ------------------------------------
 // Fold Arabic orthographic variants so "حليب" matches regardless of diacritics,
 // alef/hamza/taa-marbuta forms, or tatweel; lowercase Latin; strip punctuation.
@@ -822,12 +828,86 @@ function trimNum(n) {
 // trustworthy; a per-piece price is shown only when the count came from an
 // explicit packaging count word or bonus notation ("30 حبة", "12 rolls",
 // "10+2") — a bare "6's"/"12x" suffix is too weak to advertise a price on.
+//
+// THREE RUNGS, in strict order (2026-08-02, the price-basis work):
+//
+//   1. the ENGINE's own answer, when the item carries one. Flyer offers arrive
+//      with `unitPrice` already resolved server-side against the extractor's
+//      `unit` field and the retailer's Arabic text — evidence this module never
+//      sees. Re-deriving it here from a display name is what made per-kilo
+//      produce show no unit price at all.
+//   2. a PRICE BASIS read from the item's own text ("per kg", "/pc", "للكيلو").
+//      The price already IS the unit price; dividing would be the error. Ahead
+//      of the size division because a stated denominator beats an inferred one.
+//   3. the size division, unchanged, including its weak-count guard.
 export function unitPrice(item) {
+  const adopted = adoptEngineUnitPrice(item.unitPrice);
+  if (adopted) return adopted;
+  if (item.price == null) return null;
+  const reference = referenceQuantity(item);
+  if (!reference) return null;
+  return { value: item.price / reference.quantity, unit: reference.unit };
+}
+
+// The DENOMINATOR: how much of the comparison unit this price buys, or null when
+// no honest arithmetic is possible. Mirrors the engine's
+// `comparableQuantity.js referenceFrom()` plus its price-basis ordering.
+//
+// v4 (2026-08-02): a stated denominator used to take a second code path with its
+// own multiplication. It does not any more — "per kg" simply yields a reference
+// of 1 kg, a 1.7 kg bag yields 1.7 kg, and ONE division serves both. Exported so
+// callers that want the denominator itself (a cart deciding whether to show a
+// count stepper or a weight input) need not re-derive it from a label.
+export function referenceQuantity(item) {
   const sz = item._size || parseSize(item.name, item.size);
-  if (!sz.unit || !sz.total || item.price == null) return null;
-  if (sz.unit === 'ml') return { value: item.price / (sz.total / 1000), unit: 'L' };
-  if (sz.unit === 'g') return { value: item.price / (sz.total / 1000), unit: 'kg' };
-  if (sz.unit === 'pcs' && sz.src !== 'count-weak') return { value: item.price / sz.total, unit: 'pc' };
+  const sized = !!(sz && sz.unit && sz.total);
+  const basis = resolvePriceBasis({
+    size: item.size,
+    name: item.name,
+    text: item.nameAr || null,
+    sizeResolved: sized,
+  });
+  // A MASS/VOLUME basis outranks a printed package; a PIECE basis must not
+  // displace one — an 800 g chicken priced "Each" is more useful as SAR/kg.
+  // Same ordering as the engine's projection (steps 0 and 3).
+  if (basis.status === PRICE_BASIS_STATUS.RESOLVED
+    && !(sized && basis.unit === 'piece')
+    && basis.quantity > 0) {
+    const stated = basis.unit === 'kg' ? { quantity: basis.quantity, unit: 'kg' }
+      : basis.unit === 'l' ? { quantity: basis.quantity, unit: 'L' }
+        : { quantity: basis.quantity, unit: 'pc' };
+    // REFUSE RATHER THAN GUESS. A stated denominator beside a printed package
+    // that disagrees with it cannot be adjudicated from the text — measured on
+    // the engine's corpus, whichever one you pick is wrong about a third of the
+    // time ("Pears Rosemary Per KG" whose "10 KG" is a purchase limit; a deli
+    // line labelled "/Kg" that really is sold as a 500 g tub). A missing unit
+    // price is recoverable; a fabricated one is not.
+    //
+    // The engine can also resolve the case where both readings came out of the
+    // SAME expression (`comparableQuantity.js basisOverridesPackage`); this
+    // mirror cannot, because `parseSize` records no field provenance. It
+    // therefore refuses slightly more often, which is the safe direction — and
+    // for flyer offers it never arbitrates at all, since the engine's answer
+    // arrives on `item.unitPrice` and wins at rung 1 above.
+    if (!sized) return stated;
+    const packed = sizedReference(sz);
+    if (!packed) return stated;
+    const agree = packed.unit === stated.unit
+      && Math.abs(packed.quantity - stated.quantity) / Math.max(packed.quantity, stated.quantity) <= 0.03;
+    return agree ? packed : null;
+  }
+  if (!sized) return null;
+  return sizedReference(sz);
+}
+
+// A parsed package size -> the denominator, in the client's display units.
+function sizedReference(sz) {
+  if (!sz || !sz.unit || !(sz.total > 0)) return null;
+  if (sz.unit === 'ml') return { quantity: sz.total / 1000, unit: 'L' };
+  if (sz.unit === 'g') return { quantity: sz.total / 1000, unit: 'kg' };
+  // A bare "6's"/"12x" suffix is enough to rank on and never enough to advertise
+  // a price on — the trust ladder, inherited rather than restated.
+  if (sz.unit === 'pcs' && sz.src !== 'count-weak') return { quantity: sz.total, unit: 'pc' };
   return null;
 }
 

@@ -12,6 +12,7 @@ import {
   productFamily, queryFamily, tokenCoverage, categoryFamily, offerFamily,
   productType, queryType, freshProduceIntent, isProcessedProduce, isProduceFamily, producePresence,
   matchStage, queryTokenPresence, resolveJourneyPool, querySize, queryTokens, sizeContradicts,
+  referenceQuantity,
 } from './match.js';
 
 let pass = 0, fail = 0;
@@ -462,6 +463,86 @@ ok("weak 6's suffix -> no per-piece price", unitPrice({ name: "Indomie Noodles 6
 ok('weak x suffix -> no per-piece price', unitPrice({ name: 'Batteries 12x', price: 24 }) === null);
 ok('weak count still parses for comparability', parseSize("Indomie Noodles 6's").total === 6);
 ok('measured sizes unaffected by the ladder', unitPrice({ name: 'Milk 2L', price: 8 }).value === 4);
+
+// --- unit price from a PRICE BASIS (2026-08-02) ---
+// The three-rung ladder in match.js unitPrice: engine answer, then a basis read
+// from the item's own text, then the size division.
+ok('rung 1: the engine answer wins and is translated to display units',
+  unitPrice({ name: 'Apple Royal Gala', price: 7.99, unitPrice: { value: 7.99, unit: 'kg', source: 'printed' } })?.unit === 'kg');
+ok('rung 1: engine litres become the display "L" so families still group',
+  unitPrice({ name: 'Oil', price: 20, unitPrice: { value: 20, unit: 'l', source: 'printed' } })?.unit === 'L');
+ok('rung 1: engine pieces become "pc"',
+  unitPrice({ name: 'Lettuce', price: 4.5, unitPrice: { value: 4.5, unit: 'piece', source: 'printed' } })?.unit === 'pc');
+ok('rung 1: a malformed engine answer falls through instead of throwing',
+  unitPrice({ name: 'Milk 2L', price: 8, unitPrice: { value: 0, unit: 'nonsense' } })?.value === 4);
+
+ok('rung 2: "Per Kg" in the size field IS the unit price, not a division',
+  near(unitPrice({ name: 'Apple Royal Gala Brazil', size: 'Per Kg', price: 7.99 })?.value, 7.99));
+ok('rung 2: a per-kg name marker resolves with no size at all',
+  near(unitPrice({ name: 'SALMON FILLET KG', price: 48.99 })?.value, 48.99));
+// The client mirror REFUSES this one where the engine resolves it, and that is
+// deliberate. The engine knows the basis and the bogus 300 kg came out of the
+// SAME expression (comparableQuantity.js basisOverridesPackage) and can pick the
+// basis; parseSize records no field provenance, so this mirror cannot tell that
+// case from a deli line genuinely sold in a 500 g tub. It refuses instead of
+// guessing — the safe direction — and for flyer offers the shopper still sees
+// 26.99 SAR/kg, because the engine's answer arrives on offer.unitPrice and wins
+// at rung 1.
+ok('rung 2: a grade beside "/Kg" is REFUSED here, resolved by the engine',
+  unitPrice({ name: 'Sea Bream 200-300 /Kg', price: 26.99 }) === null);
+ok('rung 1: the engine answer for that same offer still reaches the shopper',
+  near(unitPrice({ name: 'Sea Bream 200-300 /Kg', price: 26.99,
+    unitPrice: { value: 26.99, unit: 'kg', source: 'printed' } })?.value, 26.99));
+ok('rung 2: Arabic "للكيلو" reaches the ladder through nameAr',
+  near(unitPrice({ name: 'Yellow Banana', nameAr: 'موز اصغر للكيلو', price: 12.99 })?.value, 12.99));
+ok('rung 2: a per-piece basis fills a gap',
+  near(unitPrice({ name: 'Iceberg Lettuce/pc', price: 4.5 })?.value, 4.5));
+ok('rung 2: a per-piece basis never displaces a measured size',
+  unitPrice({ name: 'Fresh Whole Chicken 800 GM Per Pc', price: 15.99 })?.unit === 'kg');
+ok('rung 2: "per 500 gm" is halved to a per-kilo price',
+  near(unitPrice({ name: 'Kalamata Olives', size: 'per 500 gm', price: 9.95 })?.value, 19.9));
+
+ok('rung 3: a plain pack price still divides exactly as before',
+  near(unitPrice({ name: 'Milk 2 L', price: 12.5 })?.value, 6.25));
+ok('rung 3: a bare "10KG" package is NOT a per-kilo price',
+  near(unitPrice({ name: 'AL OSRA SUGAR ASSORTED 10KG', size: '10KG', price: 16.99 })?.value, 1.699));
+ok('a currency in the text can never become a unit',
+  unitPrice({ name: 'Nebo Makeup Kit SAR', price: 30 }) === null);
+ok('still no size and no basis -> still no unit price',
+  unitPrice({ name: 'Milk', price: 5 }) === null);
+
+
+// --- v4: the reference quantity is the ONE denominator ---
+// unitPrice is now exactly `price / referenceQuantity`, for every product. The
+// assertions below pin both halves: that the denominator is right, and that
+// nothing takes a second code path to divide by it.
+ok('reference: a per-kg basis is 1 kg', (() => { const r = referenceQuantity({ name: 'Potato Local', size: 'Per Kg' }); return r.quantity === 1 && r.unit === 'kg'; })());
+ok('reference: a 1.7 kg bag is 1.7 kg', (() => { const r = referenceQuantity({ name: 'Potato Bag 1.7 kg' }); return near(r.quantity, 1.7) && r.unit === 'kg'; })());
+ok('reference: a 30-pack of eggs is 30 pc', (() => { const r = referenceQuantity({ name: 'White Eggs 30 pcs' }); return r.quantity === 30 && r.unit === 'pc'; })());
+ok('reference: 6 x 250 ml is 1.5 L', (() => { const r = referenceQuantity({ name: 'Milk 6 x 250 ml' }); return near(r.quantity, 1.5) && r.unit === 'L'; })());
+ok('reference: per 500 gm is 0.5 kg', (() => { const r = referenceQuantity({ name: 'Olives', size: 'per 500 gm' }); return near(r.quantity, 0.5) && r.unit === 'kg'; })());
+ok('reference: a weak count has NO denominator', referenceQuantity({ name: "Indomie Noodles 6's" }) === null);
+ok('reference: no size and no basis has NO denominator', referenceQuantity({ name: 'Milk' }) === null);
+
+// The comparison goal, in the client mirror: same family, correct ranking.
+ok('goal: both egg packs compare in one unit', unitPrice({ name: 'White Eggs 30 pcs', price: 15 }).unit === unitPrice({ name: 'White Eggs 12 pcs', price: 7 }).unit);
+ok('goal: the 30-pack is cheaper per egg', unitPrice({ name: 'White Eggs 30 pcs', price: 15 }).value < unitPrice({ name: 'White Eggs 12 pcs', price: 7 }).value);
+ok('goal: loose and bagged potatoes compare in one unit', unitPrice({ name: 'Potato Local', size: 'Per Kg', price: 4 }).unit === unitPrice({ name: 'Potato Bag 1.7 kg', price: 7 }).unit);
+ok('goal: loose potatoes are the better value', unitPrice({ name: 'Potato Local', size: 'Per Kg', price: 4 }).value < unitPrice({ name: 'Potato Bag 1.7 kg', price: 7 }).value);
+ok('goal: unit price is ALWAYS price / reference, with no second path', (() => {
+  for (const it of [
+    { name: 'Milk 2 L', price: 12.5 },
+    { name: 'Potato Local', size: 'Per Kg', price: 4 },
+    { name: 'White Eggs 30 pcs', price: 15 },
+    { name: 'Olives', size: 'per 500 gm', price: 9.95 },
+    { name: 'Iceberg Lettuce/pc', price: 4.5 },
+  ]) {
+    const r = referenceQuantity(it);
+    const up = unitPrice(it);
+    if (!near(up.value, it.price / r.quantity) || up.unit !== r.unit) return false;
+  }
+  return true;
+})());
 
 console.log(`\nmatch.test: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
