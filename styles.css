@@ -2044,8 +2044,12 @@ a.watch-name:hover { text-decoration: underline; }
   outline: none;
   cursor: grab;
   /* Press-and-hold belongs to the viewer (it opens Zoom on the held product),
-     so iOS must not raise its own Save Image / Copy sheet over the flyer. */
+     so iOS must not raise its own Save Image / Copy sheet over the flyer, and
+     nothing in here may be selectable — a hold that starts a text selection
+     shows Copy / Look Up / Translate instead of doing what we asked. */
   -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .vv-stage:active { cursor: grabbing; }
 .vv-track {
@@ -2074,6 +2078,13 @@ a.watch-name:hover { text-decoration: underline; }
   /* Press-and-hold is OUR gesture (it opens Zoom on a product). Without this,
      iOS Safari raises its own Save Image / Copy callout over the flyer. */
   -webkit-touch-callout: none;
+  /* …and this stops iOS Live Text, which is a SEPARATE mechanism: it reads the
+     text printed inside the flyer and offers Copy / Look Up / Translate, which
+     stole the hold at random. Suppressing the callout does not disable it —
+     the image must not be a touch target at all. Nothing needs it to be: the
+     gesture arbiter listens on .vv-stage and hotspots hit-test in page
+     fractions, so events simply resolve to the ancestor instead. */
+  pointer-events: none;
 }
 .vv-page.is-ready { opacity: 1; }
 
@@ -2351,6 +2362,8 @@ a.watch-name:hover { text-decoration: underline; }
   overflow: hidden;
   background: rgba(10, 9, 22, 0.92); /* the lightbox's surround */
   -webkit-touch-callout: none; /* hold exits Zoom; no OS image menu */
+  user-select: none;
+  -webkit-user-select: none;
 }
 .vz-track { position: absolute; inset: 0; will-change: transform; }
 .vz-slot { position: absolute; inset: 0; }

@@ -5584,6 +5584,20 @@ as the reader crosses pages. `canvas.js` now reports unmounts.
 `-webkit-touch-callout: none` across the stage and the Zoom layer: press-and-hold
 belongs to the viewer, so iOS must not raise its own Save Image sheet over it.
 
+That turned out to be only half of it. iOS **Live Text** is a separate mechanism
+— it reads the text printed inside the flyer image and offers Copy / Look Up /
+Translate — and suppressing the callout does not disable it. It presented as the
+hold working "usually", because it only fires when the finger lands on
+recognised text: over a product photo the hold zoomed, over the price iOS took
+the gesture.
+
+The tell was that it never happened *inside* Zoom, where the image sits in a
+`pointer-events: none` pane and is therefore not an image target at all. The
+page image now matches: the image must not be a touch target, not merely have
+its menu suppressed. Nothing needed it to be one — the arbiter listens on
+`.vv-stage` and hotspots hit-test in page fractions, so the target simply
+resolves to the ancestor.
+
 ### What the measurements settled
 
 - Flyer pages are a uniform **1060–1142 × 1500**, and `data-width`/`data-height`
