@@ -316,16 +316,19 @@ function brandMonogram(slug, name, small = false) {
 // and any image that fails to load — degrades to the deterministic monogram, so
 // a tile is never broken or blank.
 const BRAND_LOGOS = new Set([
-  'alalali', 'alsafi', 'almarai', 'americana', 'anchor', 'aquafina', 'ariel',
-  'barbican', 'berain', 'california-garden', 'clorox', 'closeup', 'colgate',
-  'deemah', 'dettol', 'doux', 'dove', 'downy', 'fairy', 'fine', 'galaxy',
-  'garnier', 'geepas', 'gillette', 'goody', 'halwani', 'head-shoulders', 'heinz',
-  'herfy', 'himalaya', 'huggies', 'indomie', 'johnsons', 'kinder', 'kitkat',
-  'kleenex', 'knorr', 'lays', 'lifebuoy', 'lipton', 'loacker', 'lurpak', 'lux',
-  'maggi', 'nadec', 'nescafe', 'nestle', 'nido', 'nivea', 'nutella', 'oreo',
-  'pampers', 'pantene', 'pepsi', 'persil', 'president', 'puck', 'quaker', 'sadia',
-  'samsung', 'sanita', 'seara', 'sensodyne', 'signal', 'snickers', 'sunbulah',
-  'sunsilk', 'tang', 'tanmiah', 'tide', 'twix', 'ulker', 'vaseline', 'veet', 'vimto',
+  'afia', 'alalali', 'alkabeer', 'almarai', 'alrabie', 'alsafi', 'alwatania',
+  'americana', 'anchor', 'aquafina', 'ariel', 'barbican', 'berain', 'bestway',
+  'california-garden', 'clorox', 'closeup', 'colgate', 'comfort', 'dari', 'deemah',
+  'dettol', 'doux', 'dove', 'downy', 'enchanteur', 'fairy', 'fine', 'foster-clarks',
+  'galaxy', 'garnier', 'geepas', 'gillette', 'goody', 'halwani', 'hanaa', 'harpic',
+  'head-shoulders', 'heinz', 'herfy', 'himalaya', 'huggies', 'indomie', 'johnsons',
+  'kdd', 'kinder', 'kiri', 'kitkat', 'kleenex', 'knorr', 'krypton', 'lays',
+  'lifebuoy', 'lipton', 'loacker', 'luna', 'lurpak', 'lux', 'maggi', 'montana',
+  'moussy', 'nada', 'nadec', 'nescafe', 'nestle', 'nido', 'nivea', 'nova',
+  'nutella', 'oreo', 'orinex', 'pampers', 'pantene', 'pepsi', 'persil', 'president',
+  'puck', 'quaker', 'rainbow', 'rani', 'sadia', 'samsung', 'sanita', 'seara',
+  'sensodyne', 'signal', 'snickers', 'sunbulah', 'sunsilk', 'tang', 'tanmiah',
+  'tide', 'twix', 'ulker', 'vaseline', 'veet', 'vimto',
 ]);
 
 function brandIcon(slug, name, small = false) {
