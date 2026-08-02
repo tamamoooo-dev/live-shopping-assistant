@@ -79,6 +79,43 @@ export function pointToFraction(t, fitW, fitH, sx, sy) {
   return { fx: (sx - t.tx) / (t.z * fitW), fy: (sy - t.ty) / (t.z * fitH) };
 }
 
+// Zoom mode: how to show ONE hotspot as a clean crop, exactly like the product
+// sheet's enlarged image — product only, nothing of the neighbouring products
+// bleeding in at the edges.
+//
+// That last part is why this returns TWO boxes. The visible window (`frame`) is
+// sized to the crop's own shape, not the pane's, and the page image is drawn
+// inside it at (imgLeft, imgTop) so the crop exactly fills it. Clipping to the
+// pane instead would show whatever the page happens to have beside the product
+// whenever their proportions differ.
+//
+// The crop is the spot grown by `pad` on every side — the same bleed
+// cropFromPage() uses, so a tight tap polygon never clips the price.
+//
+// `aspect` is the page image's natural width / height. This costs nothing: the
+// frame reuses the page <img> the viewer already fetched, and only its size and
+// offset change — no canvas, no re-decode, no second download.
+export function paneFit(spot, paneW, paneH, aspect, pad = 0.02) {
+  const a = Math.max(1e-6, aspect);
+  const x0 = Math.max(0, spot.x - pad);
+  const y0 = Math.max(0, spot.y - pad);
+  const cw = Math.max(1e-6, Math.min(1 - x0, spot.w + 2 * pad));
+  const ch = Math.max(1e-6, Math.min(1 - y0, spot.h + 2 * pad));
+  // The crop's own aspect, then contain-fitted into the pane.
+  const cropAspect = (cw * a) / ch;
+  const frameW = Math.min(paneW, paneH * cropAspect);
+  const frameH = frameW / cropAspect;
+  const imgW = frameW / cw;
+  return {
+    frameW,
+    frameH,
+    imgW,
+    imgH: imgW / a,
+    imgLeft: -x0 * imgW,
+    imgTop: -y0 * (imgW / a),
+  };
+}
+
 // The transform that centers a fractional page rect (a hotspot) in the stage
 // at a zoom that shows it comfortably — the search-landing "fly to product".
 // `insetBottom` centers within the region ABOVE an overlay (the peeking

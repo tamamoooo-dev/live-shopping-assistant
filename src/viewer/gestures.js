@@ -17,6 +17,9 @@
 //   onTap(x, y)              a clean single tap (fired after the double-tap
 //                            window so it never races onDoubleTap)
 //   onDoubleTap(x, y)        two quick taps in place
+//   onLongPress(x, y)        a still finger held past LONG_PRESS_MS; fires
+//                            WHILE the finger is down and consumes the
+//                            contact, so no tap or pan follows it
 //   onPanStart(x, y) / onPan(dx, dy) / onPanEnd(vx, vy)   vx/vy in px per ms
 //   onPinchStart(cx, cy) / onPinch(scale, cx, cy) / onPinchEnd()
 //                            scale is RELATIVE to the pinch start
@@ -24,12 +27,14 @@
 export const TAP_SLOP = 10; // px of movement that still counts as a tap
 export const DOUBLE_TAP_MS = 260; // window between taps
 export const DOUBLE_TAP_RADIUS = 48; // px between the two taps
+export const LONG_PRESS_MS = 500; // hold that becomes a press-and-hold
 
 export function createGestures(handlers = {}, opts = {}) {
   const h = handlers;
   const slop = opts.tapSlop ?? TAP_SLOP;
   const dblMs = opts.doubleTapMs ?? DOUBLE_TAP_MS;
   const dblR = opts.doubleTapRadius ?? DOUBLE_TAP_RADIUS;
+  const holdMs = opts.longPressMs ?? LONG_PRESS_MS;
   const setT = opts.setTimeout || ((fn, ms) => setTimeout(fn, ms));
   const clearT = opts.clearTimeout || ((id) => clearTimeout(id));
 
@@ -41,6 +46,7 @@ export function createGestures(handlers = {}, opts = {}) {
   let pinch0 = 0; // pinch baseline distance
   let lastTap = null; // { x, y, t } of the previous completed tap
   let tapTimer = null; // pending single-tap emit
+  let holdTimer = null; // pending long-press emit
 
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const two = () => {
@@ -53,6 +59,39 @@ export function createGestures(handlers = {}, opts = {}) {
       clearT(tapTimer);
       tapTimer = null;
     }
+  }
+
+  function flushHoldTimer() {
+    if (holdTimer != null) {
+      clearT(holdTimer);
+      holdTimer = null;
+    }
+  }
+
+  // A hold that survives the window CONSUMES its contact: the finger is still
+  // down, so the gesture must not also become a tap, a pan, or half of a
+  // double-tap when it lifts.
+  //
+  // The contact is ENDED here rather than parked in 'settled' waiting for a
+  // release. onLongPress changes what is on screen, and when the element under
+  // the finger goes away the browser may never deliver that pointer's up or
+  // cancel to us. Parking would then strand its id in `pointers` for good — and
+  // since a second live pointer means "pinch", every later touch would be
+  // misread as one, silently killing taps and pans for the rest of the session.
+  // Nothing about this contact is useful any more, so we let go of it now and
+  // ignore whatever else arrives for it.
+  function armHold(x, y) {
+    flushHoldTimer();
+    holdTimer = setT(() => {
+      holdTimer = null;
+      if (state !== 'pressed' || pointers.size !== 1) return;
+      pointers.clear();
+      state = 'idle';
+      lastTap = null;
+      flushTapTimer();
+      h.onPressCancel && h.onPressCancel();
+      h.onLongPress && h.onLongPress(x, y);
+    }, holdMs);
   }
 
   function velocity(t) {
@@ -73,10 +112,12 @@ export function createGestures(handlers = {}, opts = {}) {
       last = { x, y, t };
       samples = [{ x, y, t }];
       h.onPress && h.onPress(x, y);
+      armHold(x, y);
     } else if (pointers.size === 2) {
-      // A second finger always means pinch — cancel any tap/pan in flight.
+      // A second finger always means pinch — cancel any tap/pan/hold in flight.
       if (state === 'pressed') h.onPressCancel && h.onPressCancel();
       if (state === 'pan') h.onPanEnd && h.onPanEnd(0, 0);
+      flushHoldTimer();
       flushTapTimer();
       lastTap = null;
       state = 'pinch';
@@ -103,6 +144,7 @@ export function createGestures(handlers = {}, opts = {}) {
     if (state === 'pressed') {
       if (Math.hypot(x - start.x, y - start.y) > slop) {
         state = 'pan';
+        flushHoldTimer(); // moving means they are panning, not holding
         h.onPressCancel && h.onPressCancel();
         h.onPanStart && h.onPanStart(start.x, start.y);
         // The distance consumed by the slop is delivered as the first delta,
@@ -120,6 +162,7 @@ export function createGestures(handlers = {}, opts = {}) {
   function up(id, x, y, t) {
     const existed = pointers.delete(id);
     if (!existed) return;
+    flushHoldTimer(); // the finger lifted — nothing left to hold
     if (state === 'pinch') {
       if (pointers.size < 2) {
         h.onPinchEnd && h.onPinchEnd();
@@ -158,11 +201,16 @@ export function createGestures(handlers = {}, opts = {}) {
     if (state === 'settled' && pointers.size === 0) state = 'idle';
   }
 
-  function cancel() {
+  // `id` is optional: with one, a cancel for a pointer we are not tracking is
+  // ignored (the window-level listener sees the whole page). Without one, it
+  // means "abandon whatever is in flight".
+  function cancel(id) {
+    if (id != null && pointers.size && !pointers.has(id)) return;
     pointers.clear();
     if (state === 'pressed') h.onPressCancel && h.onPressCancel();
     if (state === 'pan') h.onPanEnd && h.onPanEnd(0, 0);
     if (state === 'pinch') h.onPinchEnd && h.onPinchEnd();
+    flushHoldTimer();
     flushTapTimer();
     state = 'idle';
   }
@@ -181,18 +229,22 @@ export function attachGestures(el, handlers, opts) {
   };
   const move = (e) => g.move(e.pointerId, e.clientX, e.clientY, e.timeStamp);
   const up = (e) => g.up(e.pointerId, e.clientX, e.clientY, e.timeStamp);
-  const cancel = () => g.cancel();
+  const cancel = (e) => g.cancel(e.pointerId);
+  // A gesture STARTS on the element, but it must be allowed to END anywhere.
+  // Releases are taken from the window so a contact is never left open because
+  // its element was replaced or removed mid-gesture; up() ignores ids it does
+  // not know, so the wider net costs nothing.
   el.addEventListener('pointerdown', down);
   el.addEventListener('pointermove', move);
-  el.addEventListener('pointerup', up);
-  el.addEventListener('pointercancel', cancel);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', cancel);
   return {
     gestures: g,
     detach() {
       el.removeEventListener('pointerdown', down);
       el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', up);
-      el.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
     },
   };
 }

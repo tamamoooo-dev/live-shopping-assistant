@@ -26,6 +26,7 @@ import { createPageCanvas } from './canvas.js';
 import { createSpotLayer, spotForOffer } from './hotspots.js';
 import { createNav } from './nav.js';
 import { createSheet } from './sheet.js';
+import { createZoomMode, buildSequence, startIndexFor } from './zoomMode.js';
 import { rememberPosition, recallPosition } from './state.js';
 import { t, tn } from '../i18n.js';
 
@@ -107,6 +108,11 @@ export function openBrochureViewer(b, storeName, opts = {}) {
         <button type="button" class="vv-zoom-out" aria-label="${t('viewer.zoomOut')}">−</button>
         <button type="button" class="vv-zoom-in" aria-label="${t('viewer.zoomIn')}">+</button>
       </span>
+      <button type="button" class="vv-zoombtn" aria-pressed="false" disabled
+              title="${t('viewer.zoomModeHint')}">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6M11 8v6"/></svg>
+        <span>${t('viewer.zoomMode')}</span>
+      </button>
       <button type="button" class="vv-close" aria-label="${t('viewer.close')}">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -123,10 +129,12 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   const closeBtn = $$('.vv-close');
   const zoomIn = $$('.vv-zoom-in');
   const zoomOut = $$('.vv-zoom-out');
+  const zoomBtn = $$('.vv-zoombtn');
 
   let canvas = null;
   let nav = null;
   let sheet = null;
+  let zoom = null; // the Zoom reading layer, when on
   let hotspots = null; // { spotsByIndex, offers, note }
   let pageIndices = []; // per rendered page: its source index
   let pageSrcs = [];
@@ -140,6 +148,10 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     viewerOpen = false;
     document.removeEventListener('keydown', onKey, true);
     for (const fn of cleanups) fn();
+    if (zoom) {
+      zoom.destroy();
+      zoom = null;
+    }
     if (canvas) {
       rememberPosition(b.id, { page: canvas.index(), zoom: Math.round(canvas.zoom() * 100) / 100 });
       canvas.destroy();
@@ -178,8 +190,10 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     }
     else if (e.key === 'Tab') trapTab(e);
     else if (!canvas) return;
-    else if (e.key === 'ArrowLeft') canvas.goTo(canvas.index() - 1);
-    else if (e.key === 'ArrowRight') canvas.goTo(canvas.index() + 1);
+    // In Zoom the arrows step through PRODUCTS, not pages — that is the unit
+    // the user is reading.
+    else if (e.key === 'ArrowLeft') (zoom ? zoom.prev() : canvas.goTo(canvas.index() - 1));
+    else if (e.key === 'ArrowRight') (zoom ? zoom.next() : canvas.goTo(canvas.index() + 1));
     else if (e.key === '+' || e.key === '=') zoomIn.click();
     else if (e.key === '-' || e.key === '_') zoomOut.click();
   }
@@ -192,6 +206,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   if (isPdf) {
     const url = pdfAssetUrl(b);
     $$('.vv-zoomctl').hidden = true;
+    zoomBtn.hidden = true; // a PDF has no page images and no hotspots to crop
     if (!url) {
       stage.innerHTML = `<div class="vv-msg">${t('viewer.loadFailed')}</div>`;
       return;
@@ -254,6 +269,91 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     if (!wasOpen) hist.push(() => sheet.close());
   }
 
+  /* --- Zoom (the optional two-product reading layout) ------------------------------- */
+  // Normal mode is untouched. Zoom is a LAYER on top of it: same brochure, same
+  // order, same product sheet — only the presentation changes, and turning it
+  // off returns to the page the reader is on.
+  const spotsOfPage = (i) =>
+    hotspots && pageIndices.length ? hotspots.spotsByIndex.get(pageIndices[i]) || [] : [];
+
+  // Zoom can only show products it has geometry for, so a page with no
+  // hotspots disables the button rather than opening an empty mode.
+  function refreshZoomBtn() {
+    if (!canvas || !hotspots) {
+      zoomBtn.disabled = true;
+      return;
+    }
+    const usable = spotsOfPage(canvas.index()).some((s) => hotspots.offers[s.offerId]);
+    zoomBtn.disabled = !usable && !zoom;
+  }
+
+  // `targetSpot` (from a press-and-hold on a product) opens Zoom ON that
+  // product instead of at the top of the page — the whole point of the hold:
+  // when you already know what you want to read, you should not have to swipe
+  // to it. The Zoom button passes nothing and still starts the page.
+  function openZoom(targetSpot) {
+    if (zoom || !canvas || !hotspots) return;
+    const entries = buildSequence({
+      pageIndices,
+      pageSrcs,
+      spotsByIndex: hotspots.spotsByIndex,
+      offers: hotspots.offers,
+    });
+    const start = startIndexFor(entries, canvas.index(), targetSpot);
+    if (start < 0) return;
+    zoom = createZoomMode(overlay, {
+      entries,
+      startIndex: start,
+      labelOf: spotLabel,
+      prevLabel: t('viewer.zoomPrev'),
+      nextLabel: t('viewer.zoomNext'),
+      onOpenProduct: (entry) =>
+        openSheet({ offer: entry.offer, spot: entry.spot, pageSrc: entry.src }),
+      // Reading past the end of a page moves the viewer underneath too, so the
+      // page indicator, the thumbnail strip and the remembered reading position
+      // all stay truthful — and exiting Zoom lands on the page just read.
+      onPageChange: (page) => canvas.goTo(page, { animate: false }),
+      // Hold again to leave — through the back stack, so the history depth
+      // keeps matching the layer count.
+      //
+      // Deferred out of the pointer event on purpose: the hold fires with the
+      // finger still down, and tearing the touch target out of the DOM in the
+      // middle of dispatching its own event leaves iOS Safari with nowhere to
+      // deliver the rest of the gesture — the page then ignores touches until
+      // something else jolts it. Let the event finish first.
+      onExitRequest: () => {
+        if (navigator.vibrate) navigator.vibrate(12);
+        setTimeout(() => hist.back(), 0);
+      },
+    });
+    if (!zoom) return;
+    overlay.classList.add('is-zoom');
+    zoomBtn.setAttribute('aria-pressed', 'true');
+    setChrome(true); // the way out must always be visible
+    hist.push(closeZoom);
+  }
+
+  // Clear the state BEFORE tearing the layer down: if destroy() ever throws,
+  // the alternative is a dead but still-mounted layer sitting invisibly over
+  // the flyer, which reads to the user as "the page stopped responding".
+  function closeZoom() {
+    const z = zoom;
+    if (!z) return;
+    zoom = null;
+    overlay.classList.remove('is-zoom');
+    zoomBtn.setAttribute('aria-pressed', 'false');
+    try {
+      z.destroy();
+    } finally {
+      refreshZoomBtn();
+      stage.focus({ preventScroll: true });
+    }
+  }
+
+  // Toggling OFF goes through the back stack so the history depth keeps
+  // matching the layer count (the same contract the sheet and grid follow).
+  zoomBtn.addEventListener('click', () => (zoom ? hist.back() : openZoom()));
+
   /* --- data ------------------------------------------------------------------------ */
   loadBrochurePages(b).then((data) => {
     if (!viewerOpen) return;
@@ -281,7 +381,9 @@ export function openBrochureViewer(b, storeName, opts = {}) {
     stage.querySelector('.vv-loading')?.remove();
 
     nav = createNav(bottom, data.pages.map((src) => ({ src })), {
-      onJump: (i) => canvas && canvas.goTo(i),
+      // The overview grid works in Zoom too: jumping lands on that page's
+      // first product instead of leaving the reading layout.
+      onJump: (i) => (zoom ? zoom.goToPage(i) : canvas && canvas.goTo(i)),
     });
     bottom.append(nav.strip);
     overlay.insertBefore(nav.indicator, bottom);
@@ -326,10 +428,19 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       onPageChange: (i) => {
         nav.setPage(i);
         rememberPosition(b.id, { page: i, zoom: 1 });
+        refreshZoomBtn();
         const layer = spotLayers.get(i);
-        if (layer && !hinted) hintSpots(i);
+        if (layer && !hinted && !zoom) hintSpots(i);
       },
       onMountPage: (i, contentEl) => attachSpots(i, contentEl),
+      // A page leaving the render window takes its spot layer with it, so the
+      // next mount builds a live one instead of keeping a detached husk.
+      onUnmountPage: (i) => {
+        const layer = spotLayers.get(i);
+        if (!layer) return;
+        layer.destroy();
+        spotLayers.delete(i);
+      },
       onPress: (i, { fx, fy }) => {
         const layer = spotLayers.get(i);
         if (!layer) return;
@@ -340,6 +451,18 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       onPressCancel: () => {
         const layer = spotLayers.get(canvas ? canvas.index() : 0);
         layer && layer.release();
+      },
+      // Press and hold a product: jump straight into Zoom reading AT it.
+      // A hold on empty flyer space is ignored — there is nothing to read.
+      onLongPress: (i, { fx, fy }) => {
+        if (zoom || !hotspots) return;
+        const layer = spotLayers.get(i);
+        if (!layer) return;
+        const m = tapMin(i);
+        const s = layer.hit(fx, fy, m.w, m.h);
+        if (!s || !hotspots.offers[s.offerId]) return;
+        if (navigator.vibrate) navigator.vibrate(12); // Android confirms the hold
+        setTimeout(() => openZoom(s), 0); // same reason as onExitRequest below
       },
       onTap: (i, { fx, fy }) => {
         const layer = spotLayers.get(i);
@@ -379,6 +502,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
       },
     });
     nav.setPage(startPage);
+    refreshZoomBtn(); // hotspots may have landed before the pages did
 
     zoomIn.addEventListener('click', () => canvas.zoomTo(canvas.zoom() + 0.75));
     zoomOut.addEventListener('click', () => canvas.zoomTo(canvas.zoom() - 0.75));
@@ -396,6 +520,7 @@ export function openBrochureViewer(b, storeName, opts = {}) {
         if (contentEl) attachSpots(i, contentEl);
       }
     }
+    refreshZoomBtn(); // Zoom only becomes available once geometry has arrived
     if (pendingOffer) landOnOffer(pendingOffer);
   });
 

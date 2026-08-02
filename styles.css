@@ -2043,6 +2043,9 @@ a.watch-name:hover { text-decoration: underline; }
   overflow: hidden;
   outline: none;
   cursor: grab;
+  /* Press-and-hold belongs to the viewer (it opens Zoom on the held product),
+     so iOS must not raise its own Save Image / Copy sheet over the flyer. */
+  -webkit-touch-callout: none;
 }
 .vv-stage:active { cursor: grabbing; }
 .vv-track {
@@ -2068,6 +2071,9 @@ a.watch-name:hover { text-decoration: underline; }
   transition: opacity 0.18s ease;
   user-select: none;
   -webkit-user-select: none;
+  /* Press-and-hold is OUR gesture (it opens Zoom on a product). Without this,
+     iOS Safari raises its own Save Image / Copy callout over the flyer. */
+  -webkit-touch-callout: none;
 }
 .vv-page.is-ready { opacity: 1; }
 
@@ -2111,6 +2117,32 @@ a.watch-name:hover { text-decoration: underline; }
 }
 .vv-zoomctl button:disabled { opacity: 0.35; cursor: default; }
 @media (pointer: coarse) { .vv-zoomctl { display: none; } } /* gestures own zoom on touch */
+
+/* The Zoom toggle. Deliberately NOT inside .vv-zoomctl — that span is hidden
+   on touch devices, which are exactly the ones this button is for. */
+.vv-zoombtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 38px;
+  padding: 0 13px;
+  border: none;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+.vv-zoombtn:hover:not(:disabled) { background: var(--surface-3); }
+.vv-zoombtn:disabled { opacity: 0.35; cursor: default; }
+.vv-zoombtn[aria-pressed='true'] { background: var(--brand); color: #fff; }
+/* The word carries the feature — users look for "Zoom" by name. It only
+   stands down on the very narrowest phones, where the header would overflow. */
+@media (max-width: 330px) { .vv-zoombtn span { display: none; } }
+
 .vv-close {
   width: 38px;
   height: 38px;
@@ -2279,36 +2311,14 @@ a.watch-name:hover { text-decoration: underline; }
   transition: border-color 0.12s, background 0.12s;
   -webkit-tap-highlight-color: transparent;
 }
-.vv-spot::after {
-  content: '+';
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--brand);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 26px;
-  text-align: center;
-  opacity: 0.9;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
-  transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.25, 1.2);
-  will-change: transform;
-}
+/* No persistent marker: a badge pinned to a spot's corner sits exactly where
+   flyers print the price. The tap layer is taught instead by the one-time
+   flash + hint on page entry, and confirmed by the pressed state below. */
 .vv-spot.is-pressed,
 .vv-spot:focus-visible {
   border-color: var(--brand);
   background: rgba(37, 99, 235, 0.14);
   outline: none;
-}
-/* The instant a finger lands on a product the marker pops larger. */
-.vv-spot.is-pressed::after,
-.vv-spot:focus-visible::after {
-  transform: scale(1.4);
-  opacity: 1;
 }
 .vv-spots-flash .vv-spot { animation: spot-flash 1.5s ease 1; }
 .vv-spot.is-pulse { animation: vv-pulse 2.4s ease 1; }
@@ -2321,6 +2331,84 @@ a.watch-name:hover { text-decoration: underline; }
   }
   75% { border-color: var(--brand); background: rgba(37, 99, 235, 0.08); box-shadow: 0 0 0 2px var(--brand-ring); }
 }
+
+/* --- Zoom: the optional one-product reading layout (zoomMode.js) -------------- */
+/* One product per screen, framed like the product sheet's enlarged image: the
+   same crop, the same dark surround, so the flyer's own print is as legible
+   here as it is there. The thumbnail strip stands down to give it the height. */
+.vv-overlay.is-zoom .vv-bottom { display: none; }
+.vv-overlay.is-zoom .vv-indicator { bottom: calc(12px + env(safe-area-inset-bottom)); }
+/* Inset with top/bottom, NOT padding: the slots are absolutely positioned, and
+   an abs-positioned child resolves `inset: 0` against the PADDING box — padding
+   here would leave the panes running under the header and the indicator. */
+.vz {
+  position: absolute;
+  top: calc(58px + env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  bottom: calc(46px + env(safe-area-inset-bottom));
+  z-index: 2;
+  overflow: hidden;
+  background: rgba(10, 9, 22, 0.92); /* the lightbox's surround */
+  -webkit-touch-callout: none; /* hold exits Zoom; no OS image menu */
+}
+.vz-track { position: absolute; inset: 0; will-change: transform; }
+.vz-slot { position: absolute; inset: 0; }
+/* Inset, not padding: the frame is sized from clientWidth/Height, which INCLUDE
+   padding — padding here would let the crop overflow to the screen edges. */
+.vz-pane {
+  position: absolute;
+  inset: 12px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  pointer-events: none; /* the gesture arbiter decides what a touch means */
+  -webkit-tap-highlight-color: transparent;
+}
+.vz-pane:focus-visible { outline: 2px solid var(--brand); outline-offset: -4px; }
+/* The crop's own window: sized to the CROP, never to the screen, so no part of
+   a neighbouring product can show at the edges. */
+.vz-frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+.vz-img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.vz-img.is-ready { opacity: 1; }
+.vz-chev {
+  position: absolute;
+  top: 50%;
+  z-index: 4;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: none;
+  border-radius: 50%;
+  background: rgba(12, 12, 30, 0.55);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.vz-chev-prev { left: 4px; }
+.vz-chev-next { right: 4px; }
+.vz-chev:disabled { opacity: 0.2; cursor: default; }
 
 /* --- misc ------------------------------------------------------------------------ */
 .vv-hint {

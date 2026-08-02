@@ -40,9 +40,11 @@ export function createPageCanvas(stage, opts) {
     pages, // [{ src }] — one per page, in order
     onPageChange = () => {},
     onTap = () => {}, // (i, {fx, fy, x, y}) -> handled? (true = consumed)
+    onLongPress = () => {}, // press-and-hold on a product, same signature
     onPress = () => {}, // pressed-feedback probe, same signature
     onPressCancel = () => {},
     onMountPage = () => {}, // (i, contentEl, fit) — attach overlays here
+    onUnmountPage = () => {}, // (i) — the slot's DOM is about to go away
     onZoomChange = () => {},
     onPullDown = () => {}, // (dy) — vertical drag at 1×: dismiss preview
     onPullDownEnd = () => {}, // (dy, vy) — release: close or spring back
@@ -143,6 +145,10 @@ export function createPageCanvas(stage, opts) {
   function unmount(i) {
     const s = slots.get(i);
     if (!s) return;
+    // Overlays attached to this slot's content go with it — otherwise the
+    // owner keeps a layer whose DOM is detached and never rebuilds it when the
+    // page comes back into the window.
+    onUnmountPage(i);
     s.el.remove();
     slots.delete(i);
   }
@@ -294,6 +300,13 @@ export function createPageCanvas(stage, opts) {
       const p = stageXY(x, y);
       const f = pointToFraction(t(), s.fit.w, s.fit.h, p.x, p.y);
       onTap(idx, { ...f, x, y });
+    },
+    onLongPress(x, y) {
+      const s = slots.get(idx);
+      if (!s || !s.fit) return;
+      const p = stageXY(x, y);
+      const f = pointToFraction(t(), s.fit.w, s.fit.h, p.x, p.y);
+      onLongPress(idx, { ...f, x, y });
     },
     onDoubleTap(x, y) {
       const s = slots.get(idx);

@@ -7,8 +7,9 @@
 
 import { createGestures } from './gestures.js';
 import {
-  fitSize, centered, bounds, clamp, zoomAt, pinchZoom, pointToFraction, centerOnRect,
+  fitSize, centered, bounds, clamp, zoomAt, pinchZoom, pointToFraction, centerOnRect, paneFit,
 } from './transform.js';
+import { buildSequence, startIndexFor } from './zoomMode.js';
 import { createSpotLayer, spotForOffer } from './hotspots.js';
 import { rememberPosition, recallPosition } from './state.js';
 import { structureOfferName } from './productName.js';
@@ -47,6 +48,7 @@ function recordingHandlers(log) {
     onPressCancel: () => log.push('presscancel'),
     onTap: (x, y) => log.push(`tap:${x},${y}`),
     onDoubleTap: () => log.push('dbltap'),
+    onLongPress: (x, y) => log.push(`longpress:${x},${y}`),
     onPanStart: () => log.push('panstart'),
     onPan: (dx, dy) => log.push(`pan:${Math.round(dx)},${Math.round(dy)}`),
     onPanEnd: (vx) => log.push(`panend:${vx.toFixed(2)}`),
@@ -111,6 +113,98 @@ function recordingHandlers(log) {
   ok('pinch scale is relative', log4.includes('pinch:2.00'));
   ok('pinch ends when a finger lifts', log4.includes('pinchend'));
   ok('settling finger never taps or pans', !log4.some((l) => l.startsWith('tap:') || l === 'panstart'));
+
+  // --- press and hold (enters Zoom on the held product) -------------------------
+  {
+    // A still finger held past the window fires ONCE and consumes the contact:
+    // lifting must not also open the product sheet.
+    const log = [];
+    const timers = manualTimers();
+    const g = createGestures(recordingHandlers(log), timers);
+    g.down(1, 100, 100, 0);
+    timers.flush(); // the hold window elapses while the finger is down
+    ok('hold fires while the finger is down', log.includes('longpress:100,100'));
+    ok('hold clears the pressed highlight', log.includes('presscancel'));
+    g.up(1, 100, 100, 600);
+    timers.flush();
+    ok('a held contact never becomes a tap', !log.some((l) => l.startsWith('tap:')));
+    ok('a held contact never pans', !log.includes('panstart'));
+    ok('hold fires exactly once', log.filter((l) => l.startsWith('longpress')).length === 1);
+  }
+  {
+    // THE REGRESSION: a hold swaps what is on screen, and the browser may then
+    // never deliver that pointer's up/cancel (its element is gone). If the id
+    // were left in the map, the NEXT touch would arrive as a second live
+    // pointer — a pinch — and taps and pans would be dead for the rest of the
+    // session, across page turns. Reported from a real iPhone.
+    const log = [];
+    const timers = manualTimers();
+    const g = createGestures(recordingHandlers(log), timers);
+    g.down(1, 100, 100, 0);
+    timers.flush(); // hold fires; the layer under the finger is replaced
+    // ...and nothing more is ever heard about pointer 1.
+    g.down(2, 140, 140, 900); // the user's next touch
+    ok('a touch after a stranded hold is not a pinch', !log.includes('pinchstart'));
+    ok('a touch after a stranded hold presses', log.filter((l) => l === 'press').length === 2);
+    g.move(2, 140, 190, 940);
+    ok('panning still works after a stranded hold', log.includes('panstart'));
+    g.up(2, 140, 190, 980);
+    timers.flush();
+
+    // And the same for a plain tap on the very next touch.
+    const log2 = [];
+    const t2 = manualTimers();
+    const g2 = createGestures(recordingHandlers(log2), t2);
+    g2.down(1, 100, 100, 0);
+    t2.flush();
+    g2.down(2, 140, 140, 900);
+    g2.up(2, 140, 140, 960);
+    t2.flush();
+    ok('tapping still works after a stranded hold', log2.includes('tap:140,140'));
+
+    // A cancel meant for someone else's pointer must not wipe our gesture.
+    const log3 = [];
+    const g3 = createGestures(recordingHandlers(log3), manualTimers());
+    g3.down(1, 10, 10, 0);
+    g3.cancel(99);
+    ok('a foreign pointercancel is ignored', !log3.includes('presscancel'));
+    g3.cancel(1);
+    ok('our own pointercancel still cancels', log3.includes('presscancel'));
+  }
+  {
+    // Moving beyond the slop is a pan, not a hold — scrolling the flyer with a
+    // slow finger must never fling the reader into Zoom.
+    const log = [];
+    const timers = manualTimers();
+    const g = createGestures(recordingHandlers(log), timers);
+    g.down(1, 100, 100, 0);
+    g.move(1, 100, 140, 40);
+    timers.flush();
+    ok('a drag cancels the hold', !log.some((l) => l.startsWith('longpress')));
+    ok('a drag still pans', log.includes('panstart'));
+  }
+  {
+    // Lifting before the window is an ordinary tap.
+    const log = [];
+    const timers = manualTimers();
+    const g = createGestures(recordingHandlers(log), timers);
+    g.down(1, 60, 60, 0);
+    g.up(1, 60, 60, 120);
+    timers.flush();
+    ok('a quick tap is unaffected', log.includes('tap:60,60'));
+    ok('a quick tap is not a hold', !log.some((l) => l.startsWith('longpress')));
+  }
+  {
+    // A second finger is a pinch, whatever the first one was doing.
+    const log = [];
+    const timers = manualTimers();
+    const g = createGestures(recordingHandlers(log), timers);
+    g.down(1, 100, 100, 0);
+    g.down(2, 200, 100, 30);
+    timers.flush();
+    ok('a pinch cancels the hold', !log.some((l) => l.startsWith('longpress')));
+    ok('a pinch still starts', log.includes('pinchstart'));
+  }
   console.log('gestures ✅');
 }
 
@@ -439,6 +533,111 @@ function recordingHandlers(log) {
   const unknown = structureOfferName({ name: 'Freshline Organic Oats 500g' });
   ok('parser works without a dictionary hit', unknown.en === 'Freshline Organic Oats' && unknown.brand === null);
   console.log('brand knowledge + OCR layer ✅');
+}
+
+/* --- Zoom: pane crop math ------------------------------------------------------------ */
+{
+  // A real flyer page and a real tile, measured from production assets:
+  // 1060x1500 page, ~0.32 x 0.21 hotspot, ONE product filling a 390px phone.
+  const ASPECT = 1060 / 1500;
+  const pad = 0.02;
+  const spot = { x: 0.0157, y: 0.389, w: 0.3206, h: 0.2151 };
+  const paneW = 351;
+  const paneH = 684;
+  const box = paneFit(spot, paneW, paneH, ASPECT);
+
+  const crop = (s) => {
+    const x0 = Math.max(0, s.x - pad);
+    const y0 = Math.max(0, s.y - pad);
+    return { x0, y0, cw: Math.min(1 - x0, s.w + 2 * pad), ch: Math.min(1 - y0, s.h + 2 * pad) };
+  };
+  const c = crop(spot);
+
+  ok('frame fits the pane', box.frameW <= paneW + 0.01 && box.frameH <= paneH + 0.01);
+  ok('frame fills one axis', near(box.frameW, paneW, 0.5) || near(box.frameH, paneH, 0.5));
+  ok('image keeps its aspect', near(box.imgW / box.imgH, ASPECT, 0.001));
+
+  // THE regression this replaces: the frame must show the crop and NOTHING
+  // else. The crop's rendered box has to match the frame on both axes exactly —
+  // any slack is a neighbouring product bleeding in at the edge.
+  ok('crop exactly fills the frame width', near(c.cw * box.imgW, box.frameW, 0.01));
+  ok('crop exactly fills the frame height', near(c.ch * box.imgH, box.frameH, 0.01));
+  ok('crop starts at the frame origin',
+    near(box.imgLeft + c.x0 * box.imgW, 0, 0.01) && near(box.imgTop + c.y0 * box.imgH, 0, 0.01));
+
+  // The point of the mode: the product must land at roughly the size the
+  // product sheet's enlarged image already shows (~310px wide on this phone),
+  // far larger than the ~125px it gets on the full page.
+  const pageFit = fitSize(1060, 1500, 390, 660);
+  ok('product is enlarged >2x', box.imgW / pageFit.w > 2.2);
+  ok('product matches the popup size', spot.w * box.imgW > 290);
+
+  // A spot flush against an edge is framed from the image edge inward — never
+  // by pulling in blank space from outside the page.
+  const edge = { x: 0, y: 0, w: 0.3, h: 0.2 };
+  const eb = paneFit(edge, paneW, paneH, ASPECT);
+  const ec = crop(edge);
+  ok('edge crop still fills its frame',
+    near(ec.cw * eb.imgW, eb.frameW, 0.01) && near(ec.ch * eb.imgH, eb.frameH, 0.01));
+  ok('edge crop starts at the image edge', near(eb.imgLeft, 0, 0.01) && near(eb.imgTop, 0, 0.01));
+
+  // A tall, narrow product and a wide, short one both crop cleanly — the case
+  // the old pane-shaped clip got wrong.
+  for (const odd of [{ x: 0.4, y: 0.1, w: 0.12, h: 0.4 }, { x: 0.05, y: 0.6, w: 0.9, h: 0.08 }]) {
+    const ob = paneFit(odd, paneW, paneH, ASPECT);
+    const oc = crop(odd);
+    ok(`odd-shaped crop fills its frame (${odd.w}x${odd.h})`,
+      near(oc.cw * ob.imgW, ob.frameW, 0.01) && near(oc.ch * ob.imgH, ob.frameH, 0.01)
+      && ob.frameW <= paneW + 0.01 && ob.frameH <= paneH + 0.01);
+  }
+  // A whole-page "spot" degenerates to the plain contain fit.
+  const whole = paneFit({ x: 0, y: 0, w: 1, h: 1 }, paneW, paneH, ASPECT, 0);
+  const plain = fitSize(1060, 1500, paneW, paneH);
+  ok('full-page spot == contain fit',
+    near(whole.frameW, plain.w, 0.5) && near(whole.frameH, plain.h, 0.5)
+    && near(whole.imgW, plain.w, 0.5));
+  console.log('zoom pane math ✅');
+}
+
+/* --- Zoom: the product sequence ------------------------------------------------------- */
+{
+  const spotsByIndex = new Map([
+    [0, [{ offerId: 'a' }, { offerId: 'b' }, { offerId: 'gone' }]],
+    [4, []], // a page with no hotspots contributes nothing
+    [7, [{ offerId: 'c' }]],
+  ]);
+  const seq = buildSequence({
+    pageIndices: [0, 4, 7],
+    pageSrcs: ['p0.webp', 'p1.webp', 'p2.webp'],
+    spotsByIndex,
+    offers: { a: { price: 1 }, b: { price: 2 }, c: { price: 3 } },
+  });
+  ok('spots without an offer are dropped', seq.length === 3);
+  ok('brochure order is preserved', seq.map((e) => e.spot.offerId).join(',') === 'a,b,c');
+  ok('entries carry their rendered page', seq[2].page === 2);
+  ok('entries carry their page image', seq[0].src === 'p0.webp' && seq[2].src === 'p2.webp');
+  ok('empty pages are skipped', !seq.some((e) => e.page === 1));
+  ok('no geometry means no sequence', buildSequence({}).length === 0);
+
+  // Where a press-and-hold opens Zoom: ON the held product, not at the top of
+  // the page — otherwise the hold saves nobody any swiping.
+  const many = buildSequence({
+    pageIndices: [0, 1],
+    pageSrcs: ['a.webp', 'b.webp'],
+    spotsByIndex: new Map([
+      [0, [{ offerId: 'p1' }, { offerId: 'p2' }, { offerId: 'p3' }]],
+      [1, [{ offerId: 'q1' }, { offerId: 'q2' }]],
+    ]),
+    offers: { p1: {}, p2: {}, p3: {}, q1: {}, q2: {} },
+  });
+  ok('the button starts the page', startIndexFor(many, 0) === 0);
+  ok('a hold starts on its own product', startIndexFor(many, 0, { offerId: 'p3' }) === 2);
+  ok('a hold on page 2 indexes globally', startIndexFor(many, 1, { offerId: 'q2' }) === 4);
+  ok('ids compare as strings', startIndexFor(many, 0, { offerId: 2 }) === 0);
+  ok('a product from another page falls back', startIndexFor(many, 1, { offerId: 'p1' }) === 3);
+  ok('an unknown product falls back', startIndexFor(many, 0, { offerId: 'nope' }) === 0);
+  ok('a page with no products says so', startIndexFor(many, 9, { offerId: 'p1' }) === -1);
+  console.log('zoom sequence ✅');
 }
 
 /* --- reading-position memory --------------------------------------------------------- */

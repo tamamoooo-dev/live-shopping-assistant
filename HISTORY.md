@@ -5489,3 +5489,105 @@ zero model cost and resolves ONLY rows whose comparable quantity is a price
 basis, so no row is retired under a justification that does not explain it.
 
 **No migration required.**
+
+---
+
+## §51 · Zoom: reading the flyer one product at a time (2026-08-02)
+
+### The report
+
+> "The current brochure viewer is hard to read on a phone. Remove the blue +,
+> it adds no value and covers the price. And I want a Zoom mode."
+
+Two requests, one shipped as asked and one that took three attempts to
+understand.
+
+### The blue +
+
+Every hotspot carried a 26px brand-blue disc pinned to its bottom-right corner.
+Flyers print the price in the bottom-right corner. The badge therefore covered
+the single most important number on the page, on every product, on every page.
+
+It was also redundant: the tap layer is already taught by the one-time flash and
+hint on page entry, and confirmed by the pressed state on touch. Deleted, with
+nothing put in its place.
+
+### Zoom, and two wrong turns
+
+The first build split each page into halves and stacked two of them. That is
+**1.0× magnification** — on a phone the page is width-bound, so magnification is
+`page width ÷ crop width`, and a full-width crop is no larger than the page.
+Crop height plays no part. Halves cannot magnify.
+
+The second build cropped per product but clipped each crop to the *pane*
+rectangle. Whenever a product's proportions did not match the pane's, the
+surrounding page bled into the gap — neighbouring products sliced in half at the
+edges. The product sheet's enlarged image never had this problem because it is a
+true crop.
+
+The third build is the one that shipped, and it is what was asked for all along:
+**one product per screen, cropped exactly like the product sheet's enlarged
+image.** The frame is sized to the crop's own shape, never the screen's, so
+nothing outside the product can appear. On a 375×812 phone a product renders
+351×374 at **2.67×** — marginally larger than the popup the reader already found
+readable.
+
+Crops cost nothing. A frame holds the *same* page `<img>` the viewer already
+fetched, sized and offset by `paneFit()`. No canvas, no second download,
+compositor-only movement — the same discipline as `canvas.js`.
+
+Products appear in the brochure's own order; nothing is re-sorted. Reading rolls
+seamlessly into the next page. A page with no hotspot geometry disables the
+button rather than opening an empty mode.
+
+### Press and hold
+
+Entering at the top of a page and swiping to the product you already wanted is
+wasted work, so a press-and-hold on a product opens Zoom **at that product**, and
+a press-and-hold inside Zoom leaves. The gesture reverses itself; the reader
+never has to find the button again.
+
+### The bug that mattered
+
+Reported from a real iPhone: after exiting Zoom, the flyer stopped responding.
+Buttons worked, swipe and hotspots did not, and it survived page changes.
+
+That combination is the whole diagnosis. Buttons are DOM clicks; swipe and
+hotspots are the *only* two things driven by the gesture arbiter. So the arbiter
+was wedged, globally.
+
+`down()` classifies by live pointer count — one is a press, **two is a pinch**.
+The hold fired with the finger still down and replaced what was under it, and
+iOS then never delivered that pointer's `up` or `cancel`. Its id stayed in the
+map forever, so the next touch arrived as a second live pointer and was read as
+a pinch. Every tap and every pan, dead, for the rest of the session. The damage
+was done on *entry*; it only became visible on exit, which is why it looked like
+the exit's fault.
+
+A hold now **ends its contact immediately** instead of parking it in `settled`
+waiting for a release that may never come. Releases are additionally taken from
+`window` rather than the element, so a contact can end even when its element has
+been removed, and `cancel` became id-aware so a foreign pointercancel cannot
+wipe the viewer's gesture.
+
+The regression test was confirmed to **fail without the fix** — four failures
+covering not-a-pinch, press, pan and tap. A test that passed either way would
+have proved nothing.
+
+### Also fixed in passing
+
+`spotLayers` was never released when a page left the render window, leaving a
+detached layer that was never rebuilt on remount — no press feedback, no hint
+flash, and a leak. Zoom made it far easier to hit because it drives page changes
+as the reader crosses pages. `canvas.js` now reports unmounts.
+
+`-webkit-touch-callout: none` across the stage and the Zoom layer: press-and-hold
+belongs to the viewer, so iOS must not raise its own Save Image sheet over it.
+
+### What the measurements settled
+
+- Flyer pages are a uniform **1060–1142 × 1500**, and `data-width`/`data-height`
+  on the source confirm there is no larger variant upstream. Zoom buys
+  legibility, not sharpness, and cannot buy more without a new source.
+- Hotspot coverage is **226/226 pages** across the current brochures, so
+  crop-per-product is viable nearly everywhere.
