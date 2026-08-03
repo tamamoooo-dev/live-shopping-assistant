@@ -44,8 +44,8 @@ import {
   canonicalMatchText,
   matchStage,
   resolveJourneyPool,
+  eachPriceLabel as formatEachPrice,
 } from './match.js';
-import { t } from './i18n.js';
 
 const REL_FLOOR = 30; // ignore weak/look-alike matches when picking the best
 const VALUE_MARGIN = 0.9; // best-value must beat the cheapest's unit price by >10%
@@ -634,16 +634,13 @@ export function unitPriceLabel(l) {
 // to diverge, so a locally-computed pack beside an engine-computed unit price is
 // the one combination that can put two mutually contradictory numbers on one
 // line. Online listings therefore carry no per-item price, and that is correct.
+// THE FORMATTING ITSELF LIVES IN match.js, in the shared core: the app has
+// THREE card renderers (this module's summary line, marketplace.js priceRow and
+// viewer/sheet.js) and the viewer deliberately does not import compare.js. The
+// first release put the formatter here, and the brochure sheet shipped without
+// a per-item price as a direct result. This is the listing adapter over it.
 export function eachPriceLabel(l) {
-  const each = l && l.each;
-  const value = Number(each?.value);
-  if (!Number.isFinite(value) || value <= 0) return '';
-  // Three decimals below 0.10 SAR: 78 live offers (cotton buds, tea bags, wet
-  // wipes) fall there and "0.02" throws away most of what distinguishes them.
-  const v = value >= 100 ? Math.round(value)
-    : value < 0.1 ? Number(value.toFixed(3))
-      : Number(value.toFixed(2));
-  return t('summary.eachPrice', { value: v });
+  return formatEachPrice(l && l.each);
 }
 
 export { sizeLabel };

@@ -15,6 +15,8 @@ import { rememberPosition, recallPosition } from './state.js';
 import { structureOfferName } from './productName.js';
 import { matchBrand, brandCount } from './brandNormalize.js';
 import { BRANDS } from './brandKnowledge.js';
+import { offerSize } from './insights.js';
+import { eachPriceLabel } from '../match.js';
 
 let pass = 0;
 let fail = 0;
@@ -657,6 +659,35 @@ function recordingHandlers(log) {
   const broken = { getItem: () => '{not json', setItem: () => {} };
   ok('corrupt storage reads as empty', recallPosition('b1', broken) === null);
   console.log('state ✅');
+}
+
+// --- the product sheet's price data (2026-08-03) --------------------------------
+// REGRESSION: the per-item price shipped in compare.js, which this viewer
+// deliberately does not import, so the brochure sheet showed a unit price and
+// no per-item price while the search summary showed both. `offerSize` is the
+// sheet's only route to that data — if it drops `each`, the sheet cannot render
+// it however well the formatter works.
+{
+  const offer = {
+    name: 'AL BATAL POTATO CHIPS 12 x 23G',
+    nameAr: 'شيبس البتال',
+    price: 10.25,
+    size: '12 x 23G',
+    unitPrice: { value: 37.14, unit: 'kg', label: 'SAR/kg', source: 'derived' },
+    eachPrice: { value: 0.8541666, pack: 12 },
+  };
+  const sized = offerSize(offer);
+  ok('offerSize carries the engine per-item price', sized.each === offer.eachPrice);
+  ok('offerSize still carries the unit price', !!sized.unit);
+  ok('the sheet formats it', eachPriceLabel(sized.each) === '0.85 SAR each');
+
+  // A per-kilo product has a unit price and NO parsed size — the branch that
+  // returns early. It must not lose the per-item price on the way out either.
+  const loose = { name: 'Salmon Fillet', price: 45, size: 'Per Kg', unitPrice: { value: 45, unit: 'kg', label: 'SAR/kg', source: 'printed' }, eachPrice: null };
+  ok('the unsized branch returns an each field too', 'each' in offerSize(loose));
+
+  // An offer the engine refused: no per-item price, no label, no crash.
+  ok('no engine value -> no label', eachPriceLabel(offerSize({ name: 'Rice Bag', price: 20 }).each) === '');
 }
 
 if (fail) {

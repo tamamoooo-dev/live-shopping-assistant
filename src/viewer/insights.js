@@ -38,8 +38,14 @@ export function offerSize(offer) {
     size: offer.size || '',
     unitPrice: offer.unitPrice || null,
   });
-  if (!sized) return { size: null, label: '', unit: up };
-  return { size: sz, label: sizeLabel(sz), unit: up };
+  // The engine's per-item price, carried through UNPARSED. It travels beside
+  // the unit price because the sheet shows them together, and it is adopted
+  // rather than derived for the same reason everywhere else: the size parsed
+  // above is this client's reading, and dividing by it would let the sheet
+  // contradict the unit price the engine sent.
+  const each = offer.eachPrice || null;
+  if (!sized) return { size: null, label: '', unit: up, each };
+  return { size: sz, label: sizeLabel(sz), unit: up, each };
 }
 
 // The history variant that actually matches THIS product's size (never mix a

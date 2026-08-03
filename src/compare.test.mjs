@@ -12,6 +12,7 @@
 import {
   computeComparison, bestValueAnalysis, eachPriceLabel, flyerListing, unitPriceLabel,
 } from './compare.js';
+import { eachPriceLabel as formatEachPrice } from './match.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('FAIL:', name); } };
@@ -570,6 +571,24 @@ const label = (id) => id;
     eachPriceLabel({ each: { value: 0.0237, pack: 200 } }) === '0.024 SAR each',
   );
   ok('a zero or negative value is refused', eachPriceLabel({ each: { value: 0, pack: 4 } }) === '');
+}
+
+// THE DEFECT THIS PINS (reported 2026-08-03): the formatter shipped inside
+// compare.js, which viewer/sheet.js deliberately does not import, so the
+// brochure product sheet rendered a unit price and no per-item price while the
+// search summary rendered both. It now lives in match.js, the one module every
+// card renderer already reaches. Assert that the shared formatter and the
+// listing adapter are the same function, so a future copy cannot drift.
+{
+  const each = { value: 0.8541666, pack: 12 };
+  ok(
+    'the listing adapter and the shared formatter agree exactly',
+    eachPriceLabel({ each }) === formatEachPrice(each),
+  );
+  // The three call shapes the three renderers actually use.
+  ok('shared formatter takes a raw eachPrice', formatEachPrice(each) === '0.85 SAR each');
+  ok('shared formatter tolerates null', formatEachPrice(null) === '');
+  ok('shared formatter tolerates undefined', formatEachPrice(undefined) === '');
 }
 
 // The per-item price is DISPLAY-ONLY: it must never influence which listing wins.

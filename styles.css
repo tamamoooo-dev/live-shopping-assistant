@@ -1266,7 +1266,10 @@ button { font-family: inherit; }
 .summary-watch:hover { background: var(--brand); color: #fff; }
 
 /* --- unit price on result + flyer cards --- */
-.unit-price, .fo-unit {
+/* The per-item price shares the unit price's treatment on a grid card: both are
+   secondary to the price itself, and on a narrow card there is no room for a
+   visual hierarchy between them beyond their order. */
+.unit-price, .fo-unit, .each-price {
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;

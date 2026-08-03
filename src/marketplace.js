@@ -23,7 +23,7 @@
 
 import { openBrochureViewer } from './viewer.js';
 import { localLandingForOffer, storeLabel, storeColor } from './brochure.js';
-import { unitPrice, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, queryTokens, stageBand } from './match.js';
+import { unitPrice, eachPriceLabel, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, queryTokens, stageBand } from './match.js';
 import { featuredScore, featuredContext, recordChoice, isPrimaryPriceTier } from './featured.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.js';
@@ -385,7 +385,11 @@ export function cardImage(src, alt) {
   return imgWrap;
 }
 
-export function priceRow(price, oldPrice, currency, discountLabel, up) {
+// `each` is the engine's per-item price (`offer.eachPrice`) or null. It renders
+// wherever the unit price renders — the two answer different questions ("is
+// this good value" vs "what does one of them cost") and a card that shows one
+// without the other is the inconsistency this parameter exists to close.
+export function priceRow(price, oldPrice, currency, discountLabel, up, each = null) {
   const prices = el('div', 'card-prices');
   if (price != null) {
     prices.appendChild(el('span', 'price', money(price, currency)));
@@ -393,6 +397,8 @@ export function priceRow(price, oldPrice, currency, discountLabel, up) {
     if (discountLabel) prices.appendChild(el('span', 'discount', discountLabel));
     const upLabel = unitPriceLabel({ up });
     if (upLabel) prices.appendChild(el('span', 'unit-price', upLabel));
+    const eachLabel = eachPriceLabel(each);
+    if (eachLabel) prices.appendChild(el('span', 'each-price', eachLabel));
   } else {
     prices.appendChild(el('span', 'no-price', t('market.tapForPrice')));
   }
@@ -505,7 +511,10 @@ function onlineCard(store, item, badge, up) {
   body.appendChild(name);
   const meta = [item.brand, item.size].filter(Boolean).join(' · ');
   if (meta) body.appendChild(el('div', 'card-meta', meta));
-  body.appendChild(priceRow(item.price, item.oldPrice, item.currency, item.discountLabel, up));
+  // No per-item price for an ONLINE listing, ever: it never passed through the
+  // engine, so nothing computed one, and this module must not derive it (see
+  // match.js eachPriceLabel).
+  body.appendChild(priceRow(item.price, item.oldPrice, item.currency, item.discountLabel, up, null));
   a.appendChild(body);
   return a;
 }
@@ -562,7 +571,7 @@ function flyerCard(listing, badge, up) {
   const name = el('div', 'card-name', displayName);
   name.dir = 'auto';
   body.appendChild(name);
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up));
+  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up, offer.eachPrice || null));
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));

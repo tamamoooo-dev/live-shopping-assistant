@@ -17,6 +17,11 @@ import {
   adoptEngineUnitPrice,
   resolvePriceBasis,
 } from './priceBasis.js';
+// The one impure-looking import in a pure module, and it is not: i18n.js only
+// touches localStorage/document INSIDE its setters and `applyI18n`, so `t()` is
+// a plain table lookup that works unchanged under Node (the test suites rely on
+// exactly that).
+import { t } from './i18n.js';
 
 // --- Arabic + English text normalization ------------------------------------
 // Fold Arabic orthographic variants so "حليب" matches regardless of diacritics,
@@ -820,6 +825,33 @@ export function sizeLabel(sz) {
 }
 function trimNum(n) {
   return Number(n.toFixed(2)).toString();
+}
+
+// The engine's PER-ITEM price, formatted: "0.85 SAR each" / "0.85 ريال للحبة".
+// Takes `offer.eachPrice` ({ value, pack }) and returns '' when there is none.
+//
+// IT LIVES HERE, IN THE SHARED CORE, BECAUSE THE APP HAS THREE CARD RENDERERS
+// AND THEY MUST NOT DRIFT. summary.js (the shopping summary), marketplace.js
+// priceRow (the results grid) and viewer/sheet.js (the brochure product sheet)
+// each draw a price line, and each reaches this module. The first release put
+// the formatter in compare.js, which the viewer deliberately does not import —
+// so the brochure sheet silently shipped without a per-item price while the
+// search results had one. One definition, reachable from all three, is the fix.
+//
+// ADOPTED, NEVER DERIVED, at every one of those three sites: this formats what
+// the engine sent and computes nothing. The client's parseSize and the engine's
+// are documented to diverge, so a locally-derived pack beside an
+// engine-computed unit price is the one combination that can put two mutually
+// contradictory numbers on the same card.
+export function eachPriceLabel(each) {
+  const value = Number(each?.value);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  // Three decimals below 0.10 SAR: 78 live offers (cotton buds, tea bags, wet
+  // wipes) land there and "0.02" throws away most of what distinguishes them.
+  const v = value >= 100 ? Math.round(value)
+    : value < 0.1 ? Number(value.toFixed(3))
+      : Number(value.toFixed(2));
+  return t('summary.eachPrice', { value: v });
 }
 
 // Per-unit price for fair comparison: SAR per litre / per kg / per piece.

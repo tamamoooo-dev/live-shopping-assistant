@@ -14,7 +14,7 @@
 import { searchOffers, storeLabel, storeColor, cleanOfferName, pricesForQuery } from '../brochure.js';
 import { addToCart, inCart } from '../cart.js';
 import { openWatchDialog } from '../alertsPage.js';
-import { isRelevant, relevance, productFamily, productType } from '../match.js';
+import { isRelevant, relevance, productFamily, productType, eachPriceLabel } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 import { structureOfferName } from './productName.js';
 import { t, tn } from '../i18n.js';
@@ -310,8 +310,13 @@ export function createSheet(host, ctx) {
     const name = sn.en;
     const nameAr = sn.ar;
     const title = name || nameAr || sn.brand || sn.fallback || t('sheet.product');
-    const { label: sizeText, unit } = offerSize(offer);
-    const meta = unit ? `${fmt(Math.round(unit.value * 100) / 100)} SAR/${unit.unit}` : '';
+    const { label: sizeText, unit, each } = offerSize(offer);
+    // Unit price then per-item price, the same order and the same pairing the
+    // search cards use — "how good is this" before "what does one cost".
+    const meta = [
+      unit ? `${fmt(Math.round(unit.value * 100) / 100)} SAR/${unit.unit}` : '',
+      eachPriceLabel(each),
+    ].filter(Boolean).join(' · ');
     const attrs = [
       sn.brand ? `<span class="ps-attr"><span class="ps-attr-k">${esc(t('sheet.brand'))}</span>${esc(sn.brand)}</span>` : '',
       sizeText ? `<span class="ps-attr"><span class="ps-attr-k">${esc(t('sheet.size'))}</span>${esc(sizeText)}</span>` : '',
