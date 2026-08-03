@@ -45,6 +45,7 @@ import {
   matchStage,
   resolveJourneyPool,
 } from './match.js';
+import { t } from './i18n.js';
 
 const REL_FLOOR = 30; // ignore weak/look-alike matches when picking the best
 const VALUE_MARGIN = 0.9; // best-value must beat the cheapest's unit price by >10%
@@ -174,6 +175,9 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     image: offer.imageUrl || null,
     size,
     up: unitPrice(item),
+    // The engine's per-item price, adopted verbatim or not at all — the client
+    // never derives one (see eachPriceLabel).
+    each: offer.eachPrice || null,
     rel,
     // Stage over the SAME bilingual text that admitted the offer to the pool.
     stage: matchStage(probe, query),
@@ -227,6 +231,7 @@ function canonicalFlyerListing(offer, query, storeLabelFn = (x) => x) {
     image: offer.imageUrl || null,
     size,
     up: unitPrice(item),
+    each: offer.eachPrice || null,
     rel: REL_FLOOR,
     stage: 0,
     family: offerFamily(offer),
@@ -613,6 +618,32 @@ export function unitPriceLabel(l) {
   if (!up) return '';
   const v = up.value >= 100 ? Math.round(up.value) : Number(up.value.toFixed(2));
   return `${v} SAR/${up.unit}`;
+}
+
+// Human "0.85 SAR each" label for the PER-ITEM price of a multipack (or '').
+//
+// A SECOND PRESENTATION, NOT A SECOND METRIC. It answers "what does one of the
+// twelve cost", where the unit price answers "is this good value". It is
+// display-only: it never reaches `bestValue`, the `unitFamily` grouping, any
+// sort order, or a watch threshold — `watch.unitPriceHint` promises shoppers
+// that packages are compared BY UNIT PRICE, and a second denominator in that
+// path would break the promise.
+//
+// The engine is the only source (`offer.eachPrice`). This module deliberately
+// does NOT derive it: the client's `parseSize` and the engine's are documented
+// to diverge, so a locally-computed pack beside an engine-computed unit price is
+// the one combination that can put two mutually contradictory numbers on one
+// line. Online listings therefore carry no per-item price, and that is correct.
+export function eachPriceLabel(l) {
+  const each = l && l.each;
+  const value = Number(each?.value);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  // Three decimals below 0.10 SAR: 78 live offers (cotton buds, tea bags, wet
+  // wipes) fall there and "0.02" throws away most of what distinguishes them.
+  const v = value >= 100 ? Math.round(value)
+    : value < 0.1 ? Number(value.toFixed(3))
+      : Number(value.toFixed(2));
+  return t('summary.eachPrice', { value: v });
 }
 
 export { sizeLabel };

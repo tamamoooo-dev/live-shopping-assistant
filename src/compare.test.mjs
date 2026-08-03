@@ -9,7 +9,9 @@
 //  • the outlier guard keeps size-parse errors out of the recommendation,
 //  • the honest-confidence ladder (equivalence > unit price > low) survives.
 
-import { computeComparison, bestValueAnalysis, flyerListing, unitPriceLabel } from './compare.js';
+import {
+  computeComparison, bestValueAnalysis, eachPriceLabel, flyerListing, unitPriceLabel,
+} from './compare.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('FAIL:', name); } };
@@ -538,6 +540,46 @@ const label = (id) => id;
   ];
   const c = computeComparison('nadec milk', [], offers, null, label);
   ok('canonical: distinct productIds never form a group', !c.equivalent || c.equivalent.stores < 2);
+}
+
+// --- the per-item price (2026-08-03) ------------------------------------------
+// The client ADOPTS the engine's answer and never derives one. These assert the
+// adoption and, more importantly, the refusal.
+{
+  const label = (x) => x;
+  const offer = {
+    store: 'tamimi', name: 'AL BATAL POTATO CHIPS 12 x 23G', price: 10.25,
+    currency: 'SAR', size: '12 x 23G',
+    unitPrice: { value: 37.14, unit: 'kg', label: 'SAR/kg', source: 'derived' },
+    eachPrice: { value: 0.8541666, pack: 12 },
+  };
+  const l = flyerListing(offer, 'potato chips', label);
+  ok('eachPrice is adopted from the engine', eachPriceLabel(l) === '0.85 SAR each');
+
+  const noEach = flyerListing({ ...offer, eachPrice: null }, 'potato chips', label);
+  ok('no engine eachPrice -> no label', eachPriceLabel(noEach) === '');
+
+  // Online listings never pass through the engine, so they never carry one —
+  // the client must NOT fill the gap by re-parsing a size (mirror divergence).
+  ok('an online listing has no per-item price', eachPriceLabel({ up: { value: 5, unit: 'L' } }) === '');
+
+  // Sub-0.10 values keep a third decimal: "0.02" would collapse a whole tail of
+  // cotton buds and tea bags into the same number.
+  ok(
+    'a sub-0.10 per-item price keeps three decimals',
+    eachPriceLabel({ each: { value: 0.0237, pack: 200 } }) === '0.024 SAR each',
+  );
+  ok('a zero or negative value is refused', eachPriceLabel({ each: { value: 0, pack: 4 } }) === '');
+}
+
+// The per-item price is DISPLAY-ONLY: it must never influence which listing wins.
+{
+  const listings = [
+    { up: { value: 10, unit: 'L' }, each: { value: 0.5, pack: 12 }, price: 20 },
+    { up: { value: 8, unit: 'L' }, each: { value: 40, pack: 2 }, price: 80 },
+  ];
+  const value = bestValueAnalysis(listings);
+  ok('bestValue ranks on the unit price alone', value && value.best.up.value === 8);
 }
 
 console.log(`\ncompare.test: ${pass} passed, ${fail} failed`);

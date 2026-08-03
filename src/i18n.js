@@ -283,6 +283,11 @@ const STRINGS = {
     'summary.kicker.cheapest': 'Cheapest option',
     'summary.title': 'Shopping summary',
     'summary.atStores': 'at {stores}',
+    // The per-item price of a multipack. Deliberately NOUN-FREE: "each" is true
+    // of a bottle, an egg, a roll and a sachet alike, and inferring the noun
+    // would be a separate feature with its own failure mode (productName.js
+    // already records what deriving words from OCR names costs).
+    'summary.eachPrice': '{value} SAR each',
     'summary.flyerBadge': 'this week’s flyer',
     'summary.watch': '🔔 Watch price',
     'summary.watchTitle': 'Get an alert when this drops to your target price',
@@ -655,6 +660,11 @@ const STRINGS = {
     'summary.kicker.cheapest': 'الخيار الأرخص',
     'summary.title': 'ملخص التسوق',
     'summary.atStores': 'في {stores}',
+    // "للحبة" — per single item. Invariant across the count nouns, so it needs
+    // none of the 3–10 plural agreement `packageSize.js countWordFor()` handles:
+    // the phrase never takes a number, which is exactly why the noun-free label
+    // is the cheaper one in Arabic too.
+    'summary.eachPrice': '{value} ريال للحبة',
     'summary.flyerBadge': 'نشرة هذا الأسبوع',
     'summary.watch': '🔔 متابعة السعر',
     'summary.watchTitle': 'احصل على تنبيه عندما ينخفض هذا إلى سعرك المستهدف',

@@ -718,6 +718,15 @@ button { font-family: inherit; }
 }
 .summary-at { font-size: 14px; font-weight: 700; color: var(--text); }
 .summary-size { font-size: 12.5px; color: var(--muted); }
+/* The per-item price rides WITH the size, one weight below the unit price: it
+   answers "what does one cost", not "is this good value", and must never
+   out-shout the metric that ranks the results. */
+.summary-each {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .summary-name {
   display: block;
   margin-top: 4px;

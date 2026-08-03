@@ -23,7 +23,7 @@
 //     caveat — the user never mistakes an OCR price for a shelf price.
 
 import { sizeLabel } from './match.js';
-import { unitPriceLabel } from './compare.js';
+import { eachPriceLabel, unitPriceLabel } from './compare.js';
 import { addToCart } from './cart.js';
 import { t, tn } from './i18n.js';
 
@@ -124,6 +124,13 @@ function priceLine(l, { big = true, shared = null } = {}) {
   line.appendChild(el('span', 'summary-at', t('summary.atStores', { stores })));
   const sz = sizeLabel(l.size);
   if (sz) line.appendChild(el('span', 'summary-size', sz));
+  // The per-item price sits with the SIZE, not with the unit price, and that
+  // placement is the design. "12 × 23 g · 0.85 SAR each" reads as one thought —
+  // what you get, and what one of them costs. Put beside the unit price instead,
+  // it would compete for the value slot with the metric that actually answers
+  // "which is better value", on a line that already carries four things.
+  const each = eachPriceLabel(l);
+  if (each) line.appendChild(el('span', 'summary-each', each));
   if (l.source === 'flyer') {
     // Badge only — the machine-extraction caveat lives in its tooltip.
     const fb = el('span', 'summary-flyer-badge', t('summary.flyerBadge'));
