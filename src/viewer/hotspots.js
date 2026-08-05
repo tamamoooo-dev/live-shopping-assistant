@@ -9,6 +9,8 @@
 // Keyboard/screen-reader users still get real <button>s (click handlers fire
 // on Enter/Space via the a11y tree even with pointer-events off).
 
+import { enrichmentDot } from '../enrichmentStatus.js';
+
 export function createSpotLayer(contentEl, spots, offers, { onActivate, labelOf }) {
   const layer = document.createElement('div');
   layer.className = 'vv-spots';
@@ -24,6 +26,7 @@ export function createSpotLayer(contentEl, spots, offers, { onActivate, labelOf 
     el.style.width = `${s.w * 100}%`;
     el.style.height = `${s.h * 100}%`;
     el.setAttribute('aria-label', labelOf(offer));
+    el.appendChild(enrichmentDot(offer));
     el.addEventListener('click', () => onActivate(offer, s)); // keyboard path
     layer.appendChild(el);
     byId.set(String(s.offerId), el);

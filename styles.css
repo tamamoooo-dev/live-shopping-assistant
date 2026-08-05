@@ -26,6 +26,7 @@
   --good-soft: rgba(22, 163, 74, 0.12);
   --bad: #dc2626;
   --bad-soft: rgba(220, 38, 38, 0.1);
+  --medium: #9333ea;
   --warn: #b45309;
   --warn-soft: rgba(217, 119, 6, 0.14);
   --radius: 18px;
@@ -59,6 +60,7 @@
     --good-soft: rgba(74, 222, 128, 0.14);
     --bad: #f87171;
     --bad-soft: rgba(248, 113, 113, 0.16);
+    --medium: #c084fc;
     --warn: #fbbf24;
     --warn-soft: rgba(251, 191, 36, 0.14);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -433,6 +435,24 @@ button { font-family: inherit; }
 }
 .card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: transparent; }
 .card:active { transform: translateY(-1px); }
+.product-enrichment-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+}
+.product-enrichment-dot.is-enriched { background: var(--good); }
+.product-enrichment-dot.is-missing { background: var(--bad); }
+.product-enrichment-dot.is-medium { background: var(--medium); }
+.card > .product-enrichment-dot {
+  position: absolute;
+  z-index: 4;
+  top: 9px;
+  left: 9px;
+}
 .card-img {
   aspect-ratio: 1 / 1;
   background: #fff;
@@ -1811,6 +1831,7 @@ a.watch-name:hover { text-decoration: underline; }
   scrollbar-width: thin;
 }
 .ps-rel-card {
+  position: relative;
   flex: 0 0 118px;
   display: flex;
   flex-direction: column;
@@ -1822,6 +1843,7 @@ a.watch-name:hover { text-decoration: underline; }
   cursor: pointer;
   text-align: start;
 }
+.ps-rel-card > .product-enrichment-dot { position: absolute; top: 5px; left: 5px; }
 .ps-rel-card:hover { border-color: var(--brand); }
 .ps-rel-card img, .ps-rel-noimg {
   width: 100%;
@@ -2334,9 +2356,14 @@ a.watch-name:hover { text-decoration: underline; }
   transition: border-color 0.12s, background 0.12s;
   -webkit-tap-highlight-color: transparent;
 }
-/* No persistent marker: a badge pinned to a spot's corner sits exactly where
-   flyers print the price. The tap layer is taught instead by the one-time
-   flash + hint on page entry, and confirmed by the pressed state below. */
+.vv-spot > .product-enrichment-dot {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 11px;
+  height: 11px;
+  border-color: rgba(255, 255, 255, 0.95);
+}
 .vv-spot.is-pressed,
 .vv-spot:focus-visible {
   border-color: var(--brand);
@@ -2393,6 +2420,7 @@ a.watch-name:hover { text-decoration: underline; }
   -webkit-tap-highlight-color: transparent;
 }
 .vz-pane:focus-visible { outline: 2px solid var(--brand); outline-offset: -4px; }
+.vz-pane > .product-enrichment-dot { position: absolute; top: 8px; left: 8px; z-index: 2; }
 /* The crop's own window: sized to the CROP, never to the screen, so no part of
    a neighbouring product can show at the edges. */
 .vz-frame {

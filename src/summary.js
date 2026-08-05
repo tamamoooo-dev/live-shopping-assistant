@@ -26,6 +26,7 @@ import { sizeLabel } from './match.js';
 import { eachPriceLabel, unitPriceLabel } from './compare.js';
 import { addToCart } from './cart.js';
 import { t, tn } from './i18n.js';
+import { enrichmentDot } from './enrichmentStatus.js';
 
 // --- rendering helpers ---------------------------------------------------------
 function money(v, c = 'SAR') {
@@ -181,6 +182,7 @@ export function summaryElement(s, storeLabelFn = (x) => x, opts = {}) {
   // Header: title + confidence chip + the actions (Add to cart, Watch price)
   const head = el('div', 'summary-head');
   head.appendChild(el('span', 'summary-title', t('summary.title')));
+  head.appendChild(enrichmentDot(h.offer || h.it || h));
   // Confidence: the colored dot alone (the label survives as a tooltip).
   const conf = el('span', `summary-conf conf-${s.confidence}`);
   conf.appendChild(el('span', 'conf-dot'));

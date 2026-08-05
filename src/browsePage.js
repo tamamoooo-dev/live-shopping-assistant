@@ -23,6 +23,7 @@ import { addToCart } from './cart.js';
 import { openWatchDialog } from './alertsPage.js';
 import { historyQuery } from './viewer/insights.js';
 import { t, getLang } from './i18n.js';
+import { enrichmentDot } from './enrichmentStatus.js';
 
 const RAILS = ['drops', 'lowest-ever'];
 const SORTS = ['discount', 'price'];
@@ -103,6 +104,7 @@ function browseCard(offer) {
   // Add-to-Cart/Watch <button>s and buttons cannot nest (same contract as the
   // marketplace's flyerCard). Same keyboard behaviour.
   const card = el('div', 'card card-flyer browse-card');
+  card.appendChild(enrichmentDot(offer));
   card.setAttribute('role', 'button');
   card.tabIndex = 0;
   card.title = t('market.flyerCardTitle', { name });

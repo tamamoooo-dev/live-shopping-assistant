@@ -29,6 +29,7 @@ import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.js';
 import { addToCart } from './cart.js';
 import { t, tn } from './i18n.js';
+import { enrichmentDot } from './enrichmentStatus.js';
 
 const DEFAULT_VISIBLE = 12;
 
@@ -407,6 +408,7 @@ export function priceRow(price, oldPrice, currency, discountLabel, up, each = nu
 
 function onlineCard(store, item, badge, up) {
   const a = el('a', 'card');
+  a.appendChild(enrichmentDot(item));
   // Only navigate when the result carries a real absolute product URL — never
   // send the user to a broken/relative href (a card should always lead exactly
   // where it says, or stay put).
@@ -524,6 +526,7 @@ function flyerCard(listing, badge, up) {
   // A div with button semantics, NOT a <button>: the card carries its own
   // Add-to-Cart <button> and buttons cannot nest. Same keyboard contract.
   const card = el('div', 'card card-flyer');
+  card.appendChild(enrichmentDot(offer));
   card.setAttribute('role', 'button');
   card.tabIndex = 0;
   const displayName = listing.name;
