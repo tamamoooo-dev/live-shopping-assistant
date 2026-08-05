@@ -18,7 +18,7 @@ import { isRelevant, relevance, productFamily, productType, eachPriceLabel } fro
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 import { structureOfferName } from './productName.js';
 import { t, tn } from '../i18n.js';
-import { enrichmentDotHtml } from '../enrichmentStatus.js';
+import { discountDotHtml } from '../discountStatus.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
 // Hero + cart thumbnails are cropped FROM THE STORED PAGE IMAGE (engine /asset,
@@ -328,7 +328,7 @@ export function createSheet(host, ctx) {
       <header class="ps-head">
         <button type="button" class="ps-back" ${stack.length > 1 ? '' : 'hidden'} aria-label="${esc(t('sheet.back'))}">‹</button>
         <span class="ps-store" style="--chip:${storeColor(offer.store)}">${esc(storeLabel(offer.store))}</span>
-        ${enrichmentDotHtml(offer)}
+        ${discountDotHtml(offer)}
         ${until ? `<span class="ps-until${ended ? ' is-ended' : ''}">${esc(until)}</span>` : ''}
         <button type="button" class="ps-close" aria-label="${esc(t('sheet.close'))}">✕</button>
       </header>
@@ -510,7 +510,7 @@ export function createSheet(host, ctx) {
       row.type = 'button';
       row.className = 'ps-cmp-row';
       row.innerHTML = `
-        ${enrichmentDotHtml(o)}
+        ${discountDotHtml(o)}
         <span class="ps-rel-store" style="--chip:${storeColor(o.store)}">${esc(storeLabel(o.store))}</span>
         <span class="ps-cmp-name" dir="auto">${esc(cleanOfferName(o.name) || cleanOfferName(o.nameAr) || '')}</span>
         <b class="ps-cmp-price">${fmt(o.price)} <small>${esc(o.currency || 'SAR')}</small></b>
@@ -631,7 +631,7 @@ export function createSheet(host, ctx) {
         card.type = 'button';
         card.className = 'ps-rel-card';
         card.innerHTML = `
-          ${enrichmentDotHtml(o)}
+          ${discountDotHtml(o)}
           ${o.imageUrl ? `<img src="${esc(o.imageUrl)}" alt="" loading="lazy">` : '<div class="ps-rel-noimg" aria-hidden="true">🛒</div>'}
           <span class="ps-rel-price">${o.price} <small>${esc(o.currency || 'SAR')}</small></span>
           <span class="ps-rel-store" style="--chip:${storeColor(o.store)}">${esc(storeLabel(o.store))}</span>
