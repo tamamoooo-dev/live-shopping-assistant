@@ -11,13 +11,6 @@
 // one store or six is the same flow (the old All/Single mode toggle is gone).
 
 import { createMemory, adaptiveSearch } from './core.js';
-import { pandaProvider } from './providers/panda.js';
-import { amazonProvider } from './providers/amazon.js';
-import { tamimiProvider } from './providers/tamimi.js';
-import { danubeProvider } from './providers/danube.js';
-import { luluProvider } from './providers/lulu.js';
-import { noonProvider } from './providers/noon.js';
-import { ninjaProvider } from './providers/ninja.js';
 import {
   loadBrochures,
   brochureForStore,
@@ -30,7 +23,7 @@ import {
 import { openBrochureViewer } from './viewer.js';
 import { initBrochuresPage } from './brochures.js';
 import { initBrowsePage } from './browsePage.js';
-import { rankItems as smartRank, relevance as matchRelevance, isRelevant, isPrimaryMatch, sizeLabel } from './match.js';
+import { sizeLabel } from './match.js';
 import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
 import { createMarketplace, openFlyerOffer } from './marketplace.js';
@@ -40,30 +33,26 @@ import { cartCount, CART_EVENT } from './cart.js';
 import { t, tn, applyI18n, initLangSwitch } from './i18n.js';
 import { initProfile } from './profile.js';
 import { BROCHURES_SOURCE_ID, splitSearchSources } from './searchSources.js';
+import {
+  ONLINE_STORES,
+  ONLINE_STORE_BY_ID,
+  BEST_EFFORT_ONLINE_STORES,
+  rankOnlineResults,
+} from './onlineStores.js';
 
 const memory = createMemory('app');
 
-// Ordered store list — drives the chips and grouped results.
-const STORES = [
-  { id: 'panda', kind: 'online', label: 'Panda', color: '#16a34a', provider: pandaProvider },
-  { id: 'amazon', kind: 'online', label: 'Amazon', color: '#f59e0b', provider: amazonProvider },
-  { id: 'tamimi', kind: 'online', label: 'Tamimi', color: '#0ea5e9', provider: tamimiProvider },
-  { id: 'danube', kind: 'online', label: 'Danube', color: '#ef4444', provider: danubeProvider },
-  { id: 'lulu', kind: 'online', label: 'Lulu', color: '#6366f1', provider: luluProvider },
-  { id: 'noon', kind: 'online', label: 'Noon', color: '#eab308', provider: noonProvider },
-  { id: 'ninja', kind: 'online', label: 'Ninja', color: '#ec4899', provider: ninjaProvider },
-];
+// Online-store order comes from the shared catalogue; the flyer index is the
+// one non-retailer source Search adds to its scope chips.
 const BROCHURES_SOURCE = {
   id: BROCHURES_SOURCE_ID,
   kind: 'brochures',
   label: t('search.source.brochures'),
   color: '#8b5cf6',
 };
-const SEARCH_SOURCES = [...STORES, BROCHURES_SOURCE];
-const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
+const SEARCH_SOURCES = [...ONLINE_STORES, BROCHURES_SOURCE];
+const STORE_BY_ID = ONLINE_STORE_BY_ID;
 const SOURCE_BY_ID = Object.fromEntries(SEARCH_SOURCES.map((s) => [s.id, s]));
-// Best-effort stores get a friendlier "temporarily unavailable" message.
-const BEST_EFFORT = new Set(['amazon', 'noon']);
 
 // How many flyer offers to pull from the engine per query. The engine holds
 // 200+ genuinely-relevant offers for staple queries across 18 stores; 40 was
@@ -79,14 +68,6 @@ const OFFERS_FETCH_LIMIT = 120;
 // shown. (The old "fall back to everything when nothing matches" behaviour is
 // gone on purpose: when Amazon fuzz-matches a query to 48 unrelated products,
 // dumping them made Amazon look broken and fed garbage into the comparison.)
-function rankAndFilter(items, query) {
-  const ranked = smartRank(items, query); // attaches _size and _rel
-  const relevant = ranked.filter((it) => isRelevant(it, query) && matchRelevance(it, query) > 0);
-  const primary = relevant.filter((it) => isPrimaryMatch(it, query));
-  const related = relevant.filter((it) => !isPrimaryMatch(it, query));
-  return { primary, related, hidden: ranked.length - relevant.length };
-}
-
 const $ = (id) => document.getElementById(id);
 const form = $('search-form');
 const input = $('search-input');
@@ -381,13 +362,13 @@ async function runSearch(query) {
         if (inFlight !== token) return;
         // Smart ranking + irrelevance filtering per store; only genuinely
         // matching results enter the marketplace and the comparison.
-        const { primary, related, hidden } = rankAndFilter(found, q);
+        const { primary, related, hidden } = rankOnlineResults(found, q);
         total += primary.length;
         for (const it of primary) tagged.push({ store: s, it });
         market.addOnline(s, primary, hidden, related);
       } catch (err) {
         if (inFlight !== token) return;
-        market.failStore(s, BEST_EFFORT.has(s.id));
+        market.failStore(s, BEST_EFFORT_ONLINE_STORES.has(s.id));
         console.warn(`${s.label} search failed:`, (err && err.details) || err);
       }
     }),

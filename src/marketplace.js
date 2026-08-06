@@ -674,7 +674,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   // The grid.
   const section = el('section', 'market');
   const head = el('div', 'market-head');
-  head.appendChild(el('span', 'market-title', t('market.allOffers')));
+  head.appendChild(el('span', 'market-title', opts.title || t('market.allOffers')));
   const count = el('span', 'market-count', '…');
   head.appendChild(count);
 

@@ -18,7 +18,13 @@
 // machine-extracted — every card opens the flyer itself (openFlyerOffer).
 
 import { loadBrowseSummary, browseOffers, storeLabel, storeColor, cleanOfferName, ENGINE_STORES } from './brochure.js';
-import { el, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort } from './marketplace.js';
+import { createMemory, adaptiveSearch } from './core.js';
+import {
+  el, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort, createMarketplace,
+} from './marketplace.js';
+import {
+  ONLINE_STORES, BEST_EFFORT_ONLINE_STORES, rankOnlineResults,
+} from './onlineStores.js';
 import { addToCart } from './cart.js';
 import { openWatchDialog } from './alertsPage.js';
 import { historyQuery } from './viewer/insights.js';
@@ -28,6 +34,7 @@ import { discountDot } from './discountStatus.js';
 const RAILS = ['drops', 'lowest-ever'];
 const SORTS = ['discount', 'price'];
 const PAGE_SIZE = 24;
+const onlineMemory = createMemory('app');
 
 // Department tile icons — presentation only (the taxonomy stays pure data).
 const DEPT_ICONS = {
@@ -355,7 +362,10 @@ function brandPill(brand) {
   pill.href = `#/browse/brand/${brand.slug}`;
   const icon = el('span', 'browse-brand-icon');
   icon.appendChild(brandIcon(brand.slug, nodeName(brand)));
-  icon.appendChild(el('span', 'browse-brand-count', String(brand.offers)));
+  const count = el('span', 'browse-brand-count', `📄 ${brand.offers}`);
+  count.title = t('browse.brandFlyerCount', { count: brand.offers });
+  count.setAttribute('aria-label', count.title);
+  icon.appendChild(count);
   pill.appendChild(icon);
   const name = el('span', 'browse-brand-name', nodeName(brand));
   name.dir = 'auto';
@@ -543,6 +553,12 @@ async function renderListing(host, route, token) {
   }
 
   const gridSlot = el('div', 'browse-slot');
+  if (route.view === 'brand') {
+    const flyerHead = el('div', 'browse-section-head');
+    flyerHead.appendChild(el('h2', null, t('browse.flyerOffers')));
+    flyerHead.appendChild(el('p', null, t('browse.flyerLead')));
+    host.appendChild(flyerHead);
+  }
   host.appendChild(gridSlot);
 
   let offset = 0;
@@ -601,4 +617,39 @@ async function renderListing(host, route, token) {
   }
 
   reload();
+  if (route.view === 'brand') {
+    renderOnlineBrand(host, brandInfo && brandInfo.en ? brandInfo.en : title, token);
+  }
+}
+
+// A brand page is the only Browse route that has a safe, canonical query.
+// Search every online provider here and feed the results into the SAME
+// marketplace component as Live Search. This deliberately stays separate from
+// the flyer grid: online prices are live catalogue results, while the first
+// grid is the structured set from this week's flyers.
+async function renderOnlineBrand(host, query, token) {
+  const section = el('section', 'browse-online-section');
+  section.appendChild(el('p', 'browse-online-lead', t('browse.onlineLead')));
+  host.appendChild(section);
+
+  const market = createMarketplace(section, ONLINE_STORES, query, {
+    includeFlyers: false,
+    title: t('browse.onlineOffers'),
+  });
+
+  await Promise.all(
+    ONLINE_STORES.map(async (store) => {
+      try {
+        const { results } = await adaptiveSearch(store.provider, query, onlineMemory);
+        if (renderToken !== token) return;
+        const { primary, related, hidden } = rankOnlineResults(results, query);
+        market.addOnline(store, primary, hidden, related);
+      } catch (err) {
+        if (renderToken !== token) return;
+        market.failStore(store, BEST_EFFORT_ONLINE_STORES.has(store.id));
+        console.warn(`${store.label} Browse search failed:`, (err && err.details) || err);
+      }
+    }),
+  );
+  if (renderToken === token) market.finish();
 }
