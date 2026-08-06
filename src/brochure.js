@@ -441,9 +441,17 @@ export async function localLandingForOffer(offer) {
 // it too). GET /browse/offers — the universal listing behind every Browse node.
 // Both best-effort like every engine read: null just means "Browse is resting".
 let browseSummaryPromise = null;
+// Cache-key bump for the 2026-08-07 brand-count dedupe. The Worker correctly
+// serves the new summary, but Cache API entries created by the previous Worker
+// version can survive a code deployment until their one-hour TTL expires.
+// Versioning this read makes the corrected counts visible immediately while
+// preserving the normal edge + session caching behaviour afterwards.
+const BROWSE_SUMMARY_CACHE_VERSION = '2026-08-07-brand-dedupe';
 export function loadBrowseSummary() {
   if (!browseSummaryPromise) {
-    browseSummaryPromise = fetch(`${ENGINE_BASE}/browse`)
+    browseSummaryPromise = fetch(
+      `${ENGINE_BASE}/browse?v=${encodeURIComponent(BROWSE_SUMMARY_CACHE_VERSION)}`,
+    )
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => (j && Array.isArray(j.departments) ? j : null))
       .catch(() => null);
