@@ -100,6 +100,7 @@ const SYNONYMS = [
   ['cola', 'كولا'],
   ['tide', 'تايد'],
   ['nutella', 'نوتيلا'],
+  ['tenderina', 'tendreena', 'تندرينا'],
   // water brands shoppers search in either script (found via "Arwa Water
   // 1.5L" — the Arabic flyer names could never match the Latin brand token)
   ['arwa', 'اروي', 'اروا'],
