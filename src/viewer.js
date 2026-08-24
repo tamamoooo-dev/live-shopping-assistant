@@ -4,4 +4,4 @@
 //
 //   import { openBrochureViewer, brochureDateLabel } from './viewer.js';
 
-export { openBrochureViewer, brochureDateLabel } from './viewer/index.js?v=20260825.2';
+export { openBrochureViewer, brochureDateLabel } from './viewer/index.js?v=20260825.3';

@@ -1,4 +1,4 @@
-// alertsPage.js — the Alerts page (#/alerts): the user's price watches and the
+// alertsPage.v2.js — the Alerts page (#/alerts): the user's price watches and the
 // alerts they produced, plus the shared "watch a price" dialog that the search
 // page (summary + result cards) opens.
 //
