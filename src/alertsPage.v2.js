@@ -29,7 +29,7 @@ import {
   refreshWatch,
 } from './brochure.js';
 import { t } from './i18n.js';
-import { notificationTarget } from './notificationNavigation.js';
+import { notificationTarget } from './notificationNavigation.js?v=20260825.7';
 import { manualRefreshReason } from './watchRefresh.js';
 
 function el(tag, cls, text) {

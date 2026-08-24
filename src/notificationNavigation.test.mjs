@@ -30,6 +30,20 @@ const forged = notificationTarget(
 );
 check('non-Amazon external URL is never direct', forged.kind === 'search');
 
+const advanced = notificationTarget(
+  {
+    query: 'تونة تندرينا ناعمة',
+    systemSearchQuery: 'Fish Goody',
+    customSearchQuery: 'تندرينا 185',
+    spec: { family: 'fish', brand: 'goody' },
+  },
+  { store: 'panda' },
+);
+check(
+  'advanced phrase overrides an inferred identity in the destination',
+  advanced.href === '#/search?q=%D8%AA%D9%86%D8%AF%D8%B1%D9%8A%D9%86%D8%A7+185',
+);
+
 const registry = notificationTarget(
   { kind: 'registry', productId: 'pr_twix1', label: 'Twix Chocolate 50g', query: 'chocolate' },
   { store: 'lulu', name: 'Twix 50 g', link: 'https://lulu.example/old' },

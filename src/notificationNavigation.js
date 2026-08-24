@@ -38,6 +38,11 @@ function sourceStore(watch = {}, observation = {}) {
 }
 
 function searchQuery(watch = {}, observation = {}) {
+  // A custom phrase is an explicit user instruction and systemSearchQuery is
+  // the engine's actual retrieval plan. Opening a watch must launch the same
+  // query the monitor uses; otherwise a spec such as { family: 'fish',
+  // brand: 'goody' } can silently turn "تندرينا 185" back into "Fish Goody".
+  const effectiveQuery = clean(watch.customSearchQuery || watch.systemSearchQuery);
   // Registry watches carry Super Search's internal identity. Keep it in the
   // route and pair it with the canonical display name as the current search
   // page's text-query fallback.
@@ -46,8 +51,8 @@ function searchQuery(watch = {}, observation = {}) {
   const registry = /^pr_[a-z0-9]+$/i.test(anchorProductId(watch));
   const identityQuery = structuredSearchQuery(watch, observation);
   const candidates = registry
-    ? [identityQuery, watch.label, observation.name, watch.query]
-    : [identityQuery, watch.query, watch.label, observation.name];
+    ? [effectiveQuery, identityQuery, watch.label, observation.name, watch.query]
+    : [effectiveQuery, identityQuery, watch.query, watch.label, observation.name];
   return clean(candidates.find((value) => clean(value)));
 }
 
