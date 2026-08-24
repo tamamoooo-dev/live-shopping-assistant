@@ -510,7 +510,7 @@ function watchRow(w, onDelete, onUpdate) {
     main.appendChild(cta);
   }
   if (!w.watchTrack && ((unanchored && !unanchored.actionable) ||
-      (!unanchored && ['anchor_unavailable', 'not_found'].includes(w.monitoringHealth))) {
+      (!unanchored && ['anchor_unavailable', 'not_found'].includes(w.monitoringHealth)))) {
     const repair = el('button', 'watch-diagnose', t('alerts.repairCta'));
     repair.type = 'button';
     repair.addEventListener('click', async () => {
