@@ -13,7 +13,7 @@
 
 import { searchOffers, storeLabel, storeColor, cleanOfferName, pricesForQuery } from '../brochure.js';
 import { addToCart, inCart } from '../cart.js';
-import { openWatchDialog } from '../alertsPage.js';
+import { openWatchDialog } from '../alertsPage.js?v=20260825.2';
 import { isRelevant, relevance, productFamily, productType, eachPriceLabel } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 import { structureOfferName } from './productName.js';

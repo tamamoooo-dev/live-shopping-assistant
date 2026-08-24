@@ -25,7 +25,7 @@ import {
 import { createPageCanvas } from './canvas.js';
 import { createSpotLayer, spotForOffer } from './hotspots.js';
 import { createNav } from './nav.js';
-import { createSheet } from './sheet.js';
+import { createSheet } from './sheet.js?v=20260825.2';
 import { createZoomMode, buildSequence, startIndexFor } from './zoomMode.js';
 import { rememberPosition, recallPosition } from './state.js';
 import { t, tn } from '../i18n.js';

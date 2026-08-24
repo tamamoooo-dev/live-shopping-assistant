@@ -24,7 +24,7 @@ import {
   orderBrochures,
   daysLeft,
 } from './brochure.js';
-import { openBrochureViewer, brochureDateLabel } from './viewer.js';
+import { openBrochureViewer, brochureDateLabel } from './viewer.js?v=20260825.2';
 import { t, tn } from './i18n.js';
 
 let initialized = false;

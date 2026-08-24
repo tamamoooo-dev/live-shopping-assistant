@@ -26,7 +26,7 @@ import {
   ONLINE_STORES, BEST_EFFORT_ONLINE_STORES, rankOnlineResults,
 } from './onlineStores.js';
 import { addToCart } from './cart.js';
-import { openWatchDialog } from './alertsPage.js';
+import { openWatchDialog } from './alertsPage.js?v=20260825.2';
 import { historyQuery } from './viewer/insights.js';
 import { t, getLang } from './i18n.js';
 import { discountDot } from './discountStatus.js';
