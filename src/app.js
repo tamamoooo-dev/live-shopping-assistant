@@ -22,7 +22,7 @@ import {
 } from './brochure.js';
 import { openBrochureViewer } from './viewer.js?v=20260825.3';
 import { initBrochuresPage } from './brochures.js?v=20260825.3';
-import { initBrowsePage } from './browsePage.js?v=20260825.3';
+import { initBrowsePage } from './browsePage.js?v=20260825.4';
 import { sizeLabel } from './match.js';
 import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
