@@ -27,7 +27,7 @@ import { sizeLabel } from './match.js';
 import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
 import { createMarketplace, openFlyerOffer } from './marketplace.js?v=20260825.3';
-import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.v2.js';
+import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.v2.js?v=20260825.6';
 import { initCartPage } from './cartPage.js?v=20260825.3';
 import { cartCount, CART_EVENT } from './cart.js';
 import { t, tn, applyI18n, initLangSwitch } from './i18n.js';

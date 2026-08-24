@@ -454,6 +454,20 @@ function watchRow(w, onDelete, onUpdate) {
   );
   main.appendChild(status);
 
+  // Keep the phrase that will actually reach every store visible on the card.
+  // The advanced override is a user instruction, so hiding it behind a closed
+  // details element made a correct backend change look unchanged.
+  const effectiveQuery = w.customSearchQuery || w.systemSearchQuery;
+  if (effectiveQuery) {
+    const queryLine = el(
+      'div',
+      'watch-reason',
+      `${t('watch.searchQuery')}: ${effectiveQuery}`,
+    );
+    queryLine.dir = 'auto';
+    main.appendChild(queryLine);
+  }
+
   // The engine's own reason, verbatim. A quiet watch must be able to say why
   // it is quiet — that is the difference between this design and the one it
   // replaced, and paraphrasing it here would put the explanation back out of
