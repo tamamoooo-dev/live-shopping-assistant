@@ -56,7 +56,7 @@ export function fmtDateShort(iso) {
     : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
-// The search query a product watch uses to re-find this product daily.
+// The fallback query for the 07:00/19:00 monitoring rounds.
 function watchQueryFor(item) {
   return (item.name || '').split(/\s+/).slice(0, 6).join(' ').slice(0, 80);
 }
@@ -454,10 +454,11 @@ function onlineCard(store, item, badge, up) {
   }
 
   // Watch bell: one tap sets a target-price watch on THIS product.
-  //   • Amazon — an exact-product watch: the engine re-finds THAT listing daily
+  //   • Amazon — an exact-product watch: the engine looks up THAT ASIN only
   //     by its stable id (Keepa-style). Marketplace SKUs have no cross-store
   //     equivalent, so this behaviour is preserved exactly.
-  //   • every other store — a cross-store watch: we keep the product identity
+  //   • every other store — a cross-source watch: the engine generalizes it to
+  //     product + brand and includes Amazon in the sweep
   //     (query + name + size) but let the engine super-search ALL stores and
   //     this week's flyers daily and take the lowest trustworthy price, exactly
   //     like the summary's "Watch price". One bell, best price everywhere.

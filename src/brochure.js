@@ -487,7 +487,7 @@ export function browseOffers(params = {}) {
 // The engine's Keepa-inspired monitoring: the user sets a target price on a
 // specific product (kind 'product': provider + stable product id) or a grocery
 // query (kind 'grocery': checked across ALL sources — online stores + flyer
-// offers) and the engine's daily cron writes an alert when the price crosses
+// offers) and the engine's 07:00/19:00 rounds write an alert when the price crosses
 // down to the target. These are thin, never-throwing clients for that API.
 //
 // PROFILE-SCOPED (Local Profile milestone): every call carries this browser's

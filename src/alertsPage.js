@@ -4,9 +4,9 @@
 //
 // A watch = "tell me when I can buy this at ≤ my target price". Two kinds:
 //   • product — a specific identifiable product (e.g. an Amazon ASIN): the
-//     engine re-finds THAT product daily and reads its price.
+//     engine re-finds THAT ASIN at 07:00/19:00 Riyadh and reads its price.
 //   • grocery — a staple query: the engine sweeps every online store AND the
-//     current flyer offers daily and takes the best trustworthy price.
+//     current sources at 07:00/19:00 Riyadh and takes the best trustworthy price.
 //
 // All engine knowledge stays in brochure.js (project rule 2); this module only
 // renders and calls its thin clients. Everything is best-effort: engine down →
@@ -84,6 +84,9 @@ export function openWatchDialog(opts) {
   document.querySelector('.watch-dialog')?.remove();
   const dlg = document.createElement('dialog');
   dlg.className = 'watch-dialog';
+  const exactAmazon = opts.kind === 'product' &&
+    String(opts.provider || '').toLowerCase() === 'amazon' &&
+    /^B[A-Z0-9]{9}$/i.test(String(opts.productId || ''));
 
   const form = el('form', 'wd-form');
   form.method = 'dialog';
@@ -97,7 +100,7 @@ export function openWatchDialog(opts) {
     el(
       'p',
       'wd-hint',
-      opts.kind === 'product'
+      exactAmazon
         ? t('watch.hintProduct', { store: storeLabel(opts.provider) || opts.provider })
         : t('watch.hintGrocery'),
     ),
@@ -121,21 +124,18 @@ export function openWatchDialog(opts) {
   const advanced = el('details', 'wd-advanced');
   advanced.appendChild(el('summary', 'wd-advanced-title', t('watch.advanced')));
   const advancedBody = el('div', 'wd-advanced-body');
-  const toggles = {};
-  if (opts.kind === 'grocery') {
-    for (const [key, labelKey] of [
-      ['matchBrand', 'watch.matchBrand'],
-      ['matchSize', 'watch.matchSize'],
-      ['matchVariant', 'watch.matchVariant'],
-    ]) {
-      const control = el('label', 'wd-toggle');
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = true;
-      toggles[key] = checkbox;
-      control.append(checkbox, el('span', null, t(labelKey)));
-      advancedBody.appendChild(control);
-    }
+  let searchInput = null;
+  if (!exactAmazon) {
+    const searchRow = el('label', 'wd-row');
+    searchRow.appendChild(el('span', 'wd-label', t('watch.searchQuery')));
+    searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.maxLength = 120;
+    searchInput.className = 'wd-input';
+    searchInput.placeholder = opts.query || t('watch.searchPlaceholder');
+    searchRow.appendChild(searchInput);
+    advancedBody.appendChild(searchRow);
+    advancedBody.appendChild(el('p', 'wd-advanced-hint', t('watch.searchHint')));
   }
   const closeRow = el('label', 'wd-row');
   closeRow.appendChild(el('span', 'wd-label', t('watch.closeThreshold')));
@@ -148,20 +148,6 @@ export function openWatchDialog(opts) {
   closeInput.className = 'wd-input';
   closeRow.appendChild(closeInput);
   advancedBody.appendChild(closeRow);
-  const advancedHint = el('p', 'wd-advanced-hint');
-  advancedBody.appendChild(advancedHint);
-  const refreshAdvancedHint = () => {
-    if (toggles.matchSize && !toggles.matchSize.checked) {
-      advancedHint.textContent = t('watch.unitPriceHint');
-    } else {
-      advancedHint.textContent = '';
-    }
-    if (toggles.matchBrand && !toggles.matchBrand.checked &&
-        !toggles.matchSize.checked && !toggles.matchVariant.checked) {
-      advancedHint.textContent = t('watch.categoryHint');
-    }
-  };
-  for (const checkbox of Object.values(toggles)) checkbox.addEventListener('change', refreshAdvancedHint);
   advanced.appendChild(advancedBody);
   form.appendChild(advanced);
 
@@ -211,13 +197,9 @@ export function openWatchDialog(opts) {
         link: opts.link || null,
         image: opts.image || null,
       },
-      // Unchecking any of these asks for a CLASS rather than a product. The
-      // ENGINE turns them into a spec, using the same extractor that will
-      // classify candidates at check time — deriving the spec here instead
-      // would pin it in one vocabulary and test it in another.
-      matchBrand: toggles.matchBrand ? toggles.matchBrand.checked : true,
-      matchSize: toggles.matchSize ? toggles.matchSize.checked : true,
-      matchVariant: toggles.matchVariant ? toggles.matchVariant.checked : true,
+      // Blank means the engine-generated brand + general product query. The
+      // advanced value overrides retrieval wording, never product identity.
+      customSearchQuery: searchInput?.value.trim() || null,
       closeThreshold: closeInput.value === '' ? null : Number(closeInput.value),
     });
     if (res.error) {
@@ -460,12 +442,15 @@ function watchRow(w, onDelete, onUpdate) {
 
   // Secondary — the living status. Friendly and active, never technical. The
   // colour cue lives on the title above; this line stays neutral.
+  const retrying = w.run?.status === 'retrying' || w.run?.status === 'running';
   const status = el(
     'div',
     'watch-status',
     unanchored
       ? unanchored.label
-      : hasDeal ? t('alerts.dealFound') : isClose ? t('alerts.closePrice') : t('alerts.stillWatching'),
+      : retrying
+        ? t('alerts.retrying', { attempt: w.run?.attempts || 1 })
+        : hasDeal ? t('alerts.dealFound') : isClose ? t('alerts.closePrice') : t('alerts.stillWatching'),
   );
   main.appendChild(status);
 
@@ -499,7 +484,7 @@ function watchRow(w, onDelete, onUpdate) {
   // A manual retry is exceptional: provider failure, first evaluation, or a
   // check older than the daily schedule plus grace. The endpoint enforces the
   // same gate. A successful evaluation repaints the row without this button.
-  if (!unanchored && manualRefreshReason(w)) {
+  if (!unanchored && !w.watchTrack && manualRefreshReason(w)) {
     const refresh = el('button', 'watch-refresh', t('alerts.refreshNow'));
     refresh.type = 'button';
     refresh.addEventListener('click', async () => {
@@ -524,7 +509,7 @@ function watchRow(w, onDelete, onUpdate) {
     cta.addEventListener('click', () => openConfirmPicker(w, cta, onUpdate));
     main.appendChild(cta);
   }
-  if ((unanchored && !unanchored.actionable) ||
+  if (!w.watchTrack && ((unanchored && !unanchored.actionable) ||
       (!unanchored && ['anchor_unavailable', 'not_found'].includes(w.monitoringHealth))) {
     const repair = el('button', 'watch-diagnose', t('alerts.repairCta'));
     repair.type = 'button';
@@ -559,7 +544,7 @@ function watchRow(w, onDelete, onUpdate) {
       (w.lastSource === 'flyer' ? t('alerts.flyerSuffix') : '');
     if (hasDeal) price.classList.add('is-deal');
   } else {
-    price.textContent = t('alerts.checkingDaily');
+    price.textContent = retrying ? t('alerts.retryingShort') : t('alerts.checkingDaily');
     price.classList.add('is-pending');
   }
   main.appendChild(price);
@@ -588,21 +573,19 @@ function watchRow(w, onDelete, onUpdate) {
     const advanced = el('details', 'watch-advanced');
     advanced.appendChild(el('summary', 'watch-advanced-title', t('watch.advanced')));
     const body = el('div', 'watch-advanced-body');
-    const controls = {};
-    if (w.kind === 'grocery') {
-      for (const [key, labelKey] of [
-        ['matchBrand', 'watch.matchBrand'],
-        ['matchSize', 'watch.matchSize'],
-        ['matchVariant', 'watch.matchVariant'],
-      ]) {
-        const control = el('label', 'wd-toggle');
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = w[key] !== false;
-        controls[key] = checkbox;
-        control.append(checkbox, el('span', null, t(labelKey)));
-        body.appendChild(control);
-      }
+    const exactAmazon = w.watchTrack === 'amazon_exact';
+    let searchInput = null;
+    if (!exactAmazon) {
+      const search = el('label', 'watch-close-control');
+      search.appendChild(el('span', null, t('watch.searchQuery')));
+      searchInput = document.createElement('input');
+      searchInput.type = 'search';
+      searchInput.maxLength = 120;
+      searchInput.value = w.customSearchQuery || '';
+      searchInput.placeholder = w.systemSearchQuery || w.query || t('watch.searchPlaceholder');
+      search.appendChild(searchInput);
+      body.appendChild(search);
+      body.appendChild(el('p', 'watch-advanced-hint', t('watch.searchHint')));
     }
     const close = el('label', 'watch-close-control');
     close.appendChild(el('span', null, t('watch.closeThreshold')));
@@ -615,23 +598,6 @@ function watchRow(w, onDelete, onUpdate) {
     closeInput.placeholder = t('watch.closePlaceholder');
     close.appendChild(closeInput);
     body.appendChild(close);
-    const hint = el('p', 'watch-advanced-hint');
-    const refreshHint = () => {
-      if (!controls.matchBrand) {
-        hint.textContent = '';
-        return;
-      }
-      hint.textContent = !controls.matchBrand.checked &&
-        !controls.matchSize.checked &&
-        !controls.matchVariant.checked
-        ? t('watch.categoryHint')
-        : !controls.matchSize.checked
-          ? t('watch.unitPriceHint')
-          : '';
-    };
-    for (const checkbox of Object.values(controls)) checkbox.addEventListener('change', refreshHint);
-    refreshHint();
-    body.appendChild(hint);
     const save = el('button', 'watch-settings-save', t('watch.saveSettings'));
     save.type = 'button';
     const saveError = el('p', 'wd-error');
@@ -640,11 +606,7 @@ function watchRow(w, onDelete, onUpdate) {
       save.disabled = true;
       save.textContent = t('watch.saving');
       const res = await updateWatch(w.id, {
-        ...(w.kind === 'grocery' ? {
-          matchBrand: controls.matchBrand.checked,
-          matchSize: controls.matchSize.checked,
-          matchVariant: controls.matchVariant.checked,
-        } : {}),
+        ...(!exactAmazon ? { customSearchQuery: searchInput.value.trim() || null } : {}),
         closeThreshold: closeInput.value === '' ? null : Number(closeInput.value),
       });
       if (res.error) {
