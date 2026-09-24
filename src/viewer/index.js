@@ -25,7 +25,8 @@ import {
 import { createPageCanvas } from './canvas.js';
 import { createSpotLayer, spotForOffer } from './hotspots.js';
 import { createNav } from './nav.js';
-import { createSheet } from './sheet.js?v=20260825.3';
+import { createSheet } from './sheet.js?v=20260924.1';
+import { priceStatus, priceStatusText } from './priceStatus.js';
 import { createZoomMode, buildSequence, startIndexFor } from './zoomMode.js';
 import { rememberPosition, recallPosition } from './state.js';
 import { t, tn } from '../i18n.js';
@@ -234,7 +235,9 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   const spotLabel = (offer) =>
     t('viewer.hotspotAria', {
       label: cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || t('viewer.flyerProduct'),
-      price: `${offer.price} ${offer.currency || 'SAR'}`,
+      price: priceStatus(offer) === 'priced'
+        ? `${offer.price} ${offer.currency || 'SAR'}`
+        : priceStatusText(offer),
     });
 
   function attachSpots(i, contentEl) {

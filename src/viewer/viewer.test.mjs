@@ -15,7 +15,8 @@ import { rememberPosition, recallPosition } from './state.js';
 import { structureOfferName } from './productName.js';
 import { matchBrand, brandCount } from './brandNormalize.js';
 import { BRANDS } from './brandKnowledge.js';
-import { offerSize } from './insights.js';
+import { offerSize, buildInsights } from './insights.js';
+import { priceStatus, priceStatusText } from './priceStatus.js';
 import { eachPriceLabel } from '../match.js';
 
 let pass = 0;
@@ -688,6 +689,74 @@ function recordingHandlers(log) {
 
   // An offer the engine refused: no per-item price, no label, no crash.
   ok('no engine value -> no label', eachPriceLabel(offerSize({ name: 'Rice Bag', price: 20 }).each) === '');
+}
+
+// --- unpriced flyer products: price pending / unavailable (2026-09-24) ------------
+// D4D publishes some flyers' products without a price. /brochures/hotspots still
+// serves them (price null + priceStatus) so they are tappable; vision price
+// enrichment later replaces an accepted one with a normal offer under the same
+// id, and a rejected one stays tappable as "unavailable".
+{
+  const fakeEl = () => ({
+    style: {},
+    classList: { add() {}, remove() {} },
+    setAttribute() {},
+    addEventListener() {},
+    appendChild() {},
+    append() {},
+    remove() {},
+  });
+  const P1 = { id: 's:r:d4d:P1', offerId: 'P1', name: 'Almarai Milk 1L', price: 6.5, oldPrice: 7.25 };
+  const U1 = { id: 's:r:d4d:U1', offerId: 'U1', name: 'Jameed 1kg', price: null, oldPrice: null, priceStatus: 'pending' };
+  const U2 = { id: 's:r:d4d:U2', offerId: 'U2', name: 'Dates 1kg', price: null, oldPrice: null, priceStatus: 'unavailable' };
+
+  // 1. an unpriced product is a tappable hotspot, pending or unavailable
+  global.document = { createElement: fakeEl };
+  const spots = [
+    { offerId: 'P1', x: 0.0, y: 0.0, w: 0.3, h: 0.3 },
+    { offerId: 'U1', x: 0.4, y: 0.0, w: 0.3, h: 0.3 },
+    { offerId: 'U2', x: 0.0, y: 0.4, w: 0.3, h: 0.3 },
+    { offerId: 'none', x: 0.4, y: 0.4, w: 0.3, h: 0.3 }, // no product served at all
+  ];
+  const layer = createSpotLayer(fakeEl(), spots, { P1, U1, U2 }, { onActivate() {}, labelOf: () => 'x' });
+  ok('a price-pending product is tappable', layer.hit(0.5, 0.1)?.offerId === 'U1');
+  ok('a price-unavailable product stays tappable', layer.hit(0.1, 0.5)?.offerId === 'U2');
+  ok('a priced product is tappable as before', layer.hit(0.1, 0.1)?.offerId === 'P1');
+  ok('a spot the engine served nothing for still never activates', layer.hit(0.5, 0.5) === null);
+  delete global.document;
+
+  ok('pending status', priceStatus(U1) === 'pending' && priceStatusText(U1) === 'Price pending');
+  ok('unavailable status', priceStatus(U2) === 'unavailable' && priceStatusText(U2) === 'Price unavailable');
+  ok('a priced offer is priced, with no status text', priceStatus(P1) === 'priced' && priceStatusText(P1) === '');
+  ok('no price and no pending promise reads as unavailable', priceStatus({ price: null }) === 'unavailable');
+  ok('a zero price is never shown as a price', priceStatus({ price: 0, priceStatus: 'pending' }) === 'pending');
+
+  // 2. enrichment accepted: the engine serves a normal offer under the same id
+  const accepted = { id: U1.id, offerId: 'U1', name: 'Jameed 1kg', price: 18, oldPrice: 22.5, priceSource: 'vision' };
+  ok('an accepted price reads as a normal priced offer', priceStatus(accepted) === 'priced');
+
+  // An unpriced product is never positioned against its history ("lowest
+  // price" would be a lie computed from a null), but the history still shows.
+  const farFuture = '2099-12-31';
+  const prices = { lowest: { price: 15, store: 'lulu', week: '2026-08-01' }, weeks: 6, trend: 'down', variants: [] };
+  for (const u of [U1, U2]) {
+    const ins = buildInsights({ offer: { ...u, validTo: farFuture }, prices });
+    ok(`${u.priceStatus}: the history is still served`, ins.history?.lowest.price === 15 && ins.history.weeks === 6);
+    ok(`${u.priceStatus}: no position against it`,
+      ins.history.delta === null && ins.history.pct === null && ins.history.atLowest === false);
+    ok(`${u.priceStatus}: no line speaks of "this price" (lowest / historical low / trending)`,
+      ins.lines.length === 0);
+  }
+
+  // 4. priced offers keep exactly the insights they had
+  const atLow = buildInsights({ offer: { ...accepted, price: 15, oldPrice: null, validTo: farFuture }, prices });
+  ok('priced at the low: delta 0, at lowest, 🏆 line',
+    atLow.history.delta === 0 && atLow.history.pct === 0 && atLow.history.atLowest === true && atLow.lines[0].icon === '🏆');
+  const above = buildInsights({ offer: { ...accepted, validTo: farFuture }, prices });
+  ok('priced above the low: delta, pct and 📉 + trend lines as before',
+    above.history.delta === 3 && above.history.pct === 20 && above.history.atLowest === false &&
+      above.lines.map((l) => l.icon).join() === '📉,↘');
+  console.log('unpriced flyer products ✅');
 }
 
 if (fail) {

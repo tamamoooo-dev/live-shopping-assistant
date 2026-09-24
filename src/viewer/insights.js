@@ -7,6 +7,7 @@
 
 import { parseSize, sizeLabel, unitPrice } from '../match.js';
 import { cleanOfferName } from '../brochure.js';
+import { priceStatus } from './priceStatus.js';
 import { t, tn } from '../i18n.js';
 
 // The Price History query seed for an offer: its most name-like tokens
@@ -95,20 +96,24 @@ export function buildInsights({ offer, prices, storeLabel = (s) => s }) {
   if (low && low.price > 0) {
     const weeks = (variant && variant.weeks) || (prices && prices.weeks) || 0;
     const trend = (variant && variant.trend) || (prices && prices.trend) || null;
-    const delta = offer.price - low.price;
-    const pct = Math.round((delta / low.price) * 100);
+    // An unpriced flyer product (price pending / unavailable) still has a
+    // history, but no price of its own to position against it — so none of
+    // the "this price" lines below apply to it.
+    const priced = priceStatus(offer) === 'priced';
+    const delta = priced ? offer.price - low.price : null;
+    const pct = priced ? Math.round((delta / low.price) * 100) : null;
     history = {
       lowest: low,
       weeks,
       trend,
       delta,
       pct,
-      atLowest: delta <= 0.01,
+      atLowest: priced && delta <= 0.01,
       label: variant ? variant.label || '' : '',
     };
     if (history.atLowest) {
       lines.push({ icon: '🏆', tone: 'good', text: t('insights.lowestPrice') });
-    } else if (pct >= 3) {
+    } else if (priced && pct >= 3) {
       const ago = weeksAgo(low.week);
       lines.push({
         icon: '📉',
@@ -121,7 +126,7 @@ export function buildInsights({ offer, prices, storeLabel = (s) => s }) {
         }),
       });
     }
-    if (trend === 'down' && !history.atLowest) {
+    if (priced && trend === 'down' && !history.atLowest) {
       lines.push({ icon: '↘', tone: 'good', text: t('insights.trendingDown') });
     }
   }

@@ -20,15 +20,15 @@ import {
   searchOffers,
   storeLabel,
 } from './brochure.js';
-import { openBrochureViewer } from './viewer.js?v=20260825.3';
-import { initBrochuresPage } from './brochures.js?v=20260825.3';
-import { initBrowsePage } from './browsePage.js?v=20260825.4';
+import { openBrochureViewer } from './viewer.js?v=20260924.1';
+import { initBrochuresPage } from './brochures.js?v=20260924.1';
+import { initBrowsePage } from './browsePage.js?v=20260924.1';
 import { sizeLabel } from './match.js';
 import { computeComparison, flyerListing } from './compare.js';
 import { summaryElement } from './summary.js';
-import { createMarketplace, openFlyerOffer } from './marketplace.js?v=20260825.3';
+import { createMarketplace, openFlyerOffer } from './marketplace.js?v=20260924.1';
 import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.v2.js?v=20260825.7';
-import { initCartPage } from './cartPage.js?v=20260825.3';
+import { initCartPage } from './cartPage.js?v=20260924.1';
 import { cartCount, CART_EVENT } from './cart.js';
 import { t, tn, applyI18n, initLangSwitch } from './i18n.js';
 import { initProfile } from './profile.js';

@@ -17,6 +17,7 @@ import { openWatchDialog } from '../alertsPage.v2.js';
 import { isRelevant, relevance, productFamily, productType, eachPriceLabel } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 import { structureOfferName } from './productName.js';
+import { priceStatus, priceStatusText } from './priceStatus.js';
 import { t, tn } from '../i18n.js';
 import { discountDotHtml } from '../discountStatus.js';
 
@@ -294,6 +295,10 @@ export function createSheet(host, ctx) {
   function render(entry) {
     closeLightbox(); // a stale enlarged image must not linger over a new card
     const offer = entry.offer;
+    // An unpriced flyer product (price pending / unavailable) is shown and
+    // tappable like any other; only what needs a real price is withheld.
+    const status = priceStatus(offer);
+    const priced = status === 'priced';
     const discount =
       offer.oldPrice && offer.oldPrice > offer.price
         ? Math.round(((offer.oldPrice - offer.price) / offer.oldPrice) * 100)
@@ -344,15 +349,19 @@ export function createSheet(host, ctx) {
             ${name && nameAr ? `<p class="ps-name-ar" dir="rtl">${esc(nameAr)}</p>` : ''}
             ${attrs ? `<p class="ps-attrs">${attrs}</p>` : ''}
             ${meta ? `<p class="ps-meta">${esc(meta)}</p>` : ''}
-            <div class="ps-pricerow">
+            <div class="ps-pricerow">${
+              priced
+                ? `
               <span class="ps-price">${fmt(offer.price)} <small>${esc(offer.currency || 'SAR')}</small></span>
               ${offer.oldPrice ? `<span class="ps-old">${fmt(offer.oldPrice)}</span>` : ''}
-              ${discount ? `<span class="ps-off">−${discount}%</span>` : ''}
+              ${discount ? `<span class="ps-off">−${discount}%</span>` : ''}`
+                : `<span class="ps-price-status is-${status}">${esc(priceStatusText(offer))}</span>`
+            }
             </div>
           </div>
         </div>
         <div class="ps-actions">
-          <button type="button" class="ps-add">
+          <button type="button" class="ps-add"${priced ? '' : ' disabled'}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.2l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h7.9a1.6 1.6 0 0 0 1.6-1.3L20.5 8H6"/></svg>
             <span>${inCart(offer.id) ? esc(t('sheet.addAgain')) : esc(t('sheet.addToList'))}</span>
           </button>
@@ -406,9 +415,9 @@ export function createSheet(host, ctx) {
       });
     }
 
-    /* Add to list */
+    /* Add to list — a priced offer only: the list totals real prices. */
     const addBtn = sheet.querySelector('.ps-add');
-    addBtn.addEventListener('click', async () => {
+    if (priced) addBtn.addEventListener('click', async () => {
       let thumb = entry.cartThumb || null;
       if (!thumb && entry.spot && entry.pageSrc) {
         thumb = await cropFromPage(entry.pageSrc, entry.spot, 220);
@@ -498,10 +507,14 @@ export function createSheet(host, ctx) {
       .slice(0, 4);
 
     const fmt = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
+    // An unpriced product has nothing to compare against: other stores' prices
+    // are listed as they are, with no delta and no "cheaper at" line.
+    const priced = priceStatus(offer) === 'priced';
     const rowEls = rows.map((o) => {
       const delta = Math.round((o.price - offer.price) * 100) / 100;
-      const badge =
-        delta < -0.01
+      const badge = !priced
+        ? ''
+        : delta < -0.01
           ? `<span class="ps-h-badge is-good">−${fmt(Math.abs(delta))}</span>`
           : delta > 0.01
             ? `<span class="ps-h-badge">+${fmt(delta)}</span>`
@@ -530,7 +543,7 @@ export function createSheet(host, ctx) {
       box.hidden = false;
       // The headline intelligence: this exact product cheaper somewhere else.
       const best = rows[0];
-      if (best && best.price < offer.price - 0.01) {
+      if (priced && best && best.price < offer.price - 0.01) {
         const ins = sheet.querySelector('.ps-insights');
         if (ins) {
           const line = document.createElement('div');
@@ -579,11 +592,15 @@ export function createSheet(host, ctx) {
       const vs = history.atLowest
         ? `<span class="ps-h-badge is-good">${esc(t('sheet.atHistoricalLow'))}</span>`
         : `<span class="ps-h-badge">${esc(t('sheet.vsLow', { pct: pctStr }))}</span>`;
+      // "This offer" positions the offer's own price; an unpriced one has none.
+      const thisOffer = priceStatus(offer) === 'priced'
+        ? `
+        <div class="ps-h-row"><span>${esc(t('sheet.thisOffer'))}</span><b>${esc(fmtMoney(offer.price))} ${vs}</b></div>`
+        : '';
       histBody.innerHTML = `
         <div class="ps-h-row"><span>${esc(t('sheet.lowestRecorded'))}</span><b>${esc(fmtMoney(history.lowest.price))}${
           history.lowest.store ? ` <small>${esc(t('sheet.atStore', { store: storeLabel(history.lowest.store) }))}</small>` : ''
-        }</b></div>
-        <div class="ps-h-row"><span>${esc(t('sheet.thisOffer'))}</span><b>${esc(fmtMoney(offer.price))} ${vs}</b></div>
+        }</b></div>${thisOffer}
         <div class="ps-h-row"><span>${esc(t('sheet.recordedOver'))}</span><b>${esc(tn('sheet.weeks', weeksCount))} <small class="ps-h-trend">${trendGlyph} ${esc(trendWord)}</small></b></div>`;
       hist.hidden = false;
     }

@@ -1789,6 +1789,8 @@ a.watch-name:hover { text-decoration: underline; }
 .ps-pricerow { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 2px; flex-wrap: wrap; }
 .ps-price { font-size: 26px; font-weight: 900; color: var(--brand); letter-spacing: -0.5px; }
 .ps-price small { font-size: 13px; font-weight: 700; color: var(--muted); }
+/* An unpriced flyer product: price pending / unavailable (viewer/priceStatus.js). */
+.ps-price-status { font-size: 16px; font-weight: 800; color: var(--muted); }
 .ps-old { font-size: 15px; color: var(--muted); text-decoration: line-through; }
 .ps-off {
   font-size: 12px;
@@ -2593,6 +2595,8 @@ a.watch-name:hover { text-decoration: underline; }
 .ps-actions .ps-add { background: var(--grad); color: #fff; }
 .ps-actions .ps-add.is-added { background: var(--good); }
 .ps-actions button:active { transform: scale(0.97); }
+/* Add to list needs a real price; an unpriced product shows it disabled. */
+.ps-actions .ps-add:disabled { opacity: 0.45; cursor: not-allowed; filter: none; transform: none; }
 .ps-insights { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 2px; }
 .ps-insight {
   display: flex;
