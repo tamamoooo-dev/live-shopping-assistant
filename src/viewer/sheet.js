@@ -294,6 +294,10 @@ export function createSheet(host, ctx) {
   function render(entry) {
     closeLightbox(); // a stale enlarged image must not linger over a new card
     const offer = entry.offer;
+    // An unpriced flyer item (engine flyer_items: the source published the
+    // product without a price). It is still a real product on this page, so the
+    // sheet shows it — but never a price, a cart line or a watch built on one.
+    const unpriced = offer.price == null;
     const discount =
       offer.oldPrice && offer.oldPrice > offer.price
         ? Math.round(((offer.oldPrice - offer.price) / offer.oldPrice) * 100)
@@ -344,19 +348,21 @@ export function createSheet(host, ctx) {
             ${name && nameAr ? `<p class="ps-name-ar" dir="rtl">${esc(nameAr)}</p>` : ''}
             ${attrs ? `<p class="ps-attrs">${attrs}</p>` : ''}
             ${meta ? `<p class="ps-meta">${esc(meta)}</p>` : ''}
-            <div class="ps-pricerow">
-              <span class="ps-price">${fmt(offer.price)} <small>${esc(offer.currency || 'SAR')}</small></span>
+            <div class="ps-pricerow">${
+              unpriced
+                ? `<span class="ps-price ps-price-flyer">${esc(t('sheet.priceOnFlyer'))}</span>`
+                : `<span class="ps-price">${fmt(offer.price)} <small>${esc(offer.currency || 'SAR')}</small></span>
               ${offer.oldPrice ? `<span class="ps-old">${fmt(offer.oldPrice)}</span>` : ''}
-              ${discount ? `<span class="ps-off">−${discount}%</span>` : ''}
-            </div>
+              ${discount ? `<span class="ps-off">−${discount}%</span>` : ''}`
+            }</div>
           </div>
         </div>
-        <div class="ps-actions">
-          <button type="button" class="ps-add">
+        <div class="ps-actions${unpriced ? ' is-unpriced' : ''}">
+          <button type="button" class="ps-add"${unpriced ? ' hidden' : ''}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.2l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h7.9a1.6 1.6 0 0 0 1.6-1.3L20.5 8H6"/></svg>
             <span>${inCart(offer.id) ? esc(t('sheet.addAgain')) : esc(t('sheet.addToList'))}</span>
           </button>
-          <button type="button" class="ps-watch" aria-label="${esc(t('sheet.watchAria'))}">
+          <button type="button" class="ps-watch"${unpriced ? ' hidden' : ''} aria-label="${esc(t('sheet.watchAria'))}">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>
             <span>${esc(t('sheet.watch'))}</span>
           </button>
@@ -374,7 +380,7 @@ export function createSheet(host, ctx) {
           <h4>${esc(t('sheet.availableElsewhere'))}</h4>
           <div class="ps-compare-body"></div>
         </div>
-        <p class="ps-note">${esc(t('sheet.note'))}</p>
+        <p class="ps-note">${esc(t(unpriced ? 'sheet.noteUnpriced' : 'sheet.note'))}</p>
         <div class="ps-related" hidden>
           <h4>${esc(t('sheet.similar'))}</h4>
           <div class="ps-rel-strip"></div>
@@ -464,7 +470,7 @@ export function createSheet(host, ctx) {
       setTimeout(() => rel && !rel.hidden && rel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 280);
     });
 
-    loadIntelligence(offer, seed);
+    if (!unpriced) loadIntelligence(offer, seed); // every insight compares this price
     loadCompare(offer, seed);
     loadRelated(offer);
   }
@@ -498,14 +504,17 @@ export function createSheet(host, ctx) {
       .slice(0, 4);
 
     const fmt = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
+    const unpriced = offer.price == null; // other stores' prices, but no delta to ours
     const rowEls = rows.map((o) => {
-      const delta = Math.round((o.price - offer.price) * 100) / 100;
+      const delta = unpriced ? null : Math.round((o.price - offer.price) * 100) / 100;
       const badge =
-        delta < -0.01
-          ? `<span class="ps-h-badge is-good">−${fmt(Math.abs(delta))}</span>`
-          : delta > 0.01
-            ? `<span class="ps-h-badge">+${fmt(delta)}</span>`
-            : `<span class="ps-h-badge">${esc(t('sheet.samePrice'))}</span>`;
+        delta == null
+          ? ''
+          : delta < -0.01
+            ? `<span class="ps-h-badge is-good">−${fmt(Math.abs(delta))}</span>`
+            : delta > 0.01
+              ? `<span class="ps-h-badge">+${fmt(delta)}</span>`
+              : `<span class="ps-h-badge">${esc(t('sheet.samePrice'))}</span>`;
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'ps-cmp-row';
@@ -530,7 +539,7 @@ export function createSheet(host, ctx) {
       box.hidden = false;
       // The headline intelligence: this exact product cheaper somewhere else.
       const best = rows[0];
-      if (best && best.price < offer.price - 0.01) {
+      if (best && !unpriced && best.price < offer.price - 0.01) {
         const ins = sheet.querySelector('.ps-insights');
         if (ins) {
           const line = document.createElement('div');

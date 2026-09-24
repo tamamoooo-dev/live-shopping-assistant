@@ -21,7 +21,7 @@ import { loadBrowseSummary, browseOffers, storeLabel, storeColor, cleanOfferName
 import { createMemory, adaptiveSearch } from './core.js';
 import {
   el, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort, createMarketplace,
-} from './marketplace.js?v=20260825.3';
+} from './marketplace.js?v=20260924.1';
 import {
   ONLINE_STORES, BEST_EFFORT_ONLINE_STORES, rankOnlineResults,
 } from './onlineStores.js';
