@@ -9,7 +9,7 @@
 
 import { cartItems, setQty, removeFromCart, clearCart, togglePurchased, CART_EVENT } from './cart.js';
 import { loadBrochures, storeLabel, storeColor } from './brochure.js';
-import { openBrochureViewer } from './viewer.js?v=20260924.1';
+import { openBrochureViewer } from './viewer.js?v=20260825.3';
 import { t, tn } from './i18n.js';
 
 const esc = (s) =>

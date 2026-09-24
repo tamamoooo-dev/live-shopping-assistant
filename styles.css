@@ -1789,7 +1789,6 @@ a.watch-name:hover { text-decoration: underline; }
 .ps-pricerow { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 2px; flex-wrap: wrap; }
 .ps-price { font-size: 26px; font-weight: 900; color: var(--brand); letter-spacing: -0.5px; }
 .ps-price small { font-size: 13px; font-weight: 700; color: var(--muted); }
-.ps-price.ps-price-flyer { font-size: 17px; font-weight: 800; color: var(--muted); letter-spacing: 0; }
 .ps-old { font-size: 15px; color: var(--muted); text-decoration: line-through; }
 .ps-off {
   font-size: 12px;
@@ -2594,9 +2593,6 @@ a.watch-name:hover { text-decoration: underline; }
 .ps-actions .ps-add { background: var(--grad); color: #fff; }
 .ps-actions .ps-add.is-added { background: var(--good); }
 .ps-actions button:active { transform: scale(0.97); }
-/* Unpriced flyer item: no cart line or watch without a price — only Similar. */
-.ps-actions button[hidden] { display: none; }
-.ps-actions.is-unpriced { grid-template-columns: 1fr; }
 .ps-insights { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 2px; }
 .ps-insight {
   display: flex;
