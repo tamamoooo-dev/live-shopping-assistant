@@ -1,0 +1,18 @@
+{
+  "requiredModel": "<SET: exact Mistral 14 model id the fallback sends>",
+  "endpoint": "https://api.mistral.ai/v1/chat/completions",
+  "temperatures": [0, 0.15, 0.3, 0.5, 0.7],
+  "readingsPerTemperature": 8,
+  "priceParser": { "type": "jsonPath", "path": "<SET: field the fallback reads the current price from>", "stripCodeFences": false },
+  "concurrency": 1,
+  "minIntervalMs": 1100,
+  "timeoutMs": 60000,
+  "maxRetries": 6,
+  "seed": 20260924,
+  "analysis": {
+    "headlineMaxReadings": 4,
+    "maxReadingsSweep": [2, 3, 4, 5, 6, 8],
+    "referenceTemperature": 0,
+    "bootstrapIterations": 2000
+  }
+}

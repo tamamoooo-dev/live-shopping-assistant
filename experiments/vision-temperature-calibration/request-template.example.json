@@ -1,0 +1,12 @@
+{
+  "model": "<SET: exact Mistral 14 model id the fallback sends>",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "<PASTE: the fallback's exact prompt, byte for byte>" },
+        { "type": "image_url", "image_url": "{{IMAGE_DATA_URL}}" }
+      ]
+    }
+  ]
+}
