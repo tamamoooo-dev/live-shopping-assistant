@@ -1,0 +1,140 @@
+{
+  "engine": {
+    "repo": "tamamoooo-dev/shopping-connector",
+    "branch": "claude/unpriced-flyer-items",
+    "commit": "af2a5a61952813ce316e05630b286ac3fd7f1e11"
+  },
+  "model": "ministral-14b-2512",
+  "modelSource": "mistralKeys.js MISTRAL_POOL_DEFINITIONS.ministral14.model (the PRICE_FALLBACK_MODEL default)",
+  "prompt": {
+    "sha256": "e643b2a1b833d12256e0e3806b04c28bc5fd042bf3a86b647b989df9be7c3557",
+    "matchesConstant": true,
+    "matchesFrozenFile": true
+  },
+  "fallbackDefaults": {
+    "maxReadings": 6,
+    "temperature": 0.3,
+    "maxDrainAttempts": 3,
+    "subrequestBudget": 45
+  },
+  "selection": {
+    "seedText": "vision-temperature-pilot-2026-09-24",
+    "seed": 1962563177,
+    "eligible": 45,
+    "required": [
+      "08",
+      "37"
+    ],
+    "pool": 43,
+    "picked": [
+      "42",
+      "41",
+      "34",
+      "13",
+      "06",
+      "43",
+      "20",
+      "02"
+    ],
+    "selected": [
+      "02",
+      "06",
+      "08",
+      "13",
+      "20",
+      "34",
+      "37",
+      "41",
+      "42",
+      "43"
+    ]
+  },
+  "crops": [
+    {
+      "id": "02",
+      "store": "aljazera",
+      "current": 36.99,
+      "old": 44.99,
+      "sha256": "a25f3da2aa1d2a2b8c26e323d8fadb105ab327631063e2928d021da6dff34467",
+      "note": ""
+    },
+    {
+      "id": "06",
+      "store": "almadina",
+      "current": 4.95,
+      "old": 19.95,
+      "sha256": "57aed3057358b9acb9a975a3bf1fc1e9d6249f9cda4eeac884d32f35f054e614",
+      "note": ""
+    },
+    {
+      "id": "08",
+      "store": "alwafa",
+      "current": 30,
+      "old": 44.99,
+      "sha256": "867a1832a3930b1aad382291fb446426853446cb0eb8fde9e8ecdb49909ad5c2",
+      "note": ""
+    },
+    {
+      "id": "13",
+      "store": "carrefour",
+      "current": 3.99,
+      "old": 6.5,
+      "sha256": "84f48b89096d5c9768725ae1dfafe3dc40538f74a449ee21e578902e68581488",
+      "note": ""
+    },
+    {
+      "id": "20",
+      "store": "danube",
+      "current": 6.99,
+      "old": 9.5,
+      "sha256": "3e0d6f420c2c8cf802607f2d51098d97458a1cb1e1ee9a9f7d1f14ad7e564af2",
+      "note": ""
+    },
+    {
+      "id": "34",
+      "store": "marksave",
+      "current": 12.95,
+      "old": 18.95,
+      "sha256": "bb24d79a9b827e1224a3d49c864edef956db9d22f73588a2276d7663711fe2e3",
+      "note": ""
+    },
+    {
+      "id": "37",
+      "store": "nesto",
+      "current": 10,
+      "old": 15.99,
+      "sha256": "aa6d91ca22174d6a78e859048c209732d81a5d2f31af35a8c5291a6671b551bd",
+      "note": ""
+    },
+    {
+      "id": "41",
+      "store": "othaim",
+      "current": 11.99,
+      "old": 16.25,
+      "sha256": "119459267ab9834133c9705e8f1ef180b392037079fa6c8bc93d74071ab43ab2",
+      "note": ""
+    },
+    {
+      "id": "42",
+      "store": "othaim",
+      "current": 8.99,
+      "old": 15,
+      "sha256": "e2b750882b69a02b5698d606be09089a60b49da71aa5492d2389ffdd44d59c00",
+      "note": "struck-through 15 confirmed at 10x upscale and by production metadata"
+    },
+    {
+      "id": "43",
+      "store": "prime",
+      "current": 5.75,
+      "old": 15.95,
+      "sha256": "c6b01511b5a29723f2ca592406aaac6299c173b089dfd89089f17196d9d9043c",
+      "note": ""
+    }
+  ],
+  "fidelity": {
+    "bodiesChecked": 100,
+    "parsesChecked": 12,
+    "problems": []
+  },
+  "assumption": "The fallback encodes the crop with the CDN's Content-Type header; the benchmark's frozen bytes are JPEG, so image/jpeg is used, as the engine does when the header is image/jpeg or absent."
+}

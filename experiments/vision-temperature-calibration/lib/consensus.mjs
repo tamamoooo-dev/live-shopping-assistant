@@ -6,6 +6,9 @@
 //   CONSECUTIVE readings match or the reading cap is hit (NO CONSENSUS).
 // An invalid reading (null) never matches anything, not even another invalid
 // one: two failures to read a price are not agreement on a price.
+// "The same price" is decided by `agree(a, b)` on halalas. The default is
+// exact equality; the real fallback uses its own ±0.01 SAR check, supplied by
+// agreeWithin() so the experiment scores exactly what the fallback accepts.
 //
 // Two ways to score it, both reported:
 //   observedConsensus — replay the rule on the readings in the order they were
@@ -21,13 +24,23 @@
 
 export const INVALID = 'invalid';
 
-export function observedConsensus(readings, cap) {
+const exact = (a, b) => a === b;
+
+// The fallback's agreement test, reproduced on halalas: priceFallback.js
+// compares the rounded SAR floats with Math.abs(a - b) <= 0.01. cents / 100 is
+// the same float its round2() produces, so this is the same expression on the
+// same numbers — including where float error makes a 1-halala gap NOT agree.
+export function agreeWithin(toleranceSar) {
+  return (a, b) => Math.abs(a / 100 - b / 100) <= toleranceSar;
+}
+
+export function observedConsensus(readings, cap, agree = exact) {
   if (!Number.isInteger(cap) || cap < 2) throw new Error('cap must be an integer >= 2');
   if (readings.length < cap) return { status: 'insufficient', value: null, calls: readings.length };
   for (let t = 1; t < cap; t++) {
     const a = readings[t - 1];
     const b = readings[t];
-    if (a != null && a === b) return { status: 'accepted', value: b, calls: t + 1 };
+    if (a != null && b != null && agree(a, b)) return { status: 'accepted', value: b, calls: t + 1 };
   }
   return { status: 'no-consensus', value: null, calls: cap };
 }
@@ -42,8 +55,11 @@ export function countReadings(readings) {
 }
 
 // readings: array of cents | null. Returns
-//   { accept: Map<cents, probability>, noConsensus, expectedCalls }.
-export function consensusOverOrderings(readings, cap) {
+//   { accept: Map<cents, probability>, noConsensus, expectedCalls,
+//     meanCallsWhenAccepted }.
+// The accepted value is the second reading of the agreeing pair, as in the
+// fallback.
+export function consensusOverOrderings(readings, cap, agree = exact) {
   if (!Number.isInteger(cap) || cap < 2) throw new Error('cap must be an integer >= 2');
   if (cap > readings.length) throw new Error(`cap ${cap} exceeds the ${readings.length} readings available`);
   const counted = countReadings(readings);
@@ -54,31 +70,35 @@ export function consensusOverOrderings(readings, cap) {
   const V = values.length;
   const memo = new Map();
 
+  const agrees = values.map((a, i) => values.map((b, j) => valid[i] && valid[j] && agree(a, b)));
+
   // State: remaining counts + index of the last reading (-1 before the first).
-  // Returns [P(accept value 0..V-1)..., P(no consensus), expected further calls].
+  // Returns [P(accept value 0..V-1)..., P(no consensus), expected further
+  // calls, Σ P(accept at reading t)·t].
   const rec = (last, taken) => {
     if (taken === cap) {
-      const out = new Float64Array(V + 2);
+      const out = new Float64Array(V + 3);
       out[V] = 1;
       return out;
     }
     const memoKey = `${counts.join(',')}|${last}`;
     const hit = memo.get(memoKey);
     if (hit) return hit;
-    const out = new Float64Array(V + 2);
+    const out = new Float64Array(V + 3);
     out[V + 1] = 1; // this reading
     const remaining = total - taken;
     for (let s = 0; s < V; s++) {
       if (!counts[s]) continue;
       const p = counts[s] / remaining;
-      if (s === last && valid[s]) {
+      if (last >= 0 && agrees[last][s]) {
         out[s] += p;
+        out[V + 2] += p * (taken + 1);
         continue;
       }
       counts[s]--;
       const sub = rec(s, taken + 1);
       counts[s]++;
-      for (let i = 0; i < V + 2; i++) out[i] += p * sub[i];
+      for (let i = 0; i < V + 3; i++) out[i] += p * sub[i];
     }
     memo.set(memoKey, out);
     return out;
@@ -87,5 +107,11 @@ export function consensusOverOrderings(readings, cap) {
   const res = rec(-1, 0);
   const accept = new Map();
   for (let s = 0; s < V; s++) if (valid[s] && res[s] > 0) accept.set(values[s], res[s]);
-  return { accept, noConsensus: res[V], expectedCalls: res[V + 1] };
+  const pAccept = 1 - res[V];
+  return {
+    accept,
+    noConsensus: res[V],
+    expectedCalls: res[V + 1],
+    meanCallsWhenAccepted: pAccept > 1e-12 ? res[V + 2] / pAccept : null,
+  };
 }

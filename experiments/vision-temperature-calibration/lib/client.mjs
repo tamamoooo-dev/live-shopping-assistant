@@ -34,7 +34,8 @@ export async function postChat({ endpoint, apiKey, body, timeoutMs, maxRetries, 
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json', authorization: `Bearer ${apiKey}` },
+        // The same two headers the engine's postMistral sends, nothing more.
+        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify(body),
         signal: ctrl.signal,
       });

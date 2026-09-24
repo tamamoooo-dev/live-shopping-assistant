@@ -55,6 +55,9 @@ function checkConfig(c) {
     if (!Number.isInteger(c[k]) || c[k] < 0) problems.push(`${k} must be a non-negative integer`);
   }
   if (c.concurrency < 1) problems.push('concurrency must be >= 1');
+  if (c.agreement != null && !(typeof c.agreement.toleranceSar === 'number' && c.agreement.toleranceSar >= 0)) {
+    problems.push('agreement.toleranceSar must be a number >= 0');
+  }
   return problems;
 }
 
@@ -117,6 +120,7 @@ async function main() {
     temperatures: temps,
     readingsPerTemperature: R,
     priceParser: config.priceParser,
+    agreement: config.agreement || { toleranceSar: 0 },
     seed: config.seed,
     analysis: config.analysis || {},
     manifest: resolve(args.manifest),
@@ -134,6 +138,7 @@ async function main() {
       ['temperatures', prev.temperatures, meta.temperatures],
       ['readings per temperature', prev.readingsPerTemperature, meta.readingsPerTemperature],
       ['price parser', prev.priceParser, meta.priceParser],
+      ['agreement tolerance', prev.agreement, meta.agreement],
       ['endpoint', prev.endpoint, meta.endpoint],
       ['crops (ids and image bytes)', prev.crops.map((c) => [c.id, c.imageSha256]), meta.crops.map((c) => [c.id, c.imageSha256])],
     ].filter(([, a, b]) => !same(a, b));
@@ -245,7 +250,7 @@ Vision temperature calibration — ${dryRun ? 'DRY RUN (no calls)' : 'RUN'}
           return;
         }
         const text = messageText(res.response);
-        const { cents, error } = extractor(text, res.response);
+        const { cents, oldCents = null, error } = extractor(text, res.response);
         record = {
           ...base,
           ok: true,
@@ -258,6 +263,7 @@ Vision temperature calibration — ${dryRun ? 'DRY RUN (no calls)' : 'RUN'}
           usage: res.response.usage ?? null,
           content: text,
           cents,
+          oldCents,
           parseError: error,
         };
       }

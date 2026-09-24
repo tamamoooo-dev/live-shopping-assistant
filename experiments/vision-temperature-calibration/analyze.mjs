@@ -10,7 +10,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { consensusOverOrderings, countReadings, INVALID, observedConsensus } from './lib/consensus.mjs';
+import { agreeWithin, consensusOverOrderings, countReadings, INVALID, observedConsensus } from './lib/consensus.mjs';
 import { formatCents } from './lib/price.mjs';
 import { bootstrap, mean, median, wilson } from './lib/stats.mjs';
 
@@ -39,7 +39,7 @@ function load(runDir) {
 // ------------------------------------------------------- per-crop facts ----
 
 // Everything later tables need about one crop at one temperature.
-function cropFacts(crop, readings, caps) {
+function cropFacts(crop, readings, caps, agree) {
   const n = readings.length;
   const truth = crop.currentPrice;
   const old = crop.oldPrice;
@@ -59,19 +59,21 @@ function cropFacts(crop, readings, caps) {
     else if (k === modal) modalValues.push(v);
   }
   // Error repetition: for a wrong (valid) reading, the chance that another
-  // reading of the same crop returns the SAME wrong price. This is exactly what
-  // lets the two-reading rule accept an error: 1.0 means every error repeats.
+  // reading of the same crop AGREES with it under the fallback's own agreement
+  // test. This is exactly what lets the two-reading rule accept an error: 1.0
+  // means every error repeats.
   let repeatNum = 0;
   let wrongValid = 0;
-  for (const [v, k] of counts) {
-    if (v === INVALID || v === truth) continue;
-    repeatNum += k * (k - 1);
-    wrongValid += k;
+  for (let i = 0; i < n; i++) {
+    const a = readings[i];
+    if (a == null || a === truth) continue;
+    wrongValid++;
+    for (let j = 0; j < n; j++) if (j !== i && readings[j] != null && agree(a, readings[j])) repeatNum++;
   }
 
   const byCap = {};
   for (const cap of caps) {
-    const exp = consensusOverOrderings(readings, cap);
+    const exp = consensusOverOrderings(readings, cap, agree);
     let pWrong = 0;
     for (const [v, p] of exp.accept) if (v !== truth) pWrong += p;
     const d4d = crop.d4dPrice;
@@ -91,7 +93,8 @@ function cropFacts(crop, readings, caps) {
       pOld: old != null ? exp.accept.get(old) || 0 : 0,
       pNone: exp.noConsensus,
       calls: exp.expectedCalls,
-      observed: observedConsensus(readings, cap),
+      callsWhenAccepted: exp.meanCallsWhenAccepted,
+      observed: observedConsensus(readings, cap, agree),
       d4d: d4d == null ? null : { wrongCaught, wrongSlipped, correctContradicted: d4d !== truth ? pCorrect : 0 },
     };
   }
@@ -120,6 +123,7 @@ function cropFacts(crop, readings, caps) {
 function analyze(meta, records, opts) {
   const temps = meta.temperatures;
   const R = meta.readingsPerTemperature;
+  const agree = agreeWithin(meta.agreement?.toleranceSar ?? 0);
   const cropsById = new Map(meta.crops.map((c) => [c.id, c]));
 
   // First successful reading per (crop, temperature, index).
@@ -150,7 +154,7 @@ function analyze(meta, records, opts) {
   for (const t of temps) {
     facts[t] = complete.map((crop) => {
       const readings = Array.from({ length: R }, (_, i) => cell.get(`${crop.id}|${t}|${i}`).cents ?? null);
-      return cropFacts(crop, readings, sweep);
+      return cropFacts(crop, readings, sweep, agree);
     });
   }
 
@@ -171,6 +175,16 @@ function analyze(meta, records, opts) {
     oldAccept: (t, ix, k = cap) => mean(ix.map((i) => facts[t][i].byCap[k].pOld)),
     noConsensus: (t, ix, k = cap) => mean(ix.map((i) => facts[t][i].byCap[k].pNone)),
     calls: (t, ix, k = cap) => mean(ix.map((i) => facts[t][i].byCap[k].calls)),
+    callsWhenAccepted: (t, ix, k = cap) => {
+      let w = 0;
+      let a = 0;
+      for (const i of ix) {
+        const f = facts[t][i].byCap[k];
+        const pa = f.pCorrect + f.pWrong;
+        if (pa > 0) { w += pa * f.callsWhenAccepted; a += pa; }
+      }
+      return a ? w / a : NaN;
+    },
     wrongAmongAccepted: (t, ix, k = cap) => {
       let w = 0;
       let a = 0;
@@ -223,6 +237,8 @@ function analyze(meta, records, opts) {
     const obsAcceptedCorrect = obs.filter((o, i) => o.status === 'accepted' && o.value === complete[i].currentPrice).length;
     const obsAcceptedWrong = obs.filter((o, i) => o.status === 'accepted' && o.value !== complete[i].currentPrice).length;
     const obsNone = obs.filter((o) => o.status === 'no-consensus').length;
+    const agreedAt = {};
+    for (const o of obs) if (o.status === 'accepted') agreedAt[o.calls] = (agreedAt[o.calls] || 0) + 1;
 
     const recs = okRecords.filter((r) => r.temperature === t && complete.some((c) => c.id === r.cropId));
     const parseErrors = {};
@@ -243,6 +259,7 @@ function analyze(meta, records, opts) {
         wrongAmongAccepted: M.wrongAmongAccepted(t, idxAll),
         noConsensus: M.noConsensus(t, idxAll), noConsensusCi: all.noConsensus,
         calls: M.calls(t, idxAll),
+        callsWhenAccepted: M.callsWhenAccepted(t, idxAll),
         stable: M.stable(t, idxAll),
         modalShare: M.modalShare(t, idxAll),
         distinct: M.distinct(t, idxAll),
@@ -263,6 +280,8 @@ function analyze(meta, records, opts) {
         wrongAccept: M.wrongAccept(t, idxOld), wrongAcceptCi: withOld.wrongAccept,
         oldAccept: M.oldAccept(t, idxOld), oldAcceptCi: withOld.oldAccept,
         correctAccept: M.correctAccept(t, idxOld),
+        noConsensus: M.noConsensus(t, idxOld),
+        errorRepeat: M.errorRepeat(t, idxOld),
       } : null,
       noCrossedOut: idxNoOld.length ? {
         accuracy: M.accuracy(t, idxNoOld),
@@ -281,6 +300,7 @@ function analyze(meta, records, opts) {
         acceptedCorrect: obsAcceptedCorrect, acceptedCorrectCi: wilson(obsAcceptedCorrect, complete.length),
         acceptedWrong: obsAcceptedWrong, acceptedWrongCi: wilson(obsAcceptedWrong, complete.length),
         noConsensus: obsNone,
+        agreedAt,
       },
       d4d: idxD4d.length ? {
         crops: idxD4d.length,
@@ -302,6 +322,7 @@ function analyze(meta, records, opts) {
   const responseModels = {};
   for (const r of okRecords) responseModels[r.responseModel ?? 'not reported'] = (responseModels[r.responseModel ?? 'not reported'] || 0) + 1;
 
+  const cropOld = (id, t) => Array.from({ length: R }, (_, k) => cell.get(`${id}|${t}|${k}`).oldCents ?? null);
   const perCrop = complete.map((crop, i) => ({
     id: crop.id,
     store: crop.store,
@@ -313,10 +334,12 @@ function analyze(meta, records, opts) {
       const f = facts[t][i];
       return [t, {
         readings: f.readings,
+        oldReadings: cropOld(crop.id, t),
         accuracy: f.accuracy,
         pCorrectAccept: f.byCap[cap].pCorrect,
         pWrongAccept: f.byCap[cap].pWrong,
         pNoConsensus: f.byCap[cap].pNone,
+        observed: f.byCap[cap].observed,
       }];
     })),
   }));
@@ -326,6 +349,7 @@ function analyze(meta, records, opts) {
     cap,
     sweep,
     reference: ref,
+    spotlight: opts.spotlight,
     bootstrapIterations: B,
     crops: { complete: complete.length, incomplete: incomplete.map((c) => c.id), crossedOut: idxOld.length, noCrossedOut: idxNoOld.length, withD4dPrice: idxD4d.length },
     transportErrors,
@@ -367,7 +391,7 @@ function renderMarkdown(a) {
     `- **Crops scored:** ${a.crops.complete} (${a.crops.crossedOut} with a visible crossed-out price, ${a.crops.noCrossedOut} without)` +
       (a.crops.incomplete.length ? ` — ${a.crops.incomplete.length} excluded as incomplete: ${a.crops.incomplete.join(', ')}` : ''),
     `- **Readings:** ${meta.readingsPerTemperature} independent calls per crop per temperature; ${a.transportErrors} transport errors (not readings)`,
-    `- **Consensus rule:** accept when two consecutive readings are the same valid price, at most **${cap}** readings per decision`,
+    `- **Consensus rule:** accept when two consecutive valid readings agree${meta.agreement?.toleranceSar ? ` (|a − b| ≤ ${meta.agreement.toleranceSar} SAR, the fallback's own test)` : ' exactly'}, at most **${cap}** readings per decision`,
     `- **Intervals:** 95%, crop-level bootstrap (${a.bootstrapIterations} resamples); differences are paired on the same crops`,
     `- **Run started:** ${meta.createdAt}`,
     '',
@@ -378,7 +402,7 @@ function renderMarkdown(a) {
 
   L.push('## 1 · Current-price extraction and consensus outcome', '');
   L.push(`Consensus probabilities are exact averages over every order the observed readings could have arrived in (unbiased for independent calls). "Wrong accepted" is the rate at which the two-reading rule would hand the fallback a price that is not the current price.`, '');
-  header(['T', 'Single read correct', 'Consensus: correct accepted', 'Consensus: **WRONG accepted**', 'Wrong per 1,000 decisions', 'Wrong among accepted', 'No consensus', 'Mean calls']);
+  header(['T', 'Single read correct', 'Consensus: correct accepted', 'Consensus: **WRONG accepted**', 'Wrong per 1,000 decisions', 'Wrong among accepted', 'No consensus', 'Mean calls', 'Readings to agreement']);
   for (const t of temps) {
     const x = perTemp[t].all;
     row([
@@ -390,17 +414,18 @@ function renderMarkdown(a) {
       pct(x.wrongAmongAccepted),
       `${pct(x.noConsensus)} ${ci(x.noConsensusCi)}`,
       x.calls.toFixed(2),
+      Number.isFinite(x.callsWhenAccepted) ? x.callsWhenAccepted.toFixed(2) : '—',
     ]);
   }
-  L.push('');
+  L.push('', '"Mean calls" counts every decision; "Readings to agreement" only the accepted ones (2 = the first two readings agreed).', '');
 
   if (a.crops.crossedOut) {
     L.push('## 2 · Crops with a visible crossed-out price', '');
     L.push('"Old price read" is a single reading returning the crossed-out price as the current price (role inversion). "Old accepted" is the consensus rule accepting it.', '');
-    header(['T', 'Single read correct', 'Old price read', 'Consensus: correct accepted', 'Consensus: WRONG accepted', 'of which old price']);
+    header(['T', 'Single read correct', 'Old price read', 'Consensus: correct accepted', 'Consensus: WRONG accepted', 'of which old price', 'No consensus', 'Error repeats']);
     for (const t of temps) {
       const x = perTemp[t].crossedOut;
-      row([`**${t}**`, `${pct(x.accuracy)} ${ci(x.accuracyCi)}`, `${pct(x.oldRate)} ${ci(x.oldRateCi)}`, pct(x.correctAccept), `**${pct(x.wrongAccept)}** ${ci(x.wrongAcceptCi)}`, `${pct(x.oldAccept)} ${ci(x.oldAcceptCi)}`]);
+      row([`**${t}**`, `${pct(x.accuracy)} ${ci(x.accuracyCi)}`, `${pct(x.oldRate)} ${ci(x.oldRateCi)}`, pct(x.correctAccept), `**${pct(x.wrongAccept)}** ${ci(x.wrongAcceptCi)}`, `${pct(x.oldAccept)} ${ci(x.oldAcceptCi)}`, pct(x.noConsensus), pct(x.errorRepeat)]);
     }
     L.push('');
     if (a.crops.noCrossedOut) {
@@ -443,10 +468,11 @@ function renderMarkdown(a) {
 
   L.push('## 6 · Observed-order check', '');
   L.push(`The rule replayed once per crop on the readings in the order they were actually taken (cap ${cap}). Noisier than §1 but model-free; it should agree with §1 within its interval.`, '');
-  header(['T', 'Accepted correct', 'Accepted WRONG', 'No consensus']);
+  const positions = Array.from({ length: cap - 1 }, (_, k) => k + 2);
+  header(['T', 'Accepted correct', 'Accepted WRONG', 'No consensus', ...positions.map((k) => `agreed at reading ${k}`)]);
   for (const t of temps) {
     const o = perTemp[t].observed;
-    row([`**${t}**`, `${o.acceptedCorrect}/${o.n} ${ci(o.acceptedCorrectCi)}`, `**${o.acceptedWrong}/${o.n}** ${ci(o.acceptedWrongCi)}`, `${o.noConsensus}/${o.n}`]);
+    row([`**${t}**`, `${o.acceptedCorrect}/${o.n} ${ci(o.acceptedCorrectCi)}`, `**${o.acceptedWrong}/${o.n}** ${ci(o.acceptedWrongCi)}`, `${o.noConsensus}/${o.n}`, ...positions.map((k) => o.agreedAt[k] || 0)]);
   }
   L.push('');
 
@@ -470,6 +496,28 @@ function renderMarkdown(a) {
     row([`**${t}**`, u.readings, `${Math.round(u.medianLatencyMs)} ms`, u.promptTokens, u.completionTokens, pe, fr]);
   }
   L.push('');
+
+  if (a.spotlight.length) {
+    L.push(`## 8a · Spotlight: ${a.spotlight.join(', ')}`, '');
+    L.push('Every reading in the order taken (current price / old price as the model returned them), and what the rule did with that order.', '');
+    for (const id of a.spotlight) {
+      const c = a.perCrop.find((x) => x.id === id);
+      if (!c) { L.push(`- \`${id}\`: not in this run`, ''); continue; }
+      L.push(`**\`${c.id}\`**${c.store ? ` (${c.store})` : ''} — current ${formatCents(c.currentPrice)}, crossed-out ${c.oldPrice != null ? formatCents(c.oldPrice) : '—'}`, '');
+      header(['T', 'Readings in order', 'Rule on this order', 'Correct reads', 'P(correct accepted)', 'P(WRONG accepted)', 'P(no consensus)']);
+      for (const t of temps) {
+        const b = c.byTemperature[t];
+        const seq = b.readings.map((r, k) => {
+          const tag = r === c.currentPrice ? '✓' : r != null && r === c.oldPrice ? ' OLD' : r == null ? '' : ' ✗';
+          return `${formatCents(r)}${tag}${b.oldReadings[k] != null ? `/${formatCents(b.oldReadings[k])}` : ''}`;
+        }).join(' → ');
+        const o = b.observed;
+        const verdict = o.status === 'accepted' ? `accepted ${formatCents(o.value)}${o.value === c.currentPrice ? ' ✓' : ' ✗'} at reading ${o.calls}` : 'no consensus';
+        row([`**${t}**`, seq, verdict, `${Math.round(b.accuracy * b.readings.length)}/${b.readings.length}`, pct(b.pCorrectAccept), `**${pct(b.pWrongAccept)}**`, pct(b.pNoConsensus)]);
+      }
+      L.push('');
+    }
+  }
 
   const troubled = a.perCrop
     .map((c) => ({ c, wrong: temps.reduce((s, t) => s + (1 - c.byTemperature[t].accuracy), 0) }))
@@ -518,6 +566,7 @@ function main() {
     sweep: cfg.maxReadingsSweep || [2, 3, 4, 6, 8],
     bootstrap: Number(args.bootstrap ?? cfg.bootstrapIterations ?? 2000),
     reference: Number(args.reference ?? cfg.referenceTemperature ?? 0),
+    spotlight: args.spotlight ? args.spotlight.split(',') : cfg.spotlight || [],
   };
   const a = analyze(meta, records, opts);
   const md = renderMarkdown(a);

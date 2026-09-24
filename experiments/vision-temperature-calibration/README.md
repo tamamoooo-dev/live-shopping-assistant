@@ -182,3 +182,27 @@ node test/e2e.test.mjs    # run → resume → analyze against a local FAKE endp
 
 A run against anything other than `api.mistral.ai` is stamped **NOT A MISTRAL
 RESULT** at the top of its report.
+
+## The Ministral 14B fallback pilot (`pilot-2026-09-24/`)
+
+Prepared from the real fallback (`shopping-connector` branch
+`claude/unpriced-flyer-items`, commit `af2a5a6`, `brochure-engine/src/offers/priceFallback.js`)
+by `fallback/prepare-pilot.mjs`, which reads a read-only checkout and writes:
+the 10 crops (08 and 37, plus 8 of the 43 other human-verified crops with a
+crossed-out price, drawn by a fixed seed), their prices from `human-canonical.json`, the
+engine's own `buildVisionRequest` body as the template, and `parser.mjs` (the
+engine's `priceReading` behind `readOnce`'s parse lines). Agreement is the
+fallback's `|a − b| ≤ 0.01`. Before writing anything it runs the engine's real
+`drainPriceFallback` against a fake fetch and refuses unless every request
+body it would send is byte-identical to the harness's and every test reply
+parses the same. `parser.mjs` imports from the checkout's absolute path, so
+rerun the prepare step in a new environment:
+
+```bash
+git -C <shopping-connector clone> worktree add --detach <dir> origin/claude/unpriced-flyer-items
+node fallback/prepare-pilot.mjs --engine <dir> --out pilot-2026-09-24
+cd pilot-2026-09-24
+node ../run.mjs --config experiment.config.json --manifest crops.csv --template request-template.json --out runs/pilot --dry-run
+MISTRAL_API_KEY=… node ../run.mjs --config experiment.config.json --manifest crops.csv --template request-template.json --out runs/pilot
+node ../analyze.mjs --run runs/pilot
+```

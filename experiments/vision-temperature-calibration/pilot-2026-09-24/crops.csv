@@ -1,0 +1,11 @@
+id,image,current_price,old_price,store,notes
+02,data/02.jpg,36.99,44.99,aljazera,"benchmark crop 02, human-canonical-truth-v2"
+06,data/06.jpg,4.95,19.95,almadina,"benchmark crop 06, human-canonical-truth-v2"
+08,data/08.jpg,30.00,44.99,alwafa,"benchmark crop 08, human-canonical-truth-v2"
+13,data/13.jpg,3.99,6.50,carrefour,"benchmark crop 13, human-canonical-truth-v2"
+20,data/20.jpg,6.99,9.50,danube,"benchmark crop 20, human-canonical-truth-v2"
+34,data/34.jpg,12.95,18.95,marksave,"benchmark crop 34, human-canonical-truth-v2"
+37,data/37.jpg,10.00,15.99,nesto,"benchmark crop 37, human-canonical-truth-v2"
+41,data/41.jpg,11.99,16.25,othaim,"benchmark crop 41, human-canonical-truth-v2"
+42,data/42.jpg,8.99,15.00,othaim,"benchmark crop 42, human-canonical-truth-v2; struck-through 15 confirmed at 10x upscale and by production metadata"
+43,data/43.jpg,5.75,15.95,prime,"benchmark crop 43, human-canonical-truth-v2"

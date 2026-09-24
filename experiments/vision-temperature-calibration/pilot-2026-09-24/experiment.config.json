@@ -1,0 +1,41 @@
+{
+  "requiredModel": "ministral-14b-2512",
+  "endpoint": "https://api.mistral.ai/v1/chat/completions",
+  "temperatures": [
+    0,
+    0.15,
+    0.3,
+    0.5,
+    0.7
+  ],
+  "readingsPerTemperature": 6,
+  "priceParser": {
+    "type": "module",
+    "path": "./parser.mjs",
+    "export": "parseReading"
+  },
+  "agreement": {
+    "toleranceSar": 0.01
+  },
+  "concurrency": 1,
+  "minIntervalMs": 1100,
+  "timeoutMs": 60000,
+  "maxRetries": 6,
+  "seed": 1962563177,
+  "analysis": {
+    "headlineMaxReadings": 6,
+    "maxReadingsSweep": [
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "referenceTemperature": 0,
+    "bootstrapIterations": 2000,
+    "spotlight": [
+      "08",
+      "37"
+    ]
+  }
+}

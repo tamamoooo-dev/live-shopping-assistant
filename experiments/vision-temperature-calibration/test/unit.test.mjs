@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { consensusOverOrderings, INVALID, observedConsensus } from '../lib/consensus.mjs';
+import { agreeWithin, consensusOverOrderings, INVALID, observedConsensus } from '../lib/consensus.mjs';
 import { createPriceExtractor, messageText, normalizePrice } from '../lib/price.mjs';
 import { buildBody, checkTemplate, IMAGE_PLACEHOLDER, modelFamily, templateHash } from '../lib/request.mjs';
 import { parseCsv } from '../lib/manifest.mjs';
@@ -102,6 +102,41 @@ const t0 = Date.now();
 consensusOverOrderings([1, 2, 3, 4, 5, 6, 7, 8], 8);
 consensusOverOrderings([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 12);
 assert.ok(Date.now() - t0 < 2000, 'worst case is fast');
+
+// --- the fallback's ±0.01 agreement ----------------------------------------
+const fb = agreeWithin(0.01);
+const engineEq = (a, b) => a != null && b != null && Math.abs(a - b) <= 0.01; // priceFallback.js eq
+for (const [a, b] of [[1295, 1296], [3000, 3001], [999, 1000], [1000, 1001], [4499, 4499], [1000, 1002], [2899, 2900], [150000, 150001]]) {
+  assert.equal(fb(a, b), engineEq(Math.round(a) / 100, Math.round(b) / 100), `agreement on ${a}/${b} matches the fallback's float test`);
+}
+assert.equal(fb(1000, 1002), false, '2 halalas apart never agree');
+assert.equal(observedConsensus([1295, 1296, 900], 3, (a, b) => true).value, 1296, 'accepted value is the second of the pair');
+{
+  // Tolerant agreement over orderings, checked by brute force.
+  const readings = [3000, 3001, 4499, null, 3000];
+  const cap = 4;
+  const agree = (a, b) => Math.abs(a - b) <= 1;
+  const exact = consensusOverOrderings(readings, cap, agree);
+  const acc = new Map();
+  let none = 0;
+  let total = 0;
+  let callsAcc = 0;
+  let nAcc = 0;
+  const perm = (acc2) => {
+    if (acc2.length === cap) {
+      const o = observedConsensus(acc2.map((i) => readings[i]), cap, agree);
+      total++;
+      if (o.status === 'accepted') { acc.set(o.value, (acc.get(o.value) || 0) + 1); callsAcc += o.calls; nAcc++; } else none++;
+      return;
+    }
+    for (let i = 0; i < readings.length; i++) if (!acc2.includes(i)) perm([...acc2, i]);
+  };
+  perm([]);
+  for (const v of new Set([...exact.accept.keys(), ...acc.keys()])) close(exact.accept.get(v) || 0, (acc.get(v) || 0) / total, `tolerant accept ${v}`);
+  close(exact.noConsensus, none / total, 'tolerant no consensus');
+  close(exact.meanCallsWhenAccepted, callsAcc / nAcc, 'readings to agreement when accepted');
+}
+assert.equal(consensusOverOrderings([null, null, null], 3).meanCallsWhenAccepted, null, 'no acceptance, no readings-to-agreement');
 
 // --- request template -------------------------------------------------------
 const tpl = {

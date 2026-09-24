@@ -105,15 +105,23 @@ export async function createPriceExtractor(spec, baseDir) {
     const mod = await import(pathToFileURL(resolve(baseDir, spec.path)).href);
     const fn = mod[spec.export || 'default'];
     if (typeof fn !== 'function') throw new Error(`priceParser module has no function export "${spec.export || 'default'}"`);
+    // The module is the fallback's own parser, so its verdict is final: a
+    // number it returns is a valid reading (converted to halalas only), and a
+    // { current, old } reading keeps the old price for diagnostics. No
+    // plausibility rule of this harness is layered on top of it.
+    const toCents = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v * 100) : normalizePrice(v));
     return (text, response) => {
       let raw;
       try {
         raw = fn(text, response);
       } catch (e) {
-        return { cents: null, error: `parser-threw: ${e.message}` };
+        return { cents: null, oldCents: null, error: `parser-threw: ${e.message}` };
       }
-      const cents = normalizePrice(raw);
-      return cents == null ? { cents: null, error: 'unreadable-price' } : { cents, error: null };
+      if (raw == null) return { cents: null, oldCents: null, error: 'invalid-reading' };
+      const reading = typeof raw === 'object' ? raw : { current: raw, old: null };
+      const cents = toCents(reading.current);
+      const oldCents = reading.old == null ? null : toCents(reading.old);
+      return cents == null ? { cents: null, oldCents: null, error: 'unreadable-price' } : { cents, oldCents, error: null };
     };
   }
   throw new Error(`unknown priceParser.type "${spec.type}"`);
