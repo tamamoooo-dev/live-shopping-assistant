@@ -25,8 +25,8 @@ import {
 import { createPageCanvas } from './canvas.js';
 import { createSpotLayer, spotForOffer } from './hotspots.js';
 import { createNav } from './nav.js';
-import { createSheet } from './sheet.js?v=20260924.1';
-import { priceStatus, priceStatusText } from './priceStatus.js';
+import { createSheet } from './sheet.js?v=20260924.2';
+import { priceStatus } from './priceStatus.js';
 import { createZoomMode, buildSequence, startIndexFor } from './zoomMode.js';
 import { rememberPosition, recallPosition } from './state.js';
 import { t, tn } from '../i18n.js';
@@ -232,13 +232,13 @@ export function openBrochureViewer(b, storeName, opts = {}) {
   const chromeVisible = () => !overlay.classList.contains('is-chrome-hidden');
 
   /* --- spot layers ---------------------------------------------------------------- */
-  const spotLabel = (offer) =>
-    t('viewer.hotspotAria', {
-      label: cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || t('viewer.flyerProduct'),
-      price: priceStatus(offer) === 'priced'
-        ? `${offer.price} ${offer.currency || 'SAR'}`
-        : priceStatusText(offer),
-    });
+  const spotLabel = (offer) => {
+    const label = cleanOfferName(offer.name) || cleanOfferName(offer.nameAr) || t('viewer.flyerProduct');
+    // No price yet: just the product — no "price pending" wording.
+    return priceStatus(offer) === 'priced'
+      ? t('viewer.hotspotAria', { label, price: `${offer.price} ${offer.currency || 'SAR'}` })
+      : label;
+  };
 
   function attachSpots(i, contentEl) {
     if (!hotspots || spotLayers.has(i)) return;

@@ -17,7 +17,7 @@ import { openWatchDialog } from '../alertsPage.v2.js';
 import { isRelevant, relevance, productFamily, productType, eachPriceLabel } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 import { structureOfferName } from './productName.js';
-import { priceStatus, priceStatusText } from './priceStatus.js';
+import { priceStatus } from './priceStatus.js';
 import { t, tn } from '../i18n.js';
 import { discountDotHtml } from '../discountStatus.js';
 
@@ -297,8 +297,7 @@ export function createSheet(host, ctx) {
     const offer = entry.offer;
     // An unpriced flyer product (price pending / unavailable) is shown and
     // tappable like any other; only what needs a real price is withheld.
-    const status = priceStatus(offer);
-    const priced = status === 'priced';
+    const priced = priceStatus(offer) === 'priced';
     const discount =
       offer.oldPrice && offer.oldPrice > offer.price
         ? Math.round(((offer.oldPrice - offer.price) / offer.oldPrice) * 100)
@@ -355,7 +354,9 @@ export function createSheet(host, ctx) {
               <span class="ps-price">${fmt(offer.price)} <small>${esc(offer.currency || 'SAR')}</small></span>
               ${offer.oldPrice ? `<span class="ps-old">${fmt(offer.oldPrice)}</span>` : ''}
               ${discount ? `<span class="ps-off">−${discount}%</span>` : ''}`
-                : `<span class="ps-price-status is-${status}">${esc(priceStatusText(offer))}</span>`
+                // No price yet: the row stays blank — the crop already shows the
+                // printed price (user decision 2026-09-24: no "Price pending").
+                : ''
             }
             </div>
           </div>

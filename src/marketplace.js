@@ -21,7 +21,7 @@
 //     hidden count) — never a grid full of unrelated products (the "48 chairs
 //     from Amazon" failure mode).
 
-import { openBrochureViewer } from './viewer.js?v=20260924.1';
+import { openBrochureViewer } from './viewer.js?v=20260924.2';
 import { localLandingForOffer, storeLabel, storeColor } from './brochure.js';
 import { unitPrice, eachPriceLabel, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, queryTokens, stageBand } from './match.js';
 import { featuredScore, featuredContext, recordChoice, isPrimaryPriceTier } from './featured.js';
