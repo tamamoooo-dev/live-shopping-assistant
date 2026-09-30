@@ -38,7 +38,7 @@ export const ENGINE_STORES = [
   { id: 'cityflower', label: 'City Flower', color: '#db2777', search: null },
   { id: 'marksave', label: 'Mark & Save', color: '#0891b2', search: null },
   { id: 'amarket', label: 'A Market', color: '#4f46e5', search: null },
-  { id: 'grandhyper', label: 'Grand Hyper', color: '#ca8a04', search: null },
+  { id: 'mkhazin', label: 'Mkhazin', color: '#ca8a04', search: null },
   { id: 'makkah', label: 'Makkah', color: '#059669', search: null },
   { id: 'prime', label: 'Prime', color: '#e11d48', search: null },
   { id: 'alwafa', label: 'Hyper Al Wafa', color: '#9333ea', search: null },
@@ -46,6 +46,8 @@ export const ENGINE_STORES = [
   // Manuel was RETIRED (2026-07-03): dead on D4D since Sep 2025 with no
   // official offers page — an uncurrentable store is removed, never shown
   // stale (milestone rule). Its engine history rows remain in D1.
+  // Grand Hyper was RETIRED the same way (2026-09-30): only expired flyers on
+  // D4D since 23 Aug. Mkhazin (مخازن) took its place.
 ];
 const ENGINE_STORE_BY_ID = Object.fromEntries(ENGINE_STORES.map((s) => [s.id, s]));
 const REGION = 'central'; // the personal tool is Riyadh-scoped (HANDOFF §10)
