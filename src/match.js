@@ -730,8 +730,12 @@ export function parseSize(name, sizeField) {
       // size's own "× 125ml" digits (a unit right after the number means the
       // × introduced the SIZE, not a multiplier; the pack forms above own that).
       // A bonus pack ("9+3" beside "1 لتر" = 12 × 1 L) wins over both.
+      // The multiplier must come right AFTER the measurement (engine mirror,
+      // ported 2026-10-08): searching the whole name read the "x" of "Impex"
+      // before "6.5Ltr" as "× 6", making a 6.5 L air fryer a 39 L six-pack.
+      const tail = hay.slice(m.index + m[0].length);
       const pm =
-        new RegExp(`[x×*]\\s*(\\d+)(?!\\s*(?:${UNITS}))${B}`, 'u').exec(hay) ||
+        new RegExp(`^\\s*[x×*]\\s*(\\d+)${B}`, 'u').exec(tail) ||
         /\b(\d+)\s*(?:pcs|pc|pack|s)\b/.exec(hay);
       const pack = bonus || (pm ? Math.max(1, parseInt(pm[1], 10)) : 1);
       return { unit: u.base, each, pack, total: each * pack, src: 'measure' };

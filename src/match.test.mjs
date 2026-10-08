@@ -24,6 +24,11 @@ ok('2 L -> 2000 ml', parseSize('Almarai Milk 2 L').total === 2000);
 ok('decimal 2.85 L survives', parseSize('Nadec Milk Full Fat 2.85L', '2.85 ML').total === 2850);
 ok('500 g -> 500', parseSize('Cheese 500 g').total === 500);
 ok('5kg -> 5000', parseSize('Rice 5kg').total === 5000);
+// A pack multiplier must follow the measurement; an "x" earlier in the name
+// ("Impex") is not "× 6" (engine mirror, 2026-10-08).
+ok('Impex 6.5Ltr is one 6.5 L unit', parseSize('Impex 6.5Ltr Hot Air Fryer', '6.5Ltr').total === 6500);
+ok('2.5 ltr is not a pack of 2', parseSize('Box 2.5 ltr').pack === 1);
+ok('a real trailing multiplier still counts', parseSize('Water 330ml x 12').total === 3960);
 ok('pack 6 x 200 ml -> 1200', parseSize('Nadec 6 x 200 ml').total === 1200);
 ok('pack 12x1l -> 12000', (() => { const s = parseSize('Nadec Multi Pack 12x1l', '1 L'); return s.total === 12000 && s.pack === 12; })());
 ok('arabic 2 لتر -> 2000', parseSize('المراعي حليب 2 لتر').total === 2000);
