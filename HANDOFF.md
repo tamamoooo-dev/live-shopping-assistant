@@ -698,9 +698,10 @@ CSS-variable driven (`--brand` blue `#2563eb`, light+dark).
 
 ## 7. Crons & scheduling (engine `wrangler.toml`)
 
-There are five triggers, the account's limit. `scheduled()` branches on
-`event.cron`, and the minute tick runs everything else by checking the
-clock.
+There are five triggers. Five was the Free-plan limit that shaped this
+design; Paid allows more, but the multiplexed minute tick works and stays.
+`scheduled()` branches on `event.cron`, and the minute tick runs everything
+else by checking the clock.
 
 ⚠️ **Cron events are delivered at least once.** On 2026-10-08, duplicates
 of the same fire arrived about a minute apart. So every drain takes a D1
