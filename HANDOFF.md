@@ -758,12 +758,33 @@ gates in front of it (user directive).
 - A fire runs ≈575 s: an 8-minute dispatch window (`DRAIN_DISPATCH_WINDOW_MS`),
   then resolution. That is almost the whole 10-minute spacing, so a run
   longer than 10 minutes makes the next fire skip on the lease.
+- **Speed is set by read latency, not keys.** A `/enrich` child (4
+  offers) takes 50–65 s, about 13 s per read. So 3 lanes give ~12 reads a
+  minute. Stage 1 + Stage 2 together use about 20 of the keys' 60
+  requests a minute, so more lanes would still fit the key budget.
+- **Every cron event is delivered twice,** 0–60 s apart. `wrangler tail`
+  shows two minute-tick events every minute, and `*/2` firing every
+  minute. The leases absorb it: the extra delivery returns in about 0.5 s.
 - ⚠️ **A run that dies keeps its lease** (`VISION_LEASE_MS` = 15 min), so
-  one fire is lost. This happened once: the 17:30 run stopped reading at
-  its window, never wrote its `cron:enrich` record, and the 17:40 fire
-  skipped. The cause is not visible without Worker logs. Enabling Workers
-  Logs (`[observability] enabled = true`) is the user's call: Paid includes
-  a monthly quota and bills beyond it.
+  the next fire is lost. This happened twice on 2026-10-08, to the 17:30
+  and 17:50 runs. Each read until its window closed (17:38 / 17:58), then
+  wrote no `cron:enrich` record, and its lease ran to start + 15 min. That
+  fits a parent awaiting a child that never answered until the platform's
+  15-minute limit; SELF dispatches have no timeout.
+  - The 17:30 run overlapped the first D1 export's widest tables.
+  - The 17:50 run overlapped a deploy (17:56).
+  - But the 17:10 run survived three deploys, and the 18:10 run finished
+    normally under `wrangler tail` (554 s, 86 enriched). So the cause is
+    unproven.
+
+  **Next evidence: Sunday's 02:00 UTC export.** If Stage 1 fires die
+  during it, make the export's parts smaller on wide tables. If deaths
+  continue at random, add a per-child timeout to `createEnrichDispatcher`
+  (~4 min; a healthy child takes about 1 min).
+
+  Workers Logs (`[observability] enabled = true`) would show the cause
+  directly. Enabling it is the user's call: Paid includes a monthly quota
+  and bills beyond it.
 
 **On demand:**
 - `POST /ingest?store=<id>`, the same path the fan-out hits.
