@@ -7,9 +7,10 @@
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
 > **Last updated:** 2026-10-08. **State at a glance:**
-> - **Production:** engine Worker version `d5e6ee24` = commit `2b340ca`
->   (`git log` on `serverless-connector` main names exactly what runs; deploys
->   only through `node deploy.mjs`, §9). Frontend `main` = `307535b` on Pages.
+> - **Production:** the engine runs the commit named in its deployment
+>   message (`a7207ba`, version `3201f964` on 2026-10-08). `wrangler
+>   deployments list` names it, because deploys go only through
+>   `node deploy.mjs` (§9). Frontend: `main` on Pages.
 > - **Platform:** Cloudflare **Workers Paid** (R2, Queues, 5-minute CPU in
 >   use, §8). Mistral is the only other spend: ONE model,
 >   `ministral-14b-2512`, for every read, with 2 live keys × 30 requests per
@@ -751,6 +752,18 @@ parked, `withFailover` waits up to two minute-cycles and then throws. The
 lane stops there, and its offers stay unread for the next fire (a provider
 failure writes no receipt). Vision is an INGESTION step: no reuse or cache
 gates in front of it (user directive).
+
+**Measured on 2026-10-08:**
+- Stage 1 read ≈620 offers an hour, at 10–14 a minute.
+- A fire runs ≈575 s: an 8-minute dispatch window (`DRAIN_DISPATCH_WINDOW_MS`),
+  then resolution. That is almost the whole 10-minute spacing, so a run
+  longer than 10 minutes makes the next fire skip on the lease.
+- ⚠️ **A run that dies keeps its lease** (`VISION_LEASE_MS` = 15 min), so
+  one fire is lost. This happened once: the 17:30 run stopped reading at
+  its window, never wrote its `cron:enrich` record, and the 17:40 fire
+  skipped. The cause is not visible without Worker logs. Enabling Workers
+  Logs (`[observability] enabled = true`) is the user's call: Paid includes
+  a monthly quota and bills beyond it.
 
 **On demand:**
 - `POST /ingest?store=<id>`, the same path the fan-out hits.
