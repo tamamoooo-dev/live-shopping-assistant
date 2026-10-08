@@ -67,6 +67,7 @@ export async function adaptiveSearch(provider, query, memory) {
   const ordered = orderStrategies(provider.strategies, lastGood);
 
   const failures = [];
+  let answered = null;
   for (const strategy of ordered) {
     try {
       const results = await strategy.run(q);
@@ -74,11 +75,17 @@ export async function adaptiveSearch(provider, query, memory) {
         memory.set(winnerKey, strategy.name); // remember what worked
         return { results, strategy: strategy.name };
       }
+      answered = answered || strategy.name;
       failures.push(`${strategy.name}: no results`);
     } catch (err) {
       failures.push(`${strategy.name}: ${err.message}`);
     }
   }
+
+  // A method that ran and found nothing is the store saying "no match" — an
+  // answer, not a failure. The store shows "no matches" rather than
+  // "unreachable", and the remembered winner stays (it still works).
+  if (answered) return { results: [], strategy: answered, empty: true };
 
   // Nothing worked. Forget the stale winner so next time we rediscover from
   // scratch instead of stubbornly retrying a dead method first.
