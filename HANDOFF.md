@@ -758,10 +758,12 @@ gates in front of it (user directive).
 - A fire runs ≈575 s: an 8-minute dispatch window (`DRAIN_DISPATCH_WINDOW_MS`),
   then resolution. That is almost the whole 10-minute spacing, so a run
   longer than 10 minutes makes the next fire skip on the lease.
-- **Speed is set by read latency, not keys.** A `/enrich` child (4
-  offers) takes 50–65 s, about 13 s per read. So 3 lanes give ~12 reads a
-  minute. Stage 1 + Stage 2 together use about 20 of the keys' 60
-  requests a minute, so more lanes would still fit the key budget.
+- **Read latency sets the pace, and the keys are close behind.** A
+  `/enrich` child (4 offers) takes 50–65 s, about 13 s per read, so 3
+  lanes give ~12 reads a minute. But in 25 minutes of `wrangler tail`, key
+  1 hit its 30-a-minute window 35 times, and failover moved those calls to
+  key 2. So requests exceed reads, and more lanes would soon hit the key
+  budget. Measure requests per minute before adding lanes.
 - **Every cron event is delivered twice,** 0–60 s apart. `wrangler tail`
   shows two minute-tick events every minute, and `*/2` firing every
   minute. The leases absorb it: the extra delivery returns in about 0.5 s.
