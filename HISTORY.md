@@ -5605,3 +5605,645 @@ resolves to the ancestor.
   legibility, not sharpness, and cannot buy more without a new source.
 - Hotspot coverage is **226/226 pages** across the current brochures, so
   crop-per-product is viable nearly everywhere.
+
+---
+
+> **Backfill note (2026-10-08).** §52–§56 were written on 2026-10-08 from the
+> session records, commit messages and production measurements of the work
+> they describe. Nothing was appended between §51 (2026-08-02) and that date.
+> §57–§58 are July sections recovered from the never-merged
+> `docs/feasibility-roadmap` branch. They were numbered §31/§32 there, which
+> main had since used for Browse.
+
+## §52 · Noon's payload moved to TanStack; the parser followed (2026-08-01)
+
+### The symptom
+
+Noon returned zero results for every query. The page itself served fine all
+along.
+
+### The cause
+
+minutes.noon.com had left Next.js, whose RSC flight sat in
+`self.__next_f.push(...)`, for **TanStack Start**. TanStack streams a
+**seroval** payload inside `<script class="$tsr">`. In that payload:
+- keys are unquoted;
+- repeated values are hoisted into `$R[n]=` back-references.
+
+So `JSON.parse` can never apply. The old parser found no marker, rebuilt 0
+bytes, and reported `no products parsed (flight 0b)`.
+
+### The fix
+
+`serverless-connector/src/providers/noon.js` now reads the seroval stream
+directly. `noon.test.mjs` (21 assertions) pins:
+- the format;
+- the multi-buy nesting that reuses `sku` + `title`;
+- the parse-break error.
+
+Verified on 7 live pages, EN/AR, grocery and non-grocery (88 products for
+`milk`, prices matching the rendered grid).
+
+### What not to re-derive
+
+- **Cookies and location are not needed.** The cookieless page carries the
+  whole catalogue. An early "needs `x-whoami-*` cookies" reading was a
+  measurement error: it grepped a quoted `"sku"` against an unquoted
+  payload.
+- **The `/_svc/catalog/*` JSON API is not an alternative.** It answers
+  `Area not serviceable` without zone headers that exist only in Noon's own
+  server tier.
+- **Testing gotcha:** Node's `fetch` gets a Cloudflare challenge from Noon;
+  curl and the deployed Worker do not. Fetch fixtures with curl, then run
+  them through the module with a stubbed `fetch`.
+
+### Lineage lesson
+
+The first deploy (`dcca4785`) came from an uncommitted tree, and the file was
+edited again that evening, so its source was unrecoverable. Alignment came
+from REDEPLOYING from committed source (`4f65415` → `f4f5eb7a`, bundle
+verified byte-identical), not from claiming a match. An uncommitted deploy is
+reproducible only until the next edit.
+
+## §53 · The per-item "each" price (2026-08-03)
+
+### What it is
+
+`offer.eachPrice = { value, pack }`, for example "0.85 SAR each" for a
+12 × 23 g pack. It answers "what does one cost", where `unitPrice` answers
+"which is better value". It is display-only: it never ranks, groups, sorts or
+alerts.
+
+### The one rule
+
+`each = unitPrice.value × (reference.quantity / pack)`. **Never
+`price / pack`.** The two are numerically identical, and that is exactly why
+the value must route through the v4 `reference` (§50):
+- every existing refusal propagates for free;
+- the two figures on a card cannot disagree;
+- no new denominator enters the model.
+
+### Seven gates
+
+`lexicon/comparableQuantity.js eachPriceFrom` requires all of:
+1. a reference;
+2. discrete selling;
+3. pack > 1;
+4. measure or count evidence;
+5. not heterogeneous;
+6. printed ≡ canonical;
+7. not a set.
+
+Measured twice on all 74,173 priced offers, at design time and on the shipped
+code: **6,507 offers** (16.1% of unit-priced).
+
+### Three findings that changed the design
+
+1. **A multi-buy veto is the wrong instrument.** It both over-reaches and
+   under-reaches:
+   - Over: `2 + 1 FREE` → pack 3 is correct.
+   - Under: 270 winners carry the bonus in the SIZE field.
+
+   What genuinely breaks is the heterogeneous bonus, `2 x 650ml + 400ml
+   FREE`. So `packageSize.js` gained a `heterogeneous` flag. The connector
+   is the whole rule: `+` adds, `/` alternates.
+2. **`package_type` is null on 67% of qualifying offers.** A name-token
+   fallback (`set|kit|طقم`) backs it up. This is admissible only because it
+   is a REFUSAL: being wrong withholds a price and never invents one. Use
+   Unicode lookarounds, not `\b`, which is ASCII-only.
+3. **Do not pass `packageType` into `resolveComparableQuantity` on the read
+   path.** Doing so flips `sellingMode` on bagged offers, a real change
+   hidden behind an additive one.
+
+### Four card paths
+
+The app had three card renderers that drifted:
+- summary;
+- results grid;
+- brochure sheet. The viewer deliberately does not import `compare.js`.
+
+The formatter moved into `match.js`, the one module all three reach. Browse
+is a fourth path with its own engine projection. It now serves `eachPrice`
+but deliberately NOT `unitPrice`: its queries omit `search_text`, which
+changes 0 each-prices but 1,488 unit prices. A test pins that divergence.
+
+### Shipped
+
+- Engine `713556e` + `4bf6f91` (Worker `8d62ba8c`).
+- Frontend `700f932` + `9401d77` + `001f236`, verified live on the Palmolive
+  6 × 120 g offer: `22.21 SAR/kg` + `2.67 SAR each`.
+
+### The free QA oracle
+
+A fabricated pack is invisible in SAR/kg and glaring in SAR/each. The
+feature exposed three already-wrong unit prices. One was the
+truncated-size bug in `parseSize` (name + sizeHint concatenation fabricates
+a pack); it was filed separately.
+
+## §54 · One model, one key pool, and the unpriced flyer products (2026-09-24)
+
+### Unpriced D4D records
+
+From 2026-09-16, and in bulk from 09-22, D4D published new flyers' records
+with `price` = `"0.000"`. A raw-payload probe proved the price is absent
+from:
+- the item fields;
+- the embedded JSON;
+- the top-level HTML;
+- the leaflet coordinates;
+- the product-page JSON-LD.
+
+It is not hidden anywhere; do not hunt for it again.
+
+The design shipped that day:
+1. D4D product + crop → a `price_pending` row at ingest.
+2. `/brochures/hotspots` serves it at once, with a null price.
+3. A Ministral 14B price fallback reads the crop. Acceptance needs two
+   agreeing readings, plus a check that the D4D description prints that
+   price.
+4. An accepted price becomes a normal `offers` row (same id,
+   `price_source='vision'`).
+
+Clickable spots went from ~446 to 13,733 / 13,755 (99.8%). The frontend shows
+a blank price row until a price exists (`c421785`); Add is disabled without a
+price.
+
+### One model
+
+User directive: "we have one model mistral 14 all old models are retired".
+Every chat-model path now sends `ministral-14b-2512` (`8985bc9`):
+- `DEFAULT_MODEL`;
+- both selector tiers;
+- the pool labels.
+
+The prompt is still the frozen Verbatim Prompt (sha256 `e643b2a1…`). Ministral
+requests omit `reasoning_effort`, which returns 400.
+
+All Mistral secrets now feed ONE shared pool (`3821a23`).
+
+### One reading publishes
+
+A Stage 1 read is served at once if it passes three checks:
+- a name;
+- a verdict that is not rejected;
+- corroboration ≥ the floor.
+
+Stage 2 became a later RE-CHECK, not a gate (`9d69c7f`). It fills a missing
+brand, size or Arabic name when the English name agrees, and removes nothing
+(`8e6e789`).
+
+The price fallback's agreeing reading is committed through the normal
+Stage 1 path, so a crop is never read twice (`53d9757`).
+
+### The minute window
+
+Measured live: Mistral's limit is **30 requests per key per FIXED wall-clock
+minute**. The window resets at hh:mm:00, with no Retry-After header. The old
+code parked a 429'd key for 1.5–3 s and knocked on a closed window again.
+
+Now a 429 parks the key until the next :00 (`2ec539c`). A key whose reply
+shows the window nearly spent parks early. A 402 key stays retired for 6 h.
+
+### "The key works, then stops"
+
+This was never a key fault. Three local price-drain loops ate the whole
+60 requests a minute. The drain moved INTO the engine, as
+`PRICE_FALLBACK_LANES` = 3 lanes on the minute tick, each leaving
+`PRICE_FALLBACK_RESERVE` = 6 requests per key per minute for the other
+callers. A 429 there costs no attempt. 76 items had been rejected for
+`transient: mistral 429`; they were reopened.
+
+### Lineage
+
+Production version `1c2b2889` (2026-09-10) had been deployed from an
+uncommitted tree. It was committed byte-for-byte as
+`production/2026-09-10-snapshot` (`4f82610`), and the work went onto
+`claude/unpriced-hotspots-deploy`. `main` stayed stale until §56.
+
+## §55 · Workers Paid, Run All hand-off, and the local OCR track parked (2026-09-26 → 09-30)
+
+### Workers Paid
+
+The user upgraded to Workers Paid, so the engine stopped being shaped around
+Free-plan limits. Paid gives:
+- 30 s CPU by default, up to 5 min via `[limits] cpu_ms`;
+- **10,000 subrequests per invocation, D1/R2 calls included.**
+
+Cloudflare documents 32 service-binding calls per request, but 36 and 48 SELF
+calls both worked.
+
+**CPU, measured by live tail (~250 invocations, 0 over the limit):**
+
+| Path | CPU per invocation |
+|---|---|
+| Verification offer | 15–23 ms |
+| Price lane | 80–150 ms |
+| Resolve 25 | 89 ms |
+| Store ingest child | p50 551 ms, max 2.06 s |
+
+Everything is I/O-bound.
+
+**Changed in `bb777a7a`:**
+- `cpu_ms = 300000`;
+- `collectD4dStore` loops checkpointed 60-page hops within a 45 s budget;
+- the background drain batch went 1 → 4 (112 offers a fire);
+- `RESOLVE_LIMIT` went 25 → 200;
+- `computeStoreRows` reads flyers concurrently (overview 12.5 s → 1.65 s).
+
+### Run All false failures
+
+Ops "Run All Stores" returned 17 × "did not complete within 2 invocations",
+although every child succeeded. The cause: `dispatchIngest` split the 48-call
+SELF budget evenly (2 per store), and an unchanged 137-page flyer needs ~18
+hops.
+
+The fix (`c7fe858a`):
+- the budget is shared;
+- a store still advancing when the budget runs out is HANDED OFF to the
+  `*/2` resume cron, instead of throwing;
+- PUBLISHING counts as in progress.
+
+After the Paid changes, Run All published all 18 stores in 111 s with 0
+hand-offs.
+
+A second bug sat in the same code. The price drain writes 3 store-less
+`ops_runs` rows a minute, which pushed every store's last OK and FAIL out of
+the newest-300 window. Ops now reads per store and per action
+(`latestByStore`, `list({ action })`, two indexes, migration applied).
+
+### Grand Hyper → Mkhazin
+
+At the user's request, Grand Hyper was retired: D4D had listed only its
+expired flyers since late August. Mkhazin (`mkhazin-supermarket-2872`)
+replaced it (frontend `6139c95`). Its D4D record is in
+`docs/FEASIBILITY-VALIDATION.md`.
+
+### Key audit (09-30)
+
+- Alive: two keys.
+- `402 billing_api_budget_exhausted`: three keys. That is a spending cap the
+  user can raise.
+
+ANY error now fails over to the next key at once: 5xx, capacity, network, or
+an unusable reply. The failing key rests 15 s and is never retired. Crop
+errors are excluded.
+
+### PaddleOCR-VL, local (09-25 → 09-26) — PARKED
+
+The local OCR track (PaddleOCR-VL 1.6 Q4 on llama.cpp Vulkan, laptop iGPU and
+AMD WX 2100) reached its accuracy goal. "Rule F" is a strict 7-read vote that
+abstains on two-offer tiles. It scored:
+- 95/0 fresh;
+- 95/0 hold;
+- 98/0 on a held-out 100.
+
+That is 288/300 right and 0 wrong, at ~26 s per crop with early stopping.
+
+It also corrected five Mistral "truth" labels, where Mistral had taken the
+struck price over a giant-digit price.
+
+It is **parked**, not adopted:
+- 26 s per crop on one laptop cannot carry the weekly catalogue;
+- the WX 2100's driver kept crashing on work→idle→work power transitions,
+  and that was still unresolved;
+- it has no path into production.
+
+The 2026-10-08 plan (G9) found that since Oct 1, D4D prices more than 99% of
+its records itself, and what remains is a validator question, not a reading
+problem. Reopen this track only if D4D stops pricing again.
+
+### Lineage, again
+
+Live `bb777a7a` was deployed from the `engine-deploy` worktree with 19
+uncommitted files plus the unpushed `2ec539c`. §56 committed it.
+
+## §56 · The 2026-10-08 executive plan: sound base, then throughput (2026-10-08)
+
+### The audit
+
+A whole-project read produced `EXECUTIVE-PLAN-2026-10-08.md` (desktop,
+outside both repos). The user's instruction was: "work according to your
+recommendation .. dont ask my approval handle it yourself".
+
+Three limits were held deliberately:
+- no spend changes (Mistral caps untouched);
+- no irreversible deletions (secrets, backups, desktop data);
+- no local benchmark data pushed to GitHub.
+
+### Phase 0: production you can name
+
+- **The tree production runs, committed.** `2c3317a` is engine `bb777a7a`;
+  `5968d44` is connector `d0e80681`. Main was merged into the production
+  lineage keeping production's tree (`8af6523`). Engine `main` now IS
+  production.
+- **`deploy.mjs` (`665a0d4`)** refuses:
+  - a dirty `brochure-engine/`, untracked files included;
+  - anything that is not pushed main;
+  - a failing suite;
+  - a borrowed wrangler.
+
+  It stamps `--message "<sha> <subject>"`. `package-lock.json` pins
+  wrangler 4.124.0. `.gitattributes` keeps the frozen prompt record LF, so
+  `enrich.test.mjs` passes on a Windows checkout.
+- **Watches broken since 2026-09-21, fixed.** Two causes:
+  1. The connector answered "no match" with **HTTP 502** ("No strategy
+     returned results."). Now any strategy that completes with `[]` is a 200
+     `{ count: 0, empty: true }` (`a8a1b2e`).
+  2. A market round would not finish until all 7 stores answered, so 5
+     watches retried every minute for the whole 6-hour slot: 360 attempts,
+     ~25k needless searches a day. Now the round accepts the stores that
+     answered after 15 attempts, marked `partialCoverage` (`83a1945`). A
+     partial answer may alert but never re-arms a watch. The frontend
+     now shows "no matches" instead of "unreachable" (`24b08d4`).
+
+### Phase 1: Vision throughput (G3)
+
+**Measured before:**
+- every Stage 1 and Stage 2 fire read 50 offers one after another
+  (240–660 s), three fires an hour each;
+- that used about 5% of the two keys' 60 requests a minute;
+- 5,919 current offers had never been read, and only 46% were served.
+
+**The caps:**
+- The candidate queries clamped at 50, so the Paid capacity of 4 × 28 = 112
+  never took effect. The clamp is now 200.
+- `runDrainLanes` (scheduler.js) deals one fire's batches round-robin into
+  concurrent sequential drains: 3 lanes for Stage 1, 2 for Stage 2 and the
+  background jobs. Expiry-first order is kept. A lane that meets a spent
+  minute window stops alone (`2adec9c`).
+- Stage 1 also fires on the minute tick at :00/:20/:40, giving 6 fires an
+  hour.
+
+**Measured after.** Stage 1 reads per 10 minutes went from about 25
+(15:00–16:50, ≈150/h) to 101–109 (17:00–17:40, ≈620/h). The ceiling is
+670/h. Each fire took 112 offers in 3 lanes and ran ~575 s.
+
+**Duplicate cron deliveries are real.** Two verification fires started 59 s
+apart (16:45:05 and 16:46:04) and both selected the same 50 queue rows. The
+cron path had no lease; it now takes `steady-verification` (`125c463`).
+Every new periodic job since takes its own lease.
+
+**The 21% "read but not served", explained.** Most of these offers fail
+`business-acceptance-v4` for a missing `english_name`. Serving them means
+generating a name, which is a guess. Left to the user (HANDOFF §11 D1).
+
+### Danube's blank prices (G4)
+
+The audit had found that 586 of 592 Danube rejections were
+`current_not_in_description`. D4D's Danube descriptions carry no numbers
+("danube الدانوب"), so the description check vetoed instead of abstaining.
+
+Looking at the crops changed the conclusion. On single-tag crops the readings
+are excellent. But many Danube crops hold several price tags, and nothing in
+D4D's data tells the two kinds apart. "Abstain, then accept two agreeing
+readings" would therefore misprice the multi-tag crops with confidence. The
+rule was **not shipped**. Two options are left to the user (HANDOFF §11 D2):
+- a validated "one price tag?" check;
+- "price on flyer".
+
+### Phase 2: CI, mirror parity, health digest
+
+- **CI** (`d3952c0`, `80a849a`). Both repos run every unit test on push and
+  pull request. Green on the first run.
+- **Matcher parity** (`9ea8dcf`). `matcherParity.vectors.json` holds 7,207
+  cases built from 394 real current flyer names and 130 queries, across all
+  22 shared exports of `matching.js` ↔ `match.js`. It is byte-identical in
+  both repos. Generating it found four drifts:
+  1. The frontend's `parseSize` read the `x` in "Impex 6.5Ltr" as a pack
+     multiplier (a 39 L six-pack). Fixed in the frontend (`307535b`, a pack
+     multiplier must directly follow the size).
+  2. Arabic-Indic digit folding in `normalizeText` and
+     `canonicalMatchText`. Pinned as a known divergence.
+  3. Single-letter tokens in `queryTokens` / `matchStage`. Pinned as a
+     known divergence.
+
+  Items 2 and 3 change which products match a search, so they wait for a
+  decision.
+- **Daily health digest** (`5fdb399`). At 05:00 UTC, under a
+  `daily-digest` lease, `ops/digest.js` sends one ntfy message. It names:
+  - stores that are not OK/PUBLISHING, with their errors;
+  - Vision served below 95%, with an unread ETA at the measured rate;
+  - incomplete watch rounds;
+  - fewer than 2 usable keys.
+
+  Missing inputs never invent problems. `GET /__ops/api/digest` previews it;
+  `POST` with `confirm` sends one now. `NTFY_TOPIC` was set the same day.
+
+### Phase 3 (part): weekly D1 export (G8)
+
+The only database copies were two hand-made desktop dumps from August, and
+D1 Time Travel reaches back only 30 days. `backup.js` (`2b340ca`) now
+exports the database to R2 every Sunday from 02:00 UTC:
+- every table, paged by rowid into 2,000-row JSONL parts, 12 parts a minute
+  under a `d1-backup` lease;
+- the derived FTS tables skipped;
+- each CREATE statement and every index kept in the manifest;
+- the newest 8 complete sets kept. Rotation never touches an unfinished
+  set or another prefix.
+
+`restore-d1-backup.mjs <date> <dir>` rebuilds `restore.sql`, rowids
+preserved, for an empty database. A missing `active.json` also starts an
+export, so the first one ran at deploy.
+
+### Deferred, on purpose
+
+- **The G8 removal pass** (retired Recovery code, OCR escalation, legacy
+  pools, `price_points`, the `/prices` V1 fallback, superseded docs) is
+  planned for month 2. It was too risky to stack on the same day's
+  deploys.
+- **Desktop data (~3.5 GB)** was not deleted. The user can archive it.
+- **Mkhazin** is on probation, 1 of 4 weeks (HANDOFF §11 D3).
+- **`docs/FEASIBILITY-VALIDATION.md`** had lived only on an unmerged branch.
+  It moved onto main with that measurement.
+
+## §57 · ClicFlyer feasibility study — CLOSED, not adopted (2026-07-05)
+
+> **Status:** Investigation complete. **Decision: do NOT adopt ClicFlyer** as an
+> ingestion source under the current architecture ($0, Cloudflare-Worker-only,
+> low-maintenance personal tool). No code written; D4D remains the foundation.
+> This section supersedes the old ClicFlyer rejection reason in §12.B (which was
+> based on a wrong diagnosis). Read this before ever reconsidering ClicFlyer.
+
+### 57.A What was investigated
+Whether ClicFlyer (`clicflyer.com` / `api.clicflyer.com`, GCC offers aggregator,
+Android app `main.ClicFlyer`) can **independently** power Super Search — i.e.
+fully replace the D4D ingestion path (brochure discovery + page images +
+structured offers + prices + retailer metadata + validity), executed from a real
+Cloudflare Worker at $0. Three fronts examined, each with live evidence:
+(1) the previous report's rejection reason; (2) the HTML/web-app path;
+(3) the official mobile API (via APK reverse-engineering + live requests).
+
+### 57.B What was proven (evidence-based)
+- **The old rejection reason was wrong.** The 503 was NOT an IP/WAF block: a bare
+  request 503s, but the SAME residential IP with normal `Accept`/`Accept-Language`
+  headers → 200; Googlebot/Bingbot UAs → 200; a US datacenter fetch → 200. The 503
+  is a crude missing-header load-shed (`Server: Kestrel`, "backend overloaded"),
+  trivially defeated with browser headers.
+- **The HTML path's data is real and complete.** With correct headers the web app
+  serves, via an ASP.NET anti-forgery (`__RequestVerificationToken`) flow that
+  mirrors D4D's CSRF pattern: `POST …/Retailers/GetFlyerOffersNew` (per-product
+  offers w/ `real-price`+`grey-cross-text` old price + `% off` + validity;
+  Lulu `totalpageoffer=1275`), `GetFlyers` + the flyer viewer (full page-image set
+  `cdn.clicflyer.net/appimages/flyerpages/flyerprocessing_<id>_<N>_compressed.webp`,
+  ~80 pages), absolute dates ("Valid Till Jul 07, 2026"), bilingual EN/AR by URL
+  segment, and stable numeric retailer ids (lulu=8, panda=2, carrefour=1, othaim=5,
+  tamimi=6, danube=12…). Coverage is broader than D4D (adds al-sadhan, bindawood,
+  alraya, pharmacies). Offer names are cleaner brand+product titles than D4D OCR.
+  No tap-polygons (only an offer→page number encoded in the crop id).
+- **The HTML path is CLOSED from a Cloudflare Worker.** A throwaway probe Worker
+  was deployed to `*.tamamoooo.workers.dev`, ran the full flow from Cloudflare's
+  edge, and was deleted. Every `www.clicflyer.com` / apex request (all paths incl.
+  static `robots.txt`/`sitemapen.xml`, both FR and GB egress colos) → **302 loop to
+  `/Home/Error`** at a Cloudflare edge. Residential and generic datacenter get 200;
+  only Cloudflare-Worker egress is trapped (the app zone is a Cloudflare zone whose
+  redirect rule fires on Worker subrequests, which are forced through that edge;
+  ordinary users resolve straight to the Azure origin and never hit it).
+  `cdn.clicflyer.net` (images) and `api.clicflyer.com` ARE Worker-reachable (200).
+  Headers/sec-fetch/UA variation does not help — it is IP/ASN-scoped, not header-based.
+- **The mobile API is a data superset — behind a bespoke encrypted-credential gate.**
+  From the APK (v10.5.3, 8 DEX, no app-native crypto `.so`): base
+  `https://api.clicflyer.com/api/v2/ClicFlyerAPI/<Action>` (+ `Account`, `UserAPI`).
+  All ingestion needs exist as endpoints: `GetFlyersWithBanner`/`GetHomeRetailers`
+  (discovery), `GetFlyerPages` (page list), `GetFlyerOffersSort`/`GetOfferDetail`
+  (products+prices), `GetRetailerStores`/`GetRetailerDetailsById`/`GetStoresByFlyerId`
+  (retailer metadata), `GetCountries`/`GetCitiesByCountry` (geo). The host is
+  Worker-reachable and returns JSON to anonymous clients on at least one endpoint
+  (`AddDeviceToken` → 200 JSON). BUT data endpoints require a **JWT** from
+  `POST api/v2/Account/Token` (the `GuestLogin`→`GenerateJWToken` path — anonymous,
+  no user credentials). That token requires an RSA/AES-GCM **encrypted credential
+  blob** carrying `DeviceId`+`UniqueId`(+shared `ApiKey`): a shotgun of every
+  plaintext header/query/body name for DeviceId/UniqueId returned a byte-identical
+  `{"code":400,"message":"Device Id and Unique Id not found."}`, proving those live
+  inside the encrypted payload. Confirmed app-owned crypto:
+  `AsymmetricEncryptionUtil.encryptWithPublicKey` (embedded RSA public key
+  `MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2S5Dp65m…`), `AesGcmUtil`/`AESEncryption`,
+  `KVConstants`, validated server-side via Azure Key Vault
+  `kv-liveclicflyerapp.vault.azure.net/keys/LiveApiKey/decrypt` (versioned
+  `api-version=2025-07-01`). No per-request HMAC interceptor
+  (only `DynamicBaseUrlInterceptor`+`RetryInterceptor`); Play Integrity strings are
+  ads/Play-Core library artifacts with **no** binding to the ClicFlyer API.
+- **Device identity vs login (settled).** DeviceId/UniqueId is a device/guest layer
+  BENEATH user auth (`GuestLogin` interactor is distinct from `Login`/`SocialLogin`/
+  `Register`/`UpGradeUserInfo`; identity generated client-side via `randomUUID`/
+  Firebase `InstallationId`). Login does NOT satisfy it and cannot bypass it — every
+  authenticated session rides on the same device-scoped, encrypted-credential JWT.
+
+### 57.C Assumptions disproven from the previous investigation
+1. "ClicFlyer WAF-blocks non-residential/datacenter IPs (503)." → FALSE. 503 = a
+   missing-header load-shed; datacenter and residential both get 200 with headers.
+2. Implicitly, "there is no machine-readable path." → FALSE. Both a CSRF-style HTML
+   API and a full mobile JSON API exist and were mapped.
+3. The bottom line ("not usable from a Worker") happened to hold, but for a
+   **completely different, now-precisely-identified reason** (a Worker-egress 302
+   trap on the web zone; an encrypted-credential gate on the mobile API), and it
+   was too broad — it missed that the CDN and mobile-API hosts ARE Worker-reachable.
+
+### 57.D Why the project is NOT adopting ClicFlyer (under current constraints)
+- **HTML path:** closed from Cloudflare Workers (302 trap, IP/ASN-scoped, not
+  header-fixable). The only workarounds — a non-Cloudflare egress/proxy — break both
+  the $0 rule and the Worker-only architecture.
+- **Mobile API path:** data is reachable in principle, but the **sole** access door
+  is a deliberately-engineered client-side encrypted-credential handshake (RSA +
+  AES-GCM, server-validated via a rotatable Azure Key Vault key). Using it requires
+  extracting the vendor's shared secret and reimplementing that cipher to **forge**
+  the app's credentials — an adversarial, brittle, maintained anti-abuse control that
+  can be rotated at will (one Key-Vault rotation kills ingestion with no notice).
+  That is the opposite of a simple, honest, low-maintenance personal tool.
+- **The investigation stopped INTENTIONALLY at the authentication layer.** No attempt
+  was made to reproduce, forge, or bypass the credential-encryption mechanism. The
+  stop was a deliberate boundary (do not build a circumvention of an access-control /
+  anti-abuse measure), not merely a tooling limit.
+
+### 57.E Do-not-reopen guidance
+Do **not** re-investigate ClicFlyer unless there is genuinely NEW external evidence:
+(a) ClicFlyer publishes an **official/partner API** (documented auth, ToS-permitted);
+(b) the **project constraints change** (a paid non-Cloudflare egress/proxy becomes
+acceptable, i.e. the $0 + Worker-only rules are relaxed); or (c) ClicFlyer removes the
+web-zone Worker-egress block AND the mobile encrypted-credential gate. Absent one of
+those, the answer is settled: **not viable; D4D stays the foundation.** All raw
+evidence (APK, DEX strings, request/response captures, probe-Worker outputs) lived in
+the session scratchpad and is not committed.
+
+---
+
+## §58 · Expansion roadmap + evidence-based feasibility investigation (2026-07-06)
+
+> **Status:** Complete. Produced two **living** engineering docs, now preserved in
+> [docs/](docs/) (`docs/EXPANSION-ROADMAP.md`,
+> `docs/FEASIBILITY-VALIDATION.md`, indexed by `docs/README.md`). No connector code
+> written — this is planning + validation. Establishes the rule that future
+> retailer decisions cite FEASIBILITY-VALIDATION.md, not assumptions, and that
+> future investigations update these files in place rather than forking new reports.
+
+### 58.A What was produced
+1. **EXPANSION-ROADMAP.md** — a 12-month plan covering ~29 candidate retailers/
+   platforms with the full attribute set (category, coverage, catalog size, search
+   capability, PDP, pricing/image/promo/brochure availability, auth, bot protection,
+   API, complexity, connector strategy, maintenance, feasibility + user-value
+   scores), Tier 1/2/3 classification, an effort×impact roadmap, the platform
+   multipliers, explicit "not worth integrating" rejections, and a "Future
+   Opportunities" feature backlog (loyalty, coupons, cashback, price guarantees,
+   wishlist sync, stock, location-aware pricing, barcode/voice search, AI assistant,
+   recommendations, basket optimization, cheapest-complete-basket, price
+   intelligence, deal detection, flyer-OCR/`deriveNames`, notifications, seasonal
+   prediction).
+2. **FEASIBILITY-VALIDATION.md** — replaced the roadmap's *theoretical* scores with
+   *measured* evidence for every Tier 1/2 candidate.
+
+### 58.B How feasibility was actually tested (the method that matters)
+The decisive question is **Worker-egress reachability** — does a source behave the
+same from a Cloudflare datacenter IP as from a browser? Residential `curl` cannot
+answer it (the ClicFlyer trap: residential 200, Worker 302-loop). So a throwaway
+probe Worker was run via `wrangler dev --remote` (egress from real Cloudflare
+edge, verified egress IP `2a06:98c0:3600::103`; `redirect: manual` to catch
+302-loops), and every candidate was probed from **three vantages**: CF edge,
+residential `curl` (KSA IP), and `WebFetch` (third network). The probe was
+**validated against controls first**: ClicFlyer reproduced its documented
+`302→/Home/Error` Worker-block exactly, and Panda returned JSON — so its verdicts
+are trustworthy. The wrangler session was stopped afterward; the probe scripts and
+captures lived in the session scratchpad and are not committed.
+
+### 58.C Evidence-based results (superseding the roadmap's guesses)
+- **✅ Build (measured product data from the edge):** **Jarir** (897 KB SSR search,
+  SAR+price fields), **Nahdi** (421 KB SSR, JSON-LD products; opens pharmacy),
+  **Spinneys** (994 KB SSR, 41 price / 327 image hits), **Mumzworld** (Next SSR,
+  prices+images; opens baby), **Salla platform** (live store `store.alshifahoney.com`
+  edge-200, 168 product refs + JSON-LD on a uniform theme — the SME multiplier
+  validated).
+- **🟡 Investigate (reachable; one browser network trace away):** Othaim online,
+  eXtra (Unbxd), GoldenScent (Algolia), Nana (Frappe `/api/method/*`,
+  delivery-marked-up price caveat), Nesto (Angular API lazy-loaded), and **Zid**
+  (platform NOT independently probed — repeat the Salla probe before committing).
+- **🔴 Skip (high-confidence blockers):**
+  - **Carrefour online (6→4):** every path incl. every `/api/…` returns an identical
+    53-byte `<p></p>` shell (residential too) — a JS-minted-token gate, no clean
+    endpoint. Stay flyer-only (D4D coverage already exists).
+  - **Al Dawaa (6→3):** connection refused/failed from all three vantages (edge 523,
+    residential 000, WebFetch ECONNREFUSED) — TLS/JA3 bot protection a Worker can't
+    forge.
+  - **Landmark / Home Centre + Babyshop (6→2):** Cloudflare managed-challenge 403
+    from the edge vs 200 + full HTML residentially — a confirmed ClicFlyer-class
+    Worker-egress block.
+  - **Bindawood (6→3):** web origin dead (CF 1016), `bindawood.com` on a GoDaddy
+    parking IP — app-only; Danube (same holding) already covers it.
+  - **Al Sadhan (5→2):** `alsadhan.com` 301-redirects to Gmail — no storefront.
+
+### 58.D Findings that reshape the plan
+- **Two roadmap assumptions were broken by evidence:** pharmacy cannot launch as a
+  Nahdi+Al Dawaa comparison (Al Dawaa blocked → Nahdi launches solo, validate
+  Whites/United as the partner), and the "Home+Baby in one Landmark connector" idea
+  fails at egress (Mumzworld now carries Baby alone).
+- **A second platform multiplier emerged:** a **hosted-search cluster** — Nahdi,
+  Mumzworld, Spinneys, GoldenScent all run **Algolia** and eXtra runs **Unbxd**
+  (public CDN search APIs, unconditionally Worker-reachable, clean JSON). A
+  "scrape app-id/key → query the index" helper amortizes across five+ retailers,
+  alongside the Salla parser and the existing D4D flyer multiplier.
+
+### 58.E Governance established
+- **Authority:** FEASIBILITY-VALIDATION.md is the source of truth for build/defer/
+  skip decisions; where it and the roadmap disagree, the validation file wins.
+- **Maintenance:** future investigations **update the two docs in place** (edit the
+  row, bump the score, add a dated line to the validation revision log §8) and never
+  fork new disconnected reports; a prior conclusion is **not overwritten without new
+  evidence** — it is superseded with a record of what changed. HANDOFF §12 points at
+  all of this.

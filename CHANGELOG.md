@@ -3,6 +3,42 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## Since 1.0.0 — continuous delivery (2026-07 → 2026-10)
+
+After 1.0.0 the project stopped cutting releases: every push to `main` deploys.
+[HISTORY.md](HISTORY.md) records each milestone in full. In brief:
+
+- **July 2026.** Flyer offers from D4D and the brochure engine:
+  - tappable brochures, price history, price watches;
+  - Browse;
+  - Journey Coherence (one shared gate ladder);
+  - packaging and size-aware search;
+  - the Featured ranking (Lowest-price ordering locked);
+  - local profiles;
+  - Vision reading of every flyer crop, with the Product Registry.
+
+  HISTORY sections up to §49.
+- **August 2026.** Comparable Quantity v4 (one denominator for every unit
+  price), flyer Zoom, Noon's TanStack payload, and the per-item "each" price.
+  HISTORY §50–§53.
+- **September 2026.**
+  - Unpriced D4D products made tappable and priced by Vision;
+  - one model (`ministral-14b-2512`) and one key pool;
+  - Workers Paid throughput;
+  - Grand Hyper replaced by Mkhazin;
+  - the local OCR track measured and parked.
+
+  HISTORY §54–§55.
+- **October 2026.**
+  - Production committed, plus a deploy script that names its commit;
+  - watches fixed;
+  - Vision read in parallel lanes;
+  - CI in both repos, with matcher-mirror golden vectors;
+  - a daily health digest;
+  - a weekly D1 export to R2.
+
+  HISTORY §56.
+
 ## [1.0.0] — 2026-06-30
 
 First frozen release. A pure static, single-store live shopping assistant for

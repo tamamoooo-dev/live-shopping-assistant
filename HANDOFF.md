@@ -6,110 +6,29 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-08-02 · Latest change: **Comparable Quantity v4 — one
-> denominator, three orthogonal facts** (HISTORY §50). Flyers price two ways and
-> only one was modelled: a per-kilo price is not a package, so
-> `parsePackageSize()` found no magnitude in `"Per Kg"` and the unit price came
-> back null — for the class of offer that states it most explicitly. The
-> projection now returns `reference` (the single denominator; `unitPrice = price
-> / reference.quantity`, no branch), `sellingMode` (discrete | continuous) and
-> `evidence` (where the reference came from). New pure module
-> `brochure-engine/src/lexicon/priceBasis.js` (+ frontend mirror
-> `src/priceBasis.js`), gate `business-acceptance-v3`, projection
-> `comparable-quantity-v4`, and `offer.unitPrice` on the read contract.
-> ⚠️ **REFUSE RATHER THAN GUESS** (user directive): contradictory evidence yields
-> NO reference rather than a confident wrong one. ⚠️ An earlier draft modelled
-> this as a second PRICING MODE and was replaced before shipping — do not
-> reintroduce a per-unit arithmetic branch. Measured: unit price on the wire
-> **46.2% → ~76%**, **144 wrong** unit prices corrected, **808 rejected offers**
-> flip to accepted across 12+ categories. No column, no migration. Details in §5
-> (Comparable Quantity v4 + Price Basis).
-> Previous change: **English-primary structured
-> product + Arabic Builder** (HISTORY §47) — the post-extraction lexicon's
-> second phase. The ENGLISH extraction is now the primary source of truth
-> (measured: usable on **99%** of production observations), and the Arabic
-> product name is **generated deterministically from it** rather than trusted
-> from OCR. Four new pure modules in `brochure-engine/src/lexicon/`:
-> `shopping.js` (242 categories / 126 descriptors, phrase-level, longest-match
-> head-noun rule), `packageSize.js` (the PRINTED size + its Arabic label),
-> `structuredProduct.js` (the authoritative English record) and
-> `arabicBuilder.js` (category → descriptors → flavour → brand → size).
-> Built name coverage **61.1%** on the 1000-row corpus, **100% Latin-free**.
-> ⚠️ **ADDITIVE ONLY** — `applyEnrichment()` still serves the observed
-> `name_ar`; the built name rides alongside for validation (§11 TODO -2b).
-> No column, no migration. Ships in the SAME undeployed diff as §44/§45.
-> Previous change: **Local Profile**
-> (HISTORY §37) — every browser gets a silent per-browser identity
-> (`lsa.profile.v1`, frontend `src/profile.js`, created at boot; all local
-> `lsa.*` user data adopted in place, `profileGet/profileSet` slots for
-> future personalization), and **Price Watches are PROFILE-SCOPED end to
-> end** (engine `watches.profile_id`, every user-facing route requires the
-> profile, per-profile cap 24 + global backstop 90, cron unscoped) —
-> deployed + production-verified 2026-07-17. ⚠️ The 19 legacy watches are
-> still UNOWNED: first profile to open Alerts adopts them (§11 TODO -1 —
-> main browser first).
-> Previous change: **Search Intelligence**
-> (HISTORY §36) — the grid's third perspective is now **Featured** (replaces
-> Most discounted; still exactly three modes): a new frontend-only
-> `src/featured.js` intelligence layer ABOVE the engine — category-aware
-> curated signals (organic/local/origin/known produce brands/…), an
-> expected-price soft penalty around the primary matches' median, a small
-> deal signal, and localStorage LEARNING from real card engagements
-> (`lsa.featured.learn.v1`, bounded, ranking-only) — all ordering WITHIN the
-> stage → family-band quality groups, never past them. **Lowest price is
-> price-first and LOCKED by user directive**: genuine matches by PRICE
-> ALONE, then the related tail (rule 9; `isPrimaryPriceTier`, featured.js
-> — never change without an explicit user ask); Best value unchanged. Saved
-> 'discount' rank pref migrates to 'featured'. Mirror side effect: family
-> lexicons gained مشبك/مشابك (care) + مفاتيح/keychain/keyring/ميداليه (toy)
-> in both repos — produce-shaped accessories found live. **Engine deployed
-> 2026-07-16** (user-approved; this deploy also closed the §35 TODO -1 —
-> production /prices now answers "Arwa Water 1.5L" with the real record,
-> verified 5.99 SAR @ tamimi).
-> Previous change: **Search Experience
-> Refinement** (HISTORY §35) — the polish milestone, nine tasks, no
-> architecture change. Headliners: **size-aware queries** in BOTH matching
-> mirrors (a query-named size — "Arwa Water 1.5L" — is a STRUCTURED filter:
-> `querySize` + size-stripping `queryTokens` + a matchStage SIZE CAP;
-> /prices filters contradicting sized identities — fixes "history disappears
-> when the query gets specific"); Shopping Summary redesigned for shoppers
-> (image + one dense price·unit·store·size line, ONE muted footer meta line
-> with a tooltip exclusion breakdown instead of five verbose notes, Add to
-> cart beside Watch); cart buttons on online grid cards; per-piece prices
-> only on explicit counts (`parseSize().src` trust ladder) + a grid-level
-> unit-price outlier guard; Lowest price now orders stage → band → price
-> (the arbitrary top-20 window transform is GONE); third grid sort **Most
-> discounted** (stage → band → discount). Its engine half
-> deployed 2026-07-16 together with §36 (closed the old TODO -1).
-> Previous change: **Journey Coherence V1**
-> (HISTORY §34) — one interpretation, declared policy: the four hand-rolled
-> gate stacks (Shopping Summary, watch alerts, /prices statistics — plus the
-> grid's implicit one) now run ONE shared gate ladder
-> (`resolveJourneyPool`: stage band → family → type → fresh-produce) in both
-> matching mirrors, with per-feature differences declared ONLY in the
-> `JOURNEY_POLICY` table; invariant, tested in both repos: alert pool ⊆
-> summary pool for the same candidates.
-> Also recent: **Packaging Intelligence V1**
-> (HISTORY §33) — one package, one interpretation in BOTH matching mirrors:
-> bonus packs ("10+2" = 12) ported to the engine (it was blind to them —
-> mirror drift), packaging count words (rolls/رول، علب، قرص، ظرف…, curated),
-> hamza/ة folds in `normSize`; "10+2 Free" ≡ "12 Rolls" now yields the same
-> unit price, equivalence group, and /prices variant everywhere.
-> Also recent: **Browse V1.1** (HISTORY §32,
-> BROWSE-DESIGN.md Rev 3) — quality refinement from real production usage:
-> rails reduced to Biggest Drops + Lowest Ever (Exceptional Deals/Ending
-> Soon/New This Week removed as a product decision), brand pages actually
-> filtered (the V1 frontend never sent `brand=` — root cause of "wrong
-> products on brand pages"), brand-detection precision guards (dept
-> allowlists, neighbor vetoes, fuzzy repair removed), brand identity hero +
-> product-families chips, fresh→frozen read-time refinement. Engine deployed
-> and production-verified 2026-07-16 (2 rails; frozen fold live —
-> chicken-poultry 436→388, frozen-poultry 32→80; brand pages filtered w/
-> families chips). ⚠️ Only the brand RE-STAMP is pending: the weekly upsert
-> self-heals it at the next ingest cron (Fri 06:00Z), or run the §11 TODO 0
-> backfill for an immediate fix.
-> (Viewer v2 / i18n / brand-knowledge milestones of 2026-07-10..15
-> are in git history; their HISTORY sections are still pending.)
+> **Last updated:** 2026-10-08. **State at a glance:**
+> - **Production:** engine Worker version `d5e6ee24` = commit `2b340ca`
+>   (`git log` on `serverless-connector` main names exactly what runs; deploys
+>   only through `node deploy.mjs`, §9). Frontend `main` = `307535b` on Pages.
+> - **Platform:** Cloudflare **Workers Paid** (R2, Queues, 5-minute CPU in
+>   use, §8). Mistral is the only other spend: ONE model,
+>   `ministral-14b-2512`, for every read, with 2 live keys × 30 requests per
+>   wall-clock minute.
+> - **Vision** reads every new offer exactly once. Stage 1 runs 3 parallel
+>   lanes of up to 112 offers per fire, 6 fires an hour; Stage 2 re-checks
+>   with 2 lanes. Unpriced D4D products are tappable and priced by the
+>   Vision fallback. About 21% of read offers stay unserved, mostly for a
+>   missing English name; that policy is the user's call (§11 D1).
+> - ⚠️ **Cron events arrive at least once.** Duplicates ~1 minute apart were
+>   seen on 2026-10-08, so every drain takes a D1 lease first (§7).
+> - **Operations:** a daily health digest goes to the ntfy topic at 05:00
+>   UTC. D1 is exported to R2 every Sunday 02:00 UTC (8 weeks kept,
+>   restore script in §9). Both repos run their tests in GitHub CI. The two
+>   matcher mirrors are pinned by shared golden vectors (§9).
+> - **Narratives:** HISTORY.md (§52–§56 cover 2026-08-01 → 2026-10-08). The
+>   gap review that drove the October work is
+>   `C:\Users\majed\Desktop\claude\EXECUTIVE-PLAN-2026-10-08.md` (outside both
+>   repos).
 
 ---
 
@@ -134,12 +53,15 @@ commercial product. You type a product (Arabic or English) and get:
 - **Price watches** with a target price, checked daily, alerting in-app
   (`#/alerts`) and optionally via ntfy.sh push.
 
-Hard constraint: **$0 running cost** — GitHub Pages + Cloudflare Workers Free
-plan only. Scope decisions always favor a simple, private, low-cost tool.
+Running cost: **Cloudflare Workers Paid** (the engine needs its CPU,
+subrequest and Queue limits) plus pay-per-call **Mistral** for Vision.
+Everything else is free: GitHub Pages, D4D and ntfy.sh. Scope decisions still
+favor a simple, private, low-cost tool. Never raise a Mistral cap or add a
+paid feature without the user's say-so.
 
-Explicitly **deferred** (do not build): `StoreSessionCollector`, our own OCR,
-LLM extraction, analytics dashboards, any paid Cloudflare feature (incl. R2 —
-not enabled on the account).
+Explicitly **deferred** (do not build): `StoreSessionCollector`; a self-hosted
+OCR in production (PaddleOCR-VL was measured locally in September and is
+PARKED, HISTORY §55); analytics dashboards beyond `/__ops`.
 
 ## 2. System map, repos, URLs
 
@@ -148,7 +70,7 @@ Browser — static frontend (GitHub Pages, ES modules, NO build step)
   │   Core → Provider → Strategy → NormalizedResult   (src/core.js, store-agnostic)
   ├─► shopping-connector Worker — STATELESS: live store fetch + normalize
   │     GET /search?provider=<id>&q=<q>  → { provider, query, strategy, count, results[] }
-  └─► brochure-engine Worker — STATEFUL (D1 + KV + 2 crons), same repo as connector
+  └─► brochure-engine Worker — STATEFUL (D1 + R2 + KV + Queues + 5 crons), same repo as connector
         brochures · structured flyer offers · price history · watches/alerts
 ```
 
@@ -158,11 +80,19 @@ Browser — static frontend (GitHub Pages, ES modules, NO build step)
 | Search connector | `shopping-connector` (⚠️ local folder is `serverless-connector`) | `C:\Users\majed\Desktop\claude\serverless-connector` | https://shopping-connector.tamamoooo.workers.dev |
 | Brochure engine | same repo, second Worker | `…\serverless-connector\brochure-engine\` | https://brochure-engine.tamamoooo.workers.dev |
 
-Cloudflare account `tamamoooo@gmail.com`. Engine bindings: D1 `brochure-engine`
-(`50bbe1ea-aca0-4f1d-abfd-c586335d82ba`), KV `BROCHURES_KV`
-(`38b0639256a34d1ebd7d96dcb55d0a9b`), `SELF` (fan-out), `CONNECTOR` (price
-capture). Engine design doc: `brochure-engine/ARCHITECTURE.md` (older; where it
-conflicts with this file, this file wins).
+Cloudflare account `tamamoooo@gmail.com`. Engine bindings:
+- D1 `DB` = `brochure-engine` (`50bbe1ea-aca0-4f1d-abfd-c586335d82ba`), ~430 MB.
+- R2 `BROCHURES` = bucket `brochure-engine`: the object store (tiered over KV),
+  Vision verification history, and `backups/d1/`.
+- KV `BROCHURES_KV` (`38b0639256a34d1ebd7d96dcb55d0a9b`).
+- Queue `BACKGROUND_DRAINS` (`brochure-background-drains`).
+- `SELF` (fan-out) and `CONNECTOR` (price capture).
+
+A staging twin exists (`brochure-engine-staging`, its own D1/R2/KV, no
+crons). Deploy it with `node deploy.mjs --staging`.
+
+Engine design doc: `brochure-engine/ARCHITECTURE.md`. It is older; where it
+conflicts with this file, this file wins.
 
 **Permanent engine contracts** (each is the source of truth for its own domain;
 where they conflict with this file, *they* win — they are narrower and newer):
@@ -197,8 +127,10 @@ where they conflict with this file, *they* win — they are narrower and newer):
    New flyer store = one engine provider config (usually a line in
    `providers/d4dStores.js`) — re-check the KV write budget (§8) first.
 4. **The connector is stateless & thin** — no DB, auth, cache, sessions.
-5. **Free plan, $0.** Respect the budgets in §8 before adding stores,
-   watches, pages, or subrequests.
+5. **Low cost, by the user's call.** The plan is Workers Paid, plus
+   Mistral pay-per-call. Respect the budgets in §8 before adding stores,
+   watches, pages, lanes or subrequests. Never raise a Mistral cap on your
+   own.
 6. **Honesty rules.** A strong "Lowest price" claim only for a confident
    ≥2-store same-brand+size equivalence group; flyer prices are D4D's AI
    extraction — always carry the disclaimer + flyer deep-link, and flyer
@@ -454,7 +386,8 @@ whole feature inert, fail-soft) into the `offer_enrichments` side-car; gate on
 literally, the Registry normalizes — extraction never rewrites, translates or
 "improves" what the crop prints.
 **FROZEN production extraction baseline (§43 decision, §44 integration,
-2026-07-25) — this is what the code runs:** `mistral-medium-latest` +
+2026-07-25) — this is what the code runs:** `ministral-14b-2512`
+(since 2026-09-24; the baseline was validated on `mistral-medium-latest`) +
 the **Verbatim Prompt** (`VISION_PROMPT`, sha256 `e643b2a1…`, asserted by
 `enrich.test.mjs` against the benchmark's own frozen file) + Expanded JSON (11
 fields) + temperature 0 / top_p 1 / reasoning `none` / `json_object`, one request
@@ -467,28 +400,22 @@ production validation plus an explicit decision. **Quality improvements now
 belong DOWNSTREAM of extraction** (brand lexicon, phrase lexicon,
 canonicalization, product identity, search), never in the prompt.
 
-**Vision Model Selection Policy (2026-07-25, engine
-`src/offers/visionModel.js`).** ⚠️ Permanent. **Medium is the production
-baseline** for all Vision extraction and the model canonical product data is
-built from; it sends `mistral-medium-latest` (the alias the frozen baseline was
-validated under — `mistral-medium-3.5` is recorded, never sent). **Small
-(`mistral-small-2603`, pinned to the version actually measured, not the drifting
-`-latest` alias) is a supported MANUAL fallback**, for when API limits or budget
-become a concern — enabled by an operator in the Ops Console → Vision → Vision
-Model, which shows the warning "Budget Mode enabled. Extraction quality may
-decrease, especially for package size and brand recognition."
-⚠️ **NEVER SWITCH MODELS AUTOMATICALLY** — no size gate, no cost router, no
-small-first-then-escalate. That design was measured (§46,
-`benchmarks/small-first-routing-30-2026-07-25`) and REJECTED: 0% escalation
-because no validator has coverage, 16.7% defect rate for the 91% saving. The
-selection lives in the object store (`ops/settings/vision-model.json`), NOT D1 —
-no migration, no redeploy, and every failure path (no store, missing key, corrupt
-bytes, unknown tier) resolves to Medium by construction, so a bad read can only
-be too good, never silently degraded. `POST /enrich` (engine.js) is the single
-place the selection is read: the enrich cron, the ops Vision Drain and the
-background Vision job all reach Mistral through it. Every stored row and every
-ops audit row records the model that produced it. Future model comparisons must
-use identical prompts, samples, scoring and methodology.
+**Vision model: ONE model, `ministral-14b-2512`, for every Mistral use**
+(user directive 2026-09-24, commit `8985bc9`; HISTORY §54). Medium and Small
+are retired. Their tier keys in `src/offers/visionModel.js` still resolve, so
+stored selections and the Ops Vision Model selector keep working, but every
+tier puts the same model on the wire. Every Mistral secret feeds one shared key
+pool (§9).
+
+⚠️ **NEVER SWITCH MODELS AUTOMATICALLY.** No size gate, no cost router, no
+small-first-then-escalate. That design was measured and REJECTED (§46,
+`benchmarks/small-first-routing-30-2026-07-25`):
+- 0% escalation, because no validator has coverage;
+- a 16.7% defect rate for the 91% saving.
+
+Every stored row and every ops audit row records the model that produced
+it. Future model comparisons must use identical prompts, samples, scoring
+and methodology.
 Tests: `node src/offers/visionModel.test.mjs`.
 **Expanded JSON mapping (§44):** `smartExtraction.js`
 `OBSERVATION_FIELD_ALIASES`/`readObservationField` read `size` ← `size` |
@@ -771,62 +698,89 @@ CSS-variable driven (`--brand` blue `#2563eb`, light+dark).
 
 ## 7. Crons & scheduling (engine `wrangler.toml`)
 
-- **`0 6 * * 2,3,5`** (Tue/Wed = Saudi drop days, Fri closes the weekend
-  freshness hole): coordinator fans out **one child invocation per store**
-  via the `SELF` service binding ("Architecture C") — each child gets its own
-  50-subrequest budget and runs brochures → that store's offers → that store's
-  price-history harvest (D1-only, no subrequests). Then the coordinator prunes.
-- **`45 5 * * *`**: watch check — SELF fan-out in batches of 3. On MONDAYS
-  the same fire then runs registry maintenance (`runMaintenance`: dormancy,
-  consolidation, healing — D1-only, no fan-out).
-- **`10,30,50 * * * *`**: the vision-enrichment drain on its OWN schedule
-  (steady-state autonomy, 2026-07-19). Vision is an INGESTION step — every
-  new offer passes through it exactly once; **no reuse/caching gates in
-  front of Vision** (user directive) — so throughput must absorb the
-  Tuesday-night burst (the whole catalog re-keys weekly; D4D offer ids are
-  never stable): each fire = own budgets, 6 sequential children × 15 offers
-  (§40 bump from 4), 3 fires/hour ⇒ ~6.5k offers/day ceiling, burst clears within the day with
-  zero manual steps. Self-limiting (empty queue = one D1 count; newest-first;
-  expired offers leave the queue). Inert without `MISTRAL_API_KEY`.
-  Resolution rides each child as its `/enrich` post-step (capped at
-  `RESOLVE_POST_LIMIT=100`, HISTORY §40). **YIELDS to a running Background Vision
-  job** so there is never more than one resolution writer (§2). DEVELOPER
-  convenience: the Ops Console's **Vision Drain** button
-  (`POST /__ops/api/enrich`, confirm:true, `batches` ≤8) fires the identical
-  drain on demand — children audited origin `ops`.
-- **`* * * * *`** (Background Manual Vision continuous drain, §40 cron redesign
-  2026-07-20): a single cheap D1 read unless an operator has a `vision_jobs` job
-  `running`; then it drains `VISION_DRAIN_BATCHES` (=4) children/fire, paced by
-  Mistral, as the SOLE resolution writer — a D1 lease (`lease_until`, atomic CAS
-  `tryLease`, `VISION_LEASE_MS`=5min) stops overlapping fires, and the `10,30,50`
-  drain + Monday maintenance yield to it. `POST /__ops/api/vision/start` just ARMS
-  the job (no chain — the old `/enrich/step` self-chain was removed as unsound: a
-  fetch-invocation `waitUntil` can't keep a ~30s hop alive). Poll `vision/job`,
-  halt with `vision/stop`. `VISION_DRAIN_BATCHES` is the tuning knob.
-- `scheduled()` branches on `event.cron`. On-demand equivalent:
-  `POST /ingest?store=<id>` (same path the fan-out hits).
+There are five triggers, the account's limit. `scheduled()` branches on
+`event.cron`, and the minute tick runs everything else by checking the
+clock.
+
+⚠️ **Cron events are delivered at least once.** On 2026-10-08, duplicates
+of the same fire arrived about a minute apart. So every drain takes a D1
+lease before it reads anything:
+`createD1VisionJobStore(db, { id }).ensureRunning()` → `tryLease()`, then
+release it with `update({ lease_until: null })`. Lease ids in use:
+`steady-vision`, `steady-verification`, `daily-digest`, `d1-backup`, plus
+the Background Vision job's own.
+
+| Trigger | What runs |
+|---|---|
+| `0 6 * * 2,3,5` | The brochure/offers pipeline. One SELF child per store runs brochures → offers → price-history harvest, then the coordinator prunes. Tue/Wed catch the Saudi weekly drop; Fri catches the weekend flyers. |
+| `*/2 * * * *` | Resumes D4D brochure collection for stores still pending. The Ops **Run All** button hands off to this cron too (HISTORY §55). |
+| `45 5 * * *` | Monday registry maintenance: dormancy, consolidation, healing. Does nothing on other days. |
+| `10,30,50 * * * *` | Vision Stage 1 (`runSteadyStateVision`). See the walkthrough below. |
+| `* * * * *` | Everything else, by clock. See the list below. |
+
+**Stage 1 walkthrough** (`10,30,50` and the minute tick at :00/:20/:40):
+1. Yield to a running Background Vision job.
+2. Take the `steady-vision` lease.
+3. Take up to 112 offers from `listDebris`, soonest-expiring first.
+4. Deal them into `STAGE_ONE_LANES` = 3 parallel lanes of 15-offer SELF
+   children (`runDrainLanes`, scheduler.js).
+5. Run detached resolution.
+
+An empty queue runs the daily resolution pass instead.
+
+**The minute tick:**
+- **Stage 1 again at :00/:20/:40,** giving 6 fires an hour. Skipped on the
+  03:00 retention tick.
+- **Stage 2 verification at :05/:25/:45.** Lease `steady-verification`,
+  `STAGE_TWO_LANES` = 2.
+- **A running Background Vision job** (`vision_jobs`): lanes, plus a lease
+  of `VISION_LEASE_MS`.
+- **Price-fallback lanes:** unpriced D4D products → Ministral, keeping a
+  per-key reserve so the other callers are never starved.
+- **Price Watch rounds** at 07:00/19:00 Riyadh, plus one-minute retries.
+- **D1 retention** at 03:00 UTC.
+- **Health digest** at 05:00 UTC (lease `daily-digest`).
+- **Weekly D1 export,** starting Sunday 02:00 UTC. It writes 12 parts a
+  minute until done (about 25 minutes; lease `d1-backup`).
+
+**Throughput.** The Stage 1 ceiling is 6 × 112 ≈ 670 offers an hour. The
+real limit is Mistral: 2 keys × 30 requests per fixed wall-clock minute,
+shared by Stage 1, Stage 2 and the price fallback. When every key is
+parked, `withFailover` waits up to two minute-cycles and then throws. The
+lane stops there, and its offers stay unread for the next fire (a provider
+failure writes no receipt). Vision is an INGESTION step: no reuse or cache
+gates in front of it (user directive).
+
+**On demand:**
+- `POST /ingest?store=<id>`, the same path the fan-out hits.
+- In `/__ops`: the Vision Drain and Background Vision start/stop buttons.
+- `GET /__ops/api/digest` previews today's digest.
+  `POST /__ops/api/digest {"confirm":true}` sends it now.
 
 ## 8. Per-invocation budgets (re-do this math before adding stores/watches)
 
-- ⚠️ **The Worker is on a PAID plan: ~1000 subrequests per invocation**, NOT the
-  Free 50 the rest of this doc historically assumed (MEASURED 2026-07-20: a
-  standalone `/resolve` doing ~640 subrequests succeeds, ~1024 dies — HISTORY
-  §40). The per-store ingest math below is still a good design ceiling to keep
-  children lean, but the true limit is 1000. **D1 queries count as subrequests**:
-  the resolution drain does ~6 per offer, so its per-invocation capacity ≈ **150
-  offers**; the `/enrich` + `/enrich/step` resolution post-step is capped at 100
-  to stay under it (`RESOLVE_POST_LIMIT` in engine.js). Backlog beyond that
-  drains via standalone `POST /resolve` (limit ≤150).
-- **Design ceiling ~50 external subrequests per ingest child.** Per-store ≈ 47:
-  1 store page + ≤6 leaflet fetches (`maxCandidates`) + ≤36 page images
-  (`maxTotalPages` — oversize flyers truncate; `maxPages` must never exceed
-  `maxTotalPages` or the flyer starves forever) + ~4 offers POSTs.
-- **32 invocations per event.** Ingest fire ≈ 1 + 18 children + capture +
-  prune; watch fire ≈ 1 + ⌈watches/3⌉ (24/profile, global backstop 90 ⇒ ≤31).
-- **KV Free:** 1 GB total (retention keeps it bounded), **1,000 writes/day** —
-  a worst-case all-stores-new-flyers day is ~700–900 writes; partial failures
-  self-heal at the next fire. This is the binding constraint on adding stores.
-- Grocery watch ≈ 7 subrequests; flyer candidates cost 0 (already in D1).
+- **Workers Paid:**
+  - 10,000 subrequests per invocation. D1 and R2 calls count.
+  - `cpu_ms = 300000` (5 minutes, set in wrangler.toml).
+  - Measured CPU on every path was under 2.1 s (2026-09-30, HISTORY §55).
+- **D1 binds at most 100 parameters per statement.** Chunk every batch
+  (HISTORY §50).
+- **The real ceiling is Mistral, not Cloudflare:** 30 requests per key per
+  wall-clock minute. Every Vision lane, Stage 2 and the price fallback draw
+  on the same key pool, so adding lanes past the key budget only parks
+  more calls.
+- **Each ingest child stays lean by design:**
+  - 1 store page;
+  - ≤6 leaflet fetches (`maxCandidates`);
+  - ≤36 page images (`maxTotalPages`);
+  - ~4 offers POSTs.
+
+  ⚠️ `maxPages` must never exceed `maxTotalPages`, or the flyer starves
+  forever.
+- **KV:** keep the checksum dedupe. With it, an unchanged flyer costs zero
+  writes.
+- **Grocery watch:** about 7 subrequests. Flyer candidates cost nothing
+  (they are already in D1).
 
 ## 9. Deploy, verify, develop
 
@@ -835,11 +789,50 @@ cache-buster: `curl ".../src/app.js?cb=$RANDOM"` — CDN `max-age=600`, so a
 stale spot-check within 10 min of a push is normal, not a failed deploy. The
 Pages metadata API 404s unauthenticated — also normal. Local: `node server.js`.
 
-**Workers:** from `serverless-connector/` or `…/brochure-engine/`:
-`npx wrangler deploy` (wrangler is already OAuth-authenticated;
-`npx --no-install wrangler deploy` works). Engine redeploys are idempotent.
-Schema changes: write canonical `schema.sql` + a `migrate-*.sql` delta,
-apply with `npx wrangler d1 execute brochure-engine --remote --file=…`.
+**Engine:** `node deploy.mjs` (same as `npm run deploy`), run from
+`brochure-engine/`, is the ONLY way to deploy production. It:
+1. refuses a dirty tree, or anything other than a pushed `main`;
+2. runs the whole suite;
+3. deploys with the local wrangler (`--env=""`);
+4. stamps the version message with the commit SHA and subject, so
+   `wrangler deployments list` names the running code.
+
+Production was deployed twice from uncommitted trees in September; this
+script exists so that never happens again. Flags: `--staging` deploys
+`brochure-engine-staging`; `--check` runs the gates only. Rollback:
+`npx wrangler rollback <version>`.
+
+The connector still deploys with `npx wrangler deploy` from
+`serverless-connector/`.
+
+**Schema changes:** write the canonical `schema.sql` plus a `migrate-*.sql`
+delta. Apply the delta BEFORE the deploy that needs it:
+`node node_modules/wrangler/bin/wrangler.js d1 execute brochure-engine --remote --env="" --file=…`
+
+**CI:** `.github/workflows/tests.yml` in both repos runs on every push and
+pull request. The `shopping-connector` repo runs the engine's
+`node run-tests.mjs` and every connector `src/**/*.test.mjs`. The frontend
+runs every `src/**/*.test.mjs`. A red run on `main` means stop and fix it
+first.
+
+**Matcher mirrors:** `src/matcherParity.vectors.json` is byte-identical in
+both repos. Each repo's `matcherParity.test.mjs` runs its own mirror against
+it: 7,207 cases on real flyer names, with 46 known divergences stored as
+`{ $diverge: { frontend, engine } }` so they cannot drift further.
+
+After a deliberate change to BOTH mirrors, from `brochure-engine/`:
+`node matcher-parity.mjs ../../live-shopping-assistant/src/match.js --write`
+then
+`cp src/matcherParity.vectors.json ../../live-shopping-assistant/src/`.
+
+**Backups:**
+- **D1 Time Travel** restores any minute of the last 30 days.
+- **The weekly R2 export** (`backups/d1/<YYYY-MM-DD>/`, newest 8 complete
+  sets kept) covers anything older, or losing the database entirely.
+  `node restore-d1-backup.mjs <YYYY-MM-DD> <out-dir>` writes `restore.sql`
+  for an EMPTY database. Rebuild the FTS index afterwards with the
+  `migrate-2026-08-25-price-identity-fts-1/-2.sql` migrations.
+- The export is a rolling copy, not a point-in-time snapshot.
 Local: connector `node dev.mjs` (:8787); engine `node dev.mjs` /
 `node dev.mjs selftest [store] | pricetest | offerstest | watchtest`
 (selftest includes live D4D legs). Connector tests:
@@ -871,8 +864,17 @@ Local: connector `node dev.mjs` (:8787); engine `node dev.mjs` /
 
   With this in place a maintenance session should never need to ask for the
   secret again unless it has been deliberately rotated.
-- `NTFY_TOPIC` (engine, **unset**) — set to an unguessable topic to enable
-  phone push (user subscribes to it in the ntfy app).
+- `NTFY_TOPIC` (engine) — **SET 2026-10-08.** It carries price-watch alerts
+  and the daily health digest. Its value is cached locally in
+  `C:\Users\majed\Desktop\claude\.ntfy.topic`, outside both repos; never
+  commit it. To receive pushes, the user subscribes to that topic in the
+  ntfy app.
+- `OPS_TOKEN` (engine) guards `/__ops`.
+- **Mistral keys** (`MINISTRAL_14B_API_KEY_1/_2` and the older
+  `MISTRAL_*` names) all feed ONE pool through `buildMistralPools`.
+  ⚠️ A secret does nothing unless `buildMistralPools` reads it. The Ops
+  Keys panel shows which keys are live: 2 on 2026-10-08, the rest
+  budget-exhausted.
 - `PAAPI_ACCESS_KEY/SECRET_KEY/PARTNER_TAG` (connector, **unset**) — would
   activate Amazon PA-API, no code change.
 
@@ -975,225 +977,70 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
--3. **Deploy the PRODUCT-ANCHORED Price Watch** (code complete 2026-07-29,
-   `brochure-engine/PRICE-WATCH.md` — NOT committed or deployed). A watch is now
-   anchored to a registry product (`pr_`) or to a declared class (`spec`), and
-   identity is resolved ONCE at creation, in the foreground, by the shared
-   resolver. The attribute-tuple matcher is deleted.
+**Closed since July** (each checked against production on 2026-10-08; the
+runbooks are in git history and HISTORY):
 
-   ⚠️ **The 2026-07-28 identity-anchor migration is SUPERSEDED and must NOT be
-   applied.** It was never run; its file was retired from the repo. Applying it
-   only adds three unused columns.
+| Old TODO | Status |
+|---|---|
+| -3, product-anchored Price Watch | The migration ran. All 7 watches are profile-owned, and none is `pending-migration`. |
+| -2, frozen extraction baseline | Superseded by the single-model switch to `ministral-14b-2512` (HISTORY §54). Every read since 2026-10-01 used that model. |
+| -2b, built Arabic name as display | Armed 2026-07-30, then replaced the same day by the USER VERDICT: serve the model's own Arabic, cleaned subtractively, with the brand appended (`lexicon/observedArabic.js`, commit `41f4387`). `built_arabic` is still persisted for diagnostics, but nothing serves it. |
+| -1, legacy watch adoption | Done: 0 unowned watches. |
+| 0 / 0b, Vision+Registry deploy and V1.1 brand re-stamp | Done. |
+| 3, phone push | `NTFY_TOPIC` is set (§9). |
+| 5, stale README/CHANGELOG | Refreshed 2026-10-08. |
 
-   Deploy order — the migration MUST land before the engine, because
-   `watchStore.create` writes `registry_product_id`, `scope` and `spec`:
+**Decisions waiting for the user.** Each was measured, not guessed, and
+none is built:
 
-   1. `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-29-watch-product-anchor.sql`
-      Purely additive. It also stamps every unanchored row `pending-migration`,
-      so no row is ever left meaning "unknown".
-   2. `npm test && npx wrangler deploy` (from `brochure-engine/`).
-   3. Freeze automated registry merge for the migration window — it is the one
-      irreversible registry operation and it runs unattended. From /__ops:
-      `POST /__ops/op {"op":"registry/merge","enabled":false,"reason":"watch migration","confirm":true}`
-      Re-arm with `"enabled":true` once the registry looks right.
-   4a. DRY RUN FIRST — writes nothing, reports exactly what would happen:
-      `curl -X POST -H "X-Ingest-Secret: $INGEST_SECRET" "$ENGINE/watches/resolve-legacy?dryRun=1"`
-      Review `minted[]` — one line per product that WOULD be created, with the
-      watch that caused it and the identity evidence. Mints survive an engine
-      rollback, so this is the moment to look.
-   4b. Run the ONE-TIME backfill (idempotent):
-      `curl -X POST -H "X-Ingest-Secret: $INGEST_SECRET" "$ENGINE/watches/resolve-legacy"`
-      Confirm `stillPending === 0` in the response. Review `minted` — those are
-      products created from watch labels, and they SURVIVE an engine rollback
-      (the only non-reversible side effect; benign, no sightings attached).
-   5. Deploy the frontend (`live-shopping-assistant`) for the
-      needs-confirmation state and the confirmation picker.
+- **D1. Read but not servable: no English name.** About 21% of offers
+  Vision has read stay unserved. Most fail `business-acceptance-v4` because
+  `english_name` is missing. Admitting them means generating an English
+  name, which is a guess and against "refuse rather than guess". The
+  options:
+  - keep refusing them;
+  - a second, targeted read for the name only;
+  - serve Arabic-only cards behind a flag.
 
-   Verify: `/__ops` "Watch System" shows `N monitored · 0 awaiting anchor`; the
-   first daily check (05:45Z) writes `last_resolution` on every watch. The
-   invariant, which must return zero rows:
-   `SELECT COUNT(*) FROM watches WHERE registry_product_id IS NULL AND spec IS NULL AND last_resolution IS NULL;`
+  HISTORY §56.
+- **D2. Danube: 586 unpriced products.** Single-tag crops read well. But
+  nothing in D4D's data tells a single-tag crop from a multi-tag one, so a
+  "take the price from the crop" rule would misprice the multi-tag crops.
+  The options:
+  - a "one price tag?" model check, validated on its own labelled sample;
+  - showing "price on flyer".
 
-   Rollback: the target is the DEPLOYED worker, not the working tree. The
-   migration is additive and nothing is dropped, so a rolled-back build reads
-   the new rows unchanged (`watchMigration.test.mjs` asserts this).
+  HISTORY §56.
+- **D3. Mkhazin is on probation, 1 of 4 weeks.** Mkhazin replaced Grand
+  Hyper in the store list. Grand Hyper has had no current D4D flyer since
+  2026-08-25. The admission rule is 4 consecutive weekly flyers on D4D.
+  Mkhazin has published exactly one (W39, valid 2026-09-27 → 10-02), and
+  nothing by 2026-10-08. Keep it on probation, or drop it; either way the
+  evidence goes in `docs/FEASIBILITY-VALIDATION.md` (§3, flyer-only
+  stores), the authority for retailer decisions.
+- **D4. Two pinned matcher divergences.** Each must be settled as ONE
+  change in both mirrors:
+  1. The engine folds Arabic-Indic digits (٣٢٠ → 320); the frontend does
+     not (`normalizeText` / `canonicalMatchText`).
+  2. The frontend drops single-letter tokens ("SHINE X", "S/S"); the
+     engine keeps them (`queryTokens` / `matchStage`).
 
-   KNOWN DEFECT (found in production 2026-07-29, NOT fixed — needs its own pass):
-   • `variety` is not canonicalised across languages. priceWatch.VARIANT_PHRASES
-     lists both 'full fat' and 'كامل الدسم' as separate surface forms, so an
-     Arabic listing yields variety='كامل الدسم' while its English twin yields
-     'full fat'. The resolver then vetoes the pair (variety-not-evidenced) and
-     the two never match. Same root cause as the processing double-count fixed
-     this session, but the fix is bigger: VARIANT_PHRASES/VARIANT_WORDS are flat
-     lists and would need to become surface-form -> canonical-value maps.
-     Impact: a watch anchored from an Arabic listing matches Arabic listings
-     only. Degraded, not broken — most KSA retailer listings are Arabic.
-     Evidence: pr_ad70c315cab4 "milk كامل الدسم", pr_4e03f5927215
-     "nadec milk خالي الدسم".
+  Both change which products match a search. After the fix, regenerate the
+  vectors (§9).
+- **D5. G8 removal pass, planned for month 2.** Remove one subsystem per
+  commit, with tests green after each:
+  - the retired Recovery code (~2.5k lines);
+  - the OCR escalation path (`OCR_FALLBACK_ENABLED=false`);
+  - the legacy model pools;
+  - the unused `price_points` table;
+  - the `/prices` V1 fallback (grep `TODO: remove V1 fallback`);
+  - the superseded design docs.
 
-   DEFERRED (not blocking; revisit after real usage):
-   • no /__ops BUTTONS for the two new ops — both are callable as
-     POST /__ops/op with {"op":"registry/merge"} / {"op":"watches/resolve-legacy"};
-   • confirming a watch does not teach the registry, though human
-     confirmation is high-quality evidence (PRICE-WATCH.md §4);
-   • `watches.kind` is vestigial once the previous deployment is retired;
-     dropping it (and the v2 identity columns) is a much-later cleanup.
+  Separately, the user can archive ~3.5 GB of loose data from the desktop
+  (two identical 675 MB D1 dumps, a forensic audit, the OCR proof of
+  concept, the PaddleOCR-VL models). The weekly R2 export now covers what
+  the dumps were for.
 
--2. **Deploy the wired-in FROZEN extraction baseline** (code complete
-   2026-07-25, HISTORY §44 — NOT yet committed or deployed). `src/offers/
-   enrich.js` now runs `mistral-medium-latest` + the Verbatim Prompt + Expanded
-   JSON, tests green (29/29 files) and `wrangler deploy --dry-run` builds.
-   ⚠️ The **Brand Lexicon** (§45) and the **Shopping Lexicon / Structured
-   Product / Arabic Builder** (§47) are in the same undeployed diff — neither
-   needs a migration or a deploy step of its own, but both ship with this.
-   Both are additive and inert on the serving path (nothing reads the built
-   Arabic name yet), so this deploy's behaviour change is still only the
-   extraction baseline.
-   To ship, in this order:
-   (a) apply the additive migrations FIRST —
-   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-25-expanded-extraction.sql`
-   (adds `offer_enrichments.extraction_json`; re-running errors harmlessly with
-   "duplicate column name"), then
-   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-26-acceptance-verdicts.sql`
-   (creates `offer_acceptance_verdicts` for the S4 verdicts, TODO -1.7(b); pure
-   `CREATE TABLE/INDEX IF NOT EXISTS`, so re-running is a no-op), then
-   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-27-extraction-source-open.sql`
-   and
-   `npx wrangler d1 execute brochure-engine --remote --file=./migrate-2026-07-27-recovery-queue.sql`
-   (the S5 Recovery Platform tables, plus the one-time fold-in of
-   `offer_ocr_queue`; also idempotent). The order among these does not matter,
-   but all must precede the deploy: the verdict write is skipped silently while
-   its table is absent, so deploying first means throwing away every verdict
-   until the migration lands. `report.acceptance.persisted` staying 0 while
-   `judged` climbs is exactly that symptom. Recovery reports itself unavailable
-   (rather than half-working) until BOTH the verdict and recovery tables exist.
-   ⚠️ For a NEW database — staging, or a rebuild — apply `schema.sql` instead:
-   it now carries every table above, so `wrangler deploy` against a fresh D1 no
-   longer produces a Worker with no Recovery Platform;
-   (b) `npm run deploy` (NOT bare `npx wrangler deploy` — the npm script runs
-   the full unit suite first via `predeploy`, which is the deployment gate);
-   (c) watch the next `10,30,50` enrich cron and confirm `report.enriched` and
-   the stored `model` column read `mistral-medium-latest`;
-   (d) on the same cron, read the new `report.acceptance` block —
-   `judged`/`accepted`/`rejected`, `persisted` (must equal `judged` once the
-   migration is applied) and the per-condition `missing` tallies. Then call
-   `enrichStore.acceptanceSummary()` for the cumulative view. This is the R5
-   calibration data; read it before tuning the mandatory set or sizing recovery
-   spend. Expect `countDebris` to DROP at the same time — that is R4 removing
-   offers that could never have been accepted, not a regression.
-   **Cost:** Medium is ≈10× Small per crop ($0.00205 vs ~$0.0002). Steady-state
-   ingestion rises by that multiple from the moment it deploys; a full 54k
-   re-enrichment would be ~$110 and is NOT part of this change — existing rows
-   keep their old-model values until an explicitly decided re-enrichment.
-
--2b. **Validate the built Arabic name, then make it the default display**
-   (HISTORY §47). The user's directive is explicit: the additive phase exists
-   ONLY for validation, and once coverage and quality are proven the built name
-   becomes the default *because* it is generated deterministically from the
-   higher-quality English extraction. In order:
-   (a) grow vocabulary against the RANKED HEAD-NOUN backlog from
-   `node validation/unbuilt-breakdown.mjs` — **31.5 of the 38.9 unbuilt points
-   are vocabulary**, and the script's projection (which re-runs the real
-   resolver, not a word count) reads top-20 → 68.9%, top-100 → 80.1%,
-   top-200 → 90.1%. ⚠️ The tail is FLAT — 77% of missing head nouns occur
-   exactly once — so plan the pass by tiers, not by "finish the list". Add a
-   term only at the HEAD-FINAL position it was measured in, and apply curation
-   rule 1 (a bare ambiguous word like `notebook` = laptop *or* stationery
-   belongs as a phrase or not at all). Re-measure after each pass; the brand
-   half of the gap is TODO 0c;
-   (b) adjudicate a real sample by eye (the §43/§46 method) — built vs observed
-   Arabic, on production rows, before any switch;
-   (c) only then change `applyEnrichment()` to prefer the built name.
-   ⚠️ Step (c) is NOT cosmetic: `offer.nameAr` feeds Browse cards, search match
-   text, watches and the registry's token profiles, so switching it re-keys
-   product identity — it needs its own measured step, never a drive-by edit.
-
--1.7. **Vision Pipeline increment 3** (architecture SETTLED; increments 1 and 2
-   code-complete 2026-07-26, HISTORY §48/§49 — NOT committed, NOT deployed).
-   `brochure-engine/VISION-PIPELINE.md` §12 is the live status table.
-   ~~(a) **R4**~~ and ~~(b) **R5/R6**~~ are **DONE 2026-07-26** (§49): the S1
-   price predicate is in SQL as `enrichStore.USABLE_PRICE_SQL` across
-   `listDebris`/`countDebris`/`coverage`, and every S4 verdict — accepted AND
-   rejected — persists to `offer_acceptance_verdicts` with its per-condition
-   `missing` list. Remaining, in dependency order:
-   (c) **S6** — widen the `offer_extraction_attempts` `source` CHECK
-   constraint so a primary and a recovery Vision read can coexist (additive);
-   (d) **S5 — the Recovery Queue, per C-8** (⚠️ user decision 2026-07-26 —
-   recovery is **queue-driven, not pipeline-driven**; the automatic ladder /
-   `RUN|TERMINATE|HOLD` router is **WITHDRAWN**). S4 ends the extraction
-   pipeline; a reject is written to one durable processor-agnostic queue
-   (`offer_id, processor, status, attempts, next_attempt_at, last_error`)
-   carrying the verdict + `missing[]`, and **nothing is invoked**. The queue
-   needs an execution mode — **Manual** (default: items wait for the operator)
-   and **Auto** (self-drains when the operator judges the API budget allows) —
-   plus per-processor arming. Vision Medium and OCR are processors ATTACHED to
-   the queue, not stages: both cost materially more than a Vision Small read,
-   so the spend decision belongs to the operator, never the pipeline;
-   (e) **S7** — the Developer Review surface, LAST, and the terminal processor.
-   Extend the Vision Inspector (R12) rather than building a new surface; by
-   then (b)'s verdict data will show how much human review the queue generates.
-   ⚠️ Ships in the same undeployed diff as TODO -2. **R4 is the first item here
-   with a live production effect** (priceless offers leave the extraction
-   queue, so queue depth and spend both drop); everything else is additive.
-   ⚠️ `migrate-2026-07-26-acceptance-verdicts.sql` must be applied or verdicts
-   are silently discarded — see TODO 0.
-
--1.5. **Deterministic current-price guard — still owed** (measured 2/50 under
-   BOTH prompts: the crossed-out price returned as the selling price at 0.99+
-   self-reported confidence). Until it exists, extracted prices must not reach
-   shoppers; §44 enforces that structurally by keeping prices out of
-   `offer_enrichments` entirely (`preservedObservation()`), so this TODO gates
-   any future use of extracted prices, not today's serving path. Shape when
-   built: when two prices are visible, current must be the LOWER; when a crop
-   shows two prices and the model returns one, reject rather than accept.
-
--1. **Legacy watch adoption pending** (profile-scoped watches deployed +
-   production-verified 2026-07-17, HISTORY §37): the 19 pre-profile
-   watches sit at `profile_id NULL` — the FIRST profile to load the
-   Alerts page adopts them, so open the app on the MAIN browser before
-   any other. (Verification throwaway profiles were reset to NULL after
-   testing; nothing is owned yet.)
-
-0. **Vision+Registry milestone — DEPLOYED 2026-07-19** (version
-   fbe294e6). Done: (1) the two `offer_enrichments` ALTERs, (2) the registry
-   tables migration, (3) `wrangler deploy` (all 3 crons registered incl.
-   `10,30,50` enrich drain), verified — `/registry/stats` live,
-   `/offers`+`/prices`+`/lowest` honor `?pipeline=vision`. 2000 pre-existing
-   enrichments resolved into the registry (cron post-step + a manual
-   `/resolve` drain). **VERIFIED 2026-07-19**: registry has 767 products /
-   1712 sightings (all current), 116 assortments; `/prices?pipeline=vision`
-   returns real market-wide lows (milk 7 variants @4.50 nesto, oil 9
-   variants @9.99); `/offers?pipeline=vision` annotates `productId` on
-   resolved offers; verdicts healthy (minted 1712, **or_deal 1** — the new
-   gate fired in production, too_few_tokens 69, unresolved 202 = expired-offer
-   enrichments that correctly never enter the current registry); autonomous
-   cron resolution independently confirmed (0→91 products on the :50 fire).
-   `INGEST_SECRET` was rotated to match `.ingest.secret` (self-consistent —
-   crons read the same env var). ⚠️ `POST /resolve` with large `limit` (≥~200)
-   overruns a Worker's D1-op budget and returns a Cloudflare error page — use
-   `limit=50` and loop (occasional 503 → back off + retry). REMAINING:
-   - (4) OPTIONAL one-time historical vision backfill `node backfill-enrich.mjs`
-     (~37k calls, resumable; failover-hardened) — reaches EXPIRED offers for
-     history depth that the cron never will; current-catalog coverage builds
-     autonomously either way (`10,30,50` drain, ~4.3k/day).
-   - (5)–(7) RESOLVED 2026-07-21: the verdict is VISION-CANONICAL (HISTORY
-     §41) — flag/evaluation tooling removed, one path shipped. Remaining
-     frontend adoption ideas (product-watch UI on `productId`, Browse-on-
-     registry badges) are now ordinary feature work.
-   - (8) follow-up: Browse brand rails still group by ingest-stamped
-     `brand_slug` (OCR-derived); re-stamp from the vision `brand` field.
-   - (9) follow-up: remove the `/prices` V1 fallback once registry depth
-     covers the catalog (grep `TODO: remove V1 fallback`).
-
-0b. **V1.1 brand re-stamp** (everything else is deployed & verified): the
-   ~130 wrong / 31 stale `brand_slug` stamps in D1 self-heal at the next
-   ingest cron (the weekly upsert re-stamps every re-extracted offer —
-   first fire Fri 2026-07-17 06:00Z). For an immediate fix instead: rotate
-   `INGEST_SECRET` (was permission-blocked 2026-07-16) and run
-   `POST /prices/backfill?store=<id>` per store, paced. Verify with:
-   `SELECT brand_slug, COUNT(*) FROM offers WHERE valid_to >= date('now')
-   AND brand_slug IN ('hana','kdd','puck','galaxy') GROUP BY 1` — hana must
-   be 0, the others should drop vs their 2026-07-16 audit counts (22/62/34).
 0c. **Brand Lexicon vocabulary** (HISTORY §45; the machinery is done and
    tested — this is data work). Measured coverage of the 98-brand list:
    **20% of unique brand strings / 17% by volume** on the 1000-crop
@@ -1225,16 +1072,40 @@ external product images — verify via `preview_eval` DOM inspection; preview
    (observed tier), shelf (family) refinements, finer product families
    inside brands, For-you / In-season rails, collections, cart intelligence,
    per-deal "why exceptional" explainer sheet.
-3. **Optional:** enable phone push — `npx wrangler secret put NTFY_TOPIC`.
 4. **Amazon durability:** configure PA-API secrets, or keep accepting
    best-effort.
-5. **README.md / CHANGELOG.md are badly stale** (still "Panda Live Search
-   v1.0.0") — refresh them; this file is the only current doc.
 6. **`deriveNames` quality** (engine): some OCR-derived offer names are still
    rough; improving the deriver self-heals on the next weekly upsert AND
    converges price-history identities (better names = fewer series splits).
 7. **Best-effort store monitoring:** notice when Amazon/Noon silently stop
    returning results (both are fragile to upstream markup changes).
+8. **Browse brand rails** still group by the ingest-stamped `brand_slug`
+   (OCR-derived). Re-stamp from the Vision `brand` field (open since the
+   2026-07-19 Vision+Registry deploy).
+9. **Unmerged remote branches.** Review each one, then delete it or merge
+   what is still wanted. Nothing was deleted on 2026-10-08.
+   - Frontend:
+     - `claude/hotspot-count-instrumentation-kgph3s` (07-10)
+     - `claude/nice-mendel-wjqck0` (09-24)
+     - `claude/trusting-franklin-1zv7u1` (09-24)
+     - `feature/i18n-phase1` (07-14)
+     - `docs/feasibility-roadmap` (07-14). Its `docs/` folder and its two
+       HISTORY sections are now on main.
+   - Engine:
+     - `claude/brochure-update-schedule-s5pmcs` (07-08)
+     - `claude/hotspot-count-instrumentation-kgph3s` (07-10)
+     - `claude/hotspot-diagnosis-2026-09` (09-24)
+     - `claude/unpriced-flyer-items` (09-24)
+
+## 12. Expansion governance
+
+Retailer decisions (build, defer, skip, or replace a flyer store) must cite
+[docs/FEASIBILITY-VALIDATION.md](docs/FEASIBILITY-VALIDATION.md). Its
+verdicts are measured from Worker egress, not assumed. Update a row in
+place and add a line to its §8 revision log; never fork a new report.
+
+[docs/EXPANSION-ROADMAP.md](docs/EXPANSION-ROADMAP.md) is the July
+12-month strategy. Where the two disagree, the validation file wins.
 
 ---
 

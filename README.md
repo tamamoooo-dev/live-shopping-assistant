@@ -1,81 +1,71 @@
-# Panda Live Search
+# Super Search
 
-**v1.0.0** · License: [MIT](LICENSE) · [Changelog](CHANGELOG.md)
+A personal Saudi shopping assistant for one user. Type a product in Arabic or
+English and get, in one ranked grid:
+- live prices from 7 online stores;
+- this week's flyer offers from ~18 physical stores.
 
-A tiny personal shopping assistant that searches the **live Panda Saudi**
-website every time and shows the current product image, name, price, previous
-price (when on offer) and a link.
+Around that grid it also offers:
+- a comparison summary;
+- price history;
+- a Browse view of this week's market;
+- tappable weekly brochures;
+- a local cart;
+- price watches that push to your phone.
 
-No accounts, no ads, no settings, no cached prices. Every search hits Panda live.
+Live at **https://tamamoooo-dev.github.io/live-shopping-assistant/** · License:
+[MIT](LICENSE) · [Changelog](CHANGELOG.md)
 
-It is a **pure static website**: the browser talks directly to Panda's public
-API. There is **no backend, no build step, and nothing to run on a server** —
-just static files (`index.html`, `styles.css`, and the ES modules in `src/`).
+This repo started as "Panda Live Search" (v1.0.0, 2026-06-30). The repos,
+Workers and internal ids keep the old names.
 
-## Deploy (static HTTPS host)
+## Read these first
 
-The app is served as-is. Host the folder on any static HTTPS host. The code uses
-ES modules with relative paths, so it works at a domain root **or** a project
-subpath (e.g. `https://you.github.io/panda-live-search/`). `.nojekyll` is
-included so GitHub Pages serves the `src/` folder untouched.
+| Document | What it holds |
+|---|---|
+| [HANDOFF.md](HANDOFF.md) | **Current state and the hard rules.** Start here: system map, crons, budgets, deploy, open decisions. |
+| [HISTORY.md](HISTORY.md) | Every milestone's story: what, why, how it was verified. |
+| [BROWSE-DESIGN.md](BROWSE-DESIGN.md) | The Browse pillar's design. |
+| [docs/FEASIBILITY-VALIDATION.md](docs/FEASIBILITY-VALIDATION.md) | The measured authority for which stores can be integrated, or kept. |
+| [docs/EXPANSION-ROADMAP.md](docs/EXPANSION-ROADMAP.md) | The July 12-month expansion strategy. |
 
-### GitHub Pages
+## How it fits together
+
+```
+Browser: this repo (GitHub Pages, ES modules, no build step)
+  ├─► shopping-connector Worker   stateless live store search
+  └─► brochure-engine Worker      D1 + R2 + KV + Queues: flyers, offers,
+                                  Vision reads (Mistral), price history,
+                                  watches, /__ops console
+```
+
+Both Workers live in
+[tamamoooo-dev/shopping-connector](https://github.com/tamamoooo-dev/shopping-connector).
+
+## Develop
 
 ```bash
-# from inside this folder (a git repo is already initialised)
-git remote add origin https://github.com/<you>/panda-live-search.git
-git push -u origin main
+node server.js
 ```
 
-Then on GitHub: **Settings → Pages → Build and deployment → Source: "Deploy from
-a branch" → Branch: `main` / `/ (root)` → Save.** Your site goes live at
-`https://<you>.github.io/panda-live-search/`.
+The server listens on http://localhost:5173. Browsers will not load ES modules
+from `file://`.
 
-### Netlify / Cloudflare Pages
-
-Either drag-and-drop this folder onto **app.netlify.com/drop**, or connect the
-repo in Cloudflare Pages with an **empty build command** and the project folder
-as the output directory. No framework preset, no build.
-
-## Optional: run it locally
-
-You only need this for local development. Browsers won't load ES modules from a
-`file://` page, so use the tiny included static server:
+Run the tests (CI runs the same loop on every push):
 
 ```bash
-node server.js   # -> http://localhost:5173
+for f in $(find src -name '*.test.mjs' | sort); do node "$f"; done
 ```
 
-To open it on your phone during development, visit
-`http://<your-computer-ip>:5173` from the same Wi-Fi.
+`src/match.js` mirrors the engine's `matching.js`. Both repos test their own
+copy against the same `src/matcherParity.vectors.json`; HANDOFF §9 explains
+how to regenerate it after a deliberate change to both.
 
-## How it works
+## Deploy
 
-```
-Core  →  Panda Provider  →  Search Strategies  →  Normalized Result
-```
+Push to `main`. GitHub Pages serves it within a couple of minutes. The CDN
+caches for 10 minutes, so spot-check with a cache-buster. All asset paths are
+relative, because Pages serves from the `/live-shopping-assistant/` subpath.
 
-- **Core** (`src/core.js`) — knows nothing about Panda. It tries a provider's
-  search strategies until one returns results, remembers which one worked
-  (in `localStorage`), tries it first next time, and forgets it if it ever
-  stops working so a new one is rediscovered automatically.
-- **Panda Provider** (`src/providers/panda.js`) — the only Panda-specific code:
-  the API host, headers, response parsing, and links.
-- **Search Strategies** — Panda is tried via two public methods:
-  1. `products-v3` — the rich products endpoint (prices + images). _Primary._
-  2. `suggestions-v3` — search suggestions (names + links). _Fallback._
-- **Normalized Result** — every strategy returns the same shape:
-  `{ id, name, image, price, oldPrice, currency, link, size, brand, discountLabel }`.
-
-## Adding another store later
-
-Create `src/providers/<store>.js` that exports a provider with the same shape
-(`{ id, label, strategies }`), then register it in `src/app.js`. The Core does
-not change.
-
-## Notes
-
-- Search language follows your input: Arabic text searches the Arabic catalogue,
-  otherwise English.
-- This is a personal tool that reads Panda's own public website endpoints. It is
-  not affiliated with Panda. Be considerate — it's for your own everyday use.
+This is a personal tool that reads stores' own public endpoints and D4D's
+flyer data. It is not affiliated with any of them.
