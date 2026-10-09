@@ -6247,3 +6247,170 @@ captures lived in the session scratchpad and are not committed.
   fork new disconnected reports; a prior conclusion is **not overwritten without new
   evidence** — it is superseded with a record of what changed. HANDOFF §12 points at
   all of this.
+
+## §59 · Performance, reliability and optimization brief (2026-10-09)
+
+### The brief
+
+The user's brief (Priority High) asked for, in order: price monitoring and
+alert reliability; efficient use of all five Mistral keys with no duplicate or
+idle work; Vision that never re-reads a validated product; store policies
+(Danube **preserve**, Arabic-only **allow**, Mkhazin **keep evaluating**);
+lightweight Cloudflare logging; ntfy push **off** with every internal record
+kept. "Use your recommendation as my choice for this task." Engine
+`be36a03` (version `5239e508`), `877412b` (`c82fb6b9`), `4a13c29`
+(`e8740ac5`) and `fba1144` (`48a50a79`), all deployed 2026-10-09 through
+`deploy.mjs`, between drain runs.
+
+### Measured before (24 h to 14:47 UTC)
+
+- **Stage 2** ran 71 fires and 1,844 SELF children: **7,239 paid re-reads**
+  (3,942 verified + 3,297 unmatched), ~302 an hour. Of the queued rows,
+  **2,911 were already served** — their re-reads could change nothing.
+  Failed rows looped up to 10 reads (an Arabic-only read had a null
+  fingerprint, so two reads never matched).
+- **Coverage:** 14,386 current offers with a crop; 11,235 served (**78.1%**);
+  3,150 read but unserved, 1,344 of them past any re-read.
+- **Stage 1:** 60 fires, 4,652 reads; the queue is now empty between drops.
+- **Watch rounds:** 2026-10-09-AM 7/7 and 2026-10-08-PM 7/7 complete
+  (after the 10-08 fixes); 2 alerts in 24 h.
+- **Keys:** all five live, independent (each its own 30 a minute) = 150 a
+  minute. Only the `medium` pool balanced, by stale percentages; the others
+  were primary-preferred, so every concurrent child started on key #1.
+- **Schedule:** `0 6 * * 2,3,5` fired **Mon/Tue/Thu** in `ops_runs`
+  (Cloudflare counts Sunday = 1), not the documented Tue/Wed/Fri. The
+  2026-10-06 (Tue) editions were first seen Thursday 10-08.
+- **Load:** `wrangler tail`, 14 minutes idle: ~1.6 invocations a minute,
+  0 log lines, 0 exceptions, 0.9 s CPU in total.
+
+### What changed
+
+**Monitoring (priority 1).** A scheduled round's alert id is
+`a_<watch_run id>_<target|close>`; `insertAlert` is `INSERT OR IGNORE` and
+reports whether a row landed, and only a landed alert is pushed. A round that
+re-runs — lease expired mid-check, retried child — records nothing twice; a
+different type in the same round still lands; manual checks keep random ids.
+The watch-run dispatcher is NOT time-capped on purpose: its 2-minute D1 lease
+already re-claims a hung round, and a cap could cut a slow market-wide sweep
+short. (`watchAlertIdempotency.test.mjs`, 13 checks.)
+
+**Push off.** `NTFY_PUSH = "off"` (wrangler.toml `[vars]`) builds no
+notifier; the secret stays, so re-enabling is deleting one line. The 05:00
+digest is recorded every day as a `cron:digest` ops row
+(`runDailyDigest`); `/__ops` shows Notifier **DISABLED** (excluded from the
+health score); the manual digest send answers 409 with the reason.
+
+**Arabic-only (D1 → allow).** `business-acceptance-v5`: the mandatory
+condition is `product_name` = an English name OR a validated `name_ar`.
+Nothing is generated. `validatedExtractionCorroboration` admits an S3-accepted
+`name_ar`; the Stage 2 fingerprint and identity comparison handle a nameless
+English side; the human review processor knows `product_name`. The serving
+gate and every frontend path already fell back to `nameAr`.
+
+**Stage 2 only when due.** `STAGE_TWO_DUE_SQL`: not served, or served from a
+crop the offer no longer shows, AND fewer than 3 reads. A flag
+(`verification/flag`) resets a row for a fresh read and quarantines the served
+read; a flagged read is never re-judged back. A real bug found by the tests:
+a quarantined row (corroboration NULL) evaluated `NOT PUBLISHED` to NULL and
+was never due — fixed with `COALESCE`.
+
+**Re-judge stored evidence.** Before any model call, the newest stored R2
+read of the current crop is judged under the current rule
+(`rejudgeStoredAttempt`) and committed with zero model calls. The backlog runs
+automatically, once per acceptance version (`runRejudgeSweep`, cursor in
+`ops/vision-rejudge-sweep.json`, every page audited `cron:vision-rejudge`),
+including rows past the read cap since a re-judge is free. The ops
+`verification/rejudge` action does the same on demand. (The local
+`opskey.key` turned out not to be the production `OPS_TOKEN` — 401 — which is
+why the sweep became automatic instead of a console call; no credential was
+rotated.)
+
+The first version ran one 200-row page inline in the Stage 2 coordinator.
+Production measured it at once: 182 of 200 published, but ~3 s a row, so the
+page held the coordinator 9.5 minutes before its paid drain, and the page
+was never audited (the sweep's result spread the page report's numeric
+`skipped` count, so `!sweep.skipped` read false). `4a13c29` moved it to the
+`*/2` trigger, which is its own invocation and so shares no connections with
+the minute tick. It runs under its own `rejudge-sweep` lease, 90 s and 4 rows
+at a time a fire, with `status` instead of `skipped`. A deadline stops
+*starting* rows, and the cursor is the last row started, so nothing between
+pages is skipped. `exhausted` is the only end signal. It stands aside for a
+watch round's first half-hour.
+
+**Nothing waits forever.** Mistral calls (60 s) and crop fetches (30 s) are
+time-boxed; a timeout is `transient` and fails over. Stage 1, Stage 2 and
+resolution SELF children are capped at 5 minutes (`fetchSelfChild`): 8 min of
+dispatching + 5 = 13 < the 15-minute cron limit, so the coordinator always
+records its run and releases the lease — the 2026-10-08 dead runs. The test
+caught an ordering bug: `abort()` rejects the fetch synchronously, so the
+timeout error must be raised first.
+
+**Balanced keys.** Every pool balances. A chain ranks keys by what is left in
+the current minute (an earlier minute's window reset; only the monthly
+allowance carries over, `longHorizonPercentage`) and starts at a random key
+among equals; inside a chain it round-robins. Exhausted keys are re-probed
+after 1 h (was 6 h).
+
+**Schedule and logs.** `0 6 * * MON,TUE,WED,THU` (names, never numbers);
+`cronNext` reads names; WED catches Tuesday drops a day sooner. Workers Logs
+on at full sampling — the measured volume is far inside the 20M a month Paid
+includes.
+
+**Not changed, by decision:** Danube's price recognition (D2 → preserve);
+Mkhazin (D3, probation continues); Stage 1 lanes stay 3 (the per-fire cap of
+112 × 6 fires/h = 672/h binds, 620 measured, and the minute tick's 6
+simultaneous connections are shared with the price lanes and watch dispatch).
+
+### Measured after
+
+Measured 16:44 UTC, after the sweep finished (16:43, 17 pages):
+
+| | Before (24 h to 14:47) | After |
+|---|---|---|
+| Current offers with a crop served | 11,235 / 14,386 = **78.1%** | 14,236 / 14,386 = **99.0%** |
+| Served Arabic-only | 0 | **2,917** |
+| Read but unserved | 3,150 (1,804 due, 1,344 capped) | **150** (18 due, 131 capped, 1 claimed) |
+| Already-served rows still queued for a paid re-read | 2,911 | **0** (never due by construction) |
+| Stage 2 paid reads | ~302 an hour | **62 in 53 min (~70 an hour)** while the backlog drained; 18 due rows left, so ~0 until new offers |
+| Model calls behind the sweep's publishes | — | **0** for 2,371 publishes |
+| Stage 2 fire with the sweep inline | — | 11.6 min (9.5 sweep + 2.1 drain); now **2.0–4.1 min**, drain only |
+| Sweep throughput | 0.35 rows/s inline | **1.0–2.2 rows/s** on `*/2` (90 s, 4 rows at a time) |
+| Watch rounds | AM 7/7, prior PM 7/7 | **2026-10-09-PM 7/7 by 16:02:06**, 2 one-minute retries, 0 duplicates |
+| Stage 2 provider limits / errors | — | 0 / 0 in 5 fires on the new code |
+
+Paid reads are counted by `SUM(attempts)` on the queue: a paid read increments
+it, a re-judge does not, and Stage 1 added no rows in the window (its queue
+has been empty since 02:20). The PM round wrote no alert, correctly: alerts
+are edge-triggered (`watch.isBelow`), and the one below-target watch (Nadec
+milk at Panda, 4.17 vs 4.17) already alerted on 2026-10-08 and has stayed
+below; its run line reads `below-target, alerted:false, notes:[]`.
+
+Two production surprises, both handled:
+
+- **A swallowed state read.** The 15:05 page left its state in R2
+  (`startedAt 15:05`, cursor `alwafa:central:d4d:98029980`), yet the 15:25
+  fire began a fresh sweep. The read had been caught as "absent". No row was
+  skipped or judged twice, since settled rows are never listed again, but the
+  totals lost 182 publishes. `fba1144`: a failed read now throws, and the fire
+  answers `unavailable` and writes nothing.
+- **A deploy mid-fire.** The 15:48 sweep fire was cut off by the 15:48:36
+  deploy. Its lease kept the 15:50 fire out, and the 15:52 fire resumed from
+  the 15:46 cursor: an interrupted run recovered exactly as designed.
+
+Not measurable yet:
+- the first `cron:digest` row with `push: 'disabled'` (05:00 UTC, 2026-10-10);
+- Stage 1 admitting a new Arabic-only read at ingestion (needs new offers);
+- per-key spread, because key snapshots stay in child reports, not in ops rows.
+
+### Validation
+
+- Suite: 90 test files green (new: `watchAlertIdempotency`, `drainTimeouts`,
+  `visionRejudge`, `rejudgeSweepTick` — the last drives the real `scheduled()`
+  handler; extended: key balancing, digest, status, store, acceptance).
+- Recovery scenarios under test: re-run round (no duplicate alert), hung child
+  (lane stops, report written), hung provider (timeout → next key), re-judge
+  paging past the cap, flagged read never revived, sweep once per version,
+  a sweep page cut short by its deadline (resumes, nothing skipped), a fire
+  that starts nothing (never marked done).
+- Production: both deploys stamped; schedule accepted by Cloudflare;
+  `NTFY_PUSH=off` bound.

@@ -6,28 +6,36 @@
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-10-08. **State at a glance:**
+> **Last updated:** 2026-10-09. **State at a glance:**
 > - **Production:** the engine runs the commit named in its deployment
->   message (`a7207ba`, version `3201f964` on 2026-10-08). `wrangler
+>   message (`fba1144`, version `48a50a79` on 2026-10-09). `wrangler
 >   deployments list` names it, because deploys go only through
 >   `node deploy.mjs` (§9). Frontend: `main` on Pages.
 > - **Platform:** Cloudflare **Workers Paid** (R2, Queues, 5-minute CPU in
 >   use, §8). Mistral is the only other spend: ONE model,
->   `ministral-14b-2512`, for every read, with 2 live keys × 30 requests per
->   wall-clock minute.
+>   `ministral-14b-2512`, for every read, with **5 live keys × 30 requests
+>   per wall-clock minute** (each key its own limit), balanced per minute.
 > - **Vision** reads every new offer exactly once. Stage 1 runs 3 parallel
->   lanes of up to 112 offers per fire, 6 fires an hour; Stage 2 re-checks
->   with 2 lanes. Unpriced D4D products are tappable and priced by the
->   Vision fallback. About 21% of read offers stay unserved, mostly for a
->   missing English name; that policy is the user's call (§11 D1).
+>   lanes of up to 112 offers per fire, 6 fires an hour. Stage 2 reads only
+>   rows that are still due (unserved, under 3 reads) and re-judges stored
+>   reads first, at zero cost. Arabic-only products are served (§11 D1:
+>   allow). Measured 2026-10-09 16:44 UTC: **99.0%** of current offers
+>   with a crop are served (14,236 / 14,386; 2,917 of them Arabic-only);
+>   150 stay unserved.
+> - **Price monitoring** rounds at 07:00/19:00 Riyadh; an alert is recorded
+>   once per round (idempotent id), and every Mistral call, crop fetch and
+>   drain child is time-boxed so a hung call cannot stall a run (§5, §7).
 > - ⚠️ **Cron events arrive at least once.** Duplicates ~1 minute apart were
->   seen on 2026-10-08, so every drain takes a D1 lease first (§7).
-> - **Operations:** a daily health digest goes to the ntfy topic at 05:00
->   UTC. D1 is exported to R2 every Sunday 02:00 UTC (8 weeks kept,
->   restore script in §9). Both repos run their tests in GitHub CI. The two
->   matcher mirrors are pinned by shared golden vectors (§9).
-> - **Narratives:** HISTORY.md (§52–§56 cover 2026-08-01 → 2026-10-08). The
->   gap review that drove the October work is
+>   seen on 2026-10-08, so every drain takes a D1 lease first (§7). Cron
+>   weekdays are written as NAMES (Cloudflare counts Sunday = 1).
+> - **Operations:** ntfy push is **OFF** (`NTFY_PUSH`, §9); the 05:00 UTC
+>   health digest is still recorded daily as a `cron:digest` ops row. D1 is
+>   exported to R2 every Sunday 02:00 UTC (8 weeks kept, restore script in
+>   §9). Workers Logs are on. Both repos run their tests in GitHub CI; the
+>   two matcher mirrors are pinned by shared golden vectors (§9).
+> - **Narratives:** HISTORY.md (§52–§56 cover 2026-08-01 → 2026-10-08; §59
+>   the 2026-10-09 performance and reliability brief). The gap review that
+>   drove the October work is
 >   `C:\Users\majed\Desktop\claude\EXECUTIVE-PLAN-2026-10-08.md` (outside both
 >   repos).
 
@@ -336,7 +344,13 @@ Cap: 24 active watches PER PROFILE (`MAX_WATCHES`) + a global backstop of 90
 (`MAX_WATCHES_TOTAL`, keeps the daily fan-out ≤31 of the 32-invocation
 budget), checked daily in SELF-fan-out batches of 3. Watch API is open but
 validated+capped (single-user posture). Push = optional `NTFY_TOPIC` secret
-(unset ⇒ in-app only; the ntfy channel is one topic, not per-profile).
+(unset ⇒ in-app only; the ntfy channel is one topic, not per-profile) —
+switched OFF by `NTFY_PUSH = "off"` since 2026-10-09 (§9).
+**Alerts are idempotent per round** (2026-10-09): a scheduled round's alert
+id is `a_<watch_run id>_<target|close>` and `insertAlert` is `INSERT OR
+IGNORE`, so a round that re-runs (lease expired mid-check, retried child)
+never records or pushes the same alert twice; a different type in the same
+round still lands. Manual checks keep random ids.
 
 **Retention** (`retention.js`, runs after each cron ingest; manual
 `POST /prune`): metadata forever; **bytes** deleted once a brochure is
@@ -714,8 +728,8 @@ the Background Vision job's own.
 
 | Trigger | What runs |
 |---|---|
-| `0 6 * * 2,3,5` | The brochure/offers pipeline. One SELF child per store runs brochures → offers → price-history harvest, then the coordinator prunes. Tue/Wed catch the Saudi weekly drop; Fri catches the weekend flyers. |
-| `*/2 * * * *` | Resumes D4D brochure collection for stores still pending. The Ops **Run All** button hands off to this cron too (HISTORY §55). |
+| `0 6 * * MON,TUE,WED,THU` | The brochure/offers pipeline. One SELF child per store runs brochures → offers → price-history harvest, then the coordinator prunes. ⚠️ **Day NAMES only:** Cloudflare counts Sunday = 1, so the old `2,3,5` (meant Tue/Wed/Fri) ran Mon/Tue/Thu. Tuesday-start flyers are not on D4D yet at the Tuesday fire (the 10-06 editions were first seen Thu 10-08), so WED was added (2026-10-09). `cronNext` reads names. |
+| `*/2 * * * *` | Resumes D4D brochure collection for stores still pending. The Ops **Run All** button hands off to this cron too (HISTORY §55). Also the **re-judge sweep** (below). |
 | `45 5 * * *` | Monday registry maintenance: dormancy, consolidation, healing. Does nothing on other days. |
 | `10,30,50 * * * *` | Vision Stage 1 (`runSteadyStateVision`). See the walkthrough below. |
 | `* * * * *` | Everything else, by clock. See the list below. |
@@ -734,20 +748,45 @@ An empty queue runs the daily resolution pass instead.
 - **Stage 1 again at :00/:20/:40,** giving 6 fires an hour. Skipped on the
   03:00 retention tick.
 - **Stage 2 verification at :05/:25/:45.** Lease `steady-verification`,
-  `STAGE_TWO_LANES` = 2.
+  `STAGE_TWO_LANES` = 2. **Only DUE rows are read** (2026-10-09,
+  `STAGE_TWO_DUE_SQL`): not served, or served from a crop the offer no
+  longer shows, AND fewer than `STAGE_TWO_MAX_ATTEMPTS` = 3 reads. A
+  served read is never re-read. Before any model call, the newest stored R2
+  read of the current crop is re-judged under the current rule
+  (`rejudgeStoredAttempt`) and published at zero cost when it passes.
+  To force a fresh read: `POST /__ops/api/verification/flag
+  {"confirm":true,"offerIds":[…]}` (quarantines the served read; a flagged
+  read is never re-judged back).
+- **Re-judge sweep** (`*/2` trigger, `runRejudgeSweepTick`, lease
+  `rejudge-sweep`): when `BUSINESS_ACCEPTANCE_VERSION` changes, every
+  unsettled queue row — past the read cap too, a re-judge is free — is
+  re-judged ONCE against its stored read, 90 s and 4 rows at a time a fire,
+  each page audited as `cron:vision-rejudge`. Cursor + totals in R2
+  `ops/vision-rejudge-sweep.json`. Stands aside for a watch round's first
+  half-hour, the retention minute and a brochure resume. On demand (needs
+  the OPS_TOKEN): `POST /__ops/api/verification/rejudge
+  {"confirm":true,"dryRun":true,"limit":200}`, paged by `after`.
 - **A running Background Vision job** (`vision_jobs`): lanes, plus a lease
   of `VISION_LEASE_MS`.
 - **Price-fallback lanes:** unpriced D4D products → Ministral, keeping a
   per-key reserve so the other callers are never starved.
 - **Price Watch rounds** at 07:00/19:00 Riyadh, plus one-minute retries.
 - **D1 retention** at 03:00 UTC.
-- **Health digest** at 05:00 UTC (lease `daily-digest`).
+- **Health digest** at 05:00 UTC (lease `daily-digest`). Recorded every
+  day as a `cron:digest` ops row (`runDailyDigest`, full text in `detail`);
+  pushed only while push is on — it is OFF (§9, `NTFY_PUSH`).
 - **Weekly D1 export,** starting Sunday 02:00 UTC. It writes 12 parts a
   minute until done (about 25 minutes; lease `d1-backup`).
 
 **Throughput.** The Stage 1 ceiling is 6 × 112 ≈ 670 offers an hour. The
-real limit is Mistral: 2 keys × 30 requests per fixed wall-clock minute,
-shared by Stage 1, Stage 2 and the price fallback. When every key is
+real limit is Mistral: **5 independent keys × 30 requests per fixed
+wall-clock minute = 150 a minute** (probed 2026-10-09), shared by Stage 1,
+Stage 2 and the price fallback. Every pool is balanced: a chain ranks keys by
+what is left in the CURRENT minute (an earlier minute's spent window has
+reset; only the monthly allowance carries over) and starts at a random key
+among equals, so concurrent SELF children spread over the five instead of all
+starting on key #1. An exhausted/402 key is re-probed after 1 h
+(`EXHAUSTED_KEY_RECHECK_MS`). When every key is
 parked, `withFailover` waits up to two minute-cycles and then throws. The
 lane stops there, and its offers stay unread for the next fire (a provider
 failure writes no receipt). Vision is an INGESTION step: no reuse or cache
@@ -779,20 +818,26 @@ gates in front of it (user directive).
     normally under `wrangler tail` (554 s, 86 enriched). So the cause is
     unproven.
 
-  **Next evidence: Sunday's 02:00 UTC export.** If Stage 1 fires die
-  during it, make the export's parts smaller on wide tables. If deaths
-  continue at random, add a per-child timeout to `createEnrichDispatcher`
-  (~4 min; a healthy child takes about 1 min).
+  **Fixed 2026-10-09 by time-boxing, whatever the trigger:** every Mistral
+  call (60 s, `MISTRAL_TIMEOUT_MS`) and crop fetch (30 s) has a timeout (a
+  timeout is `transient` and fails over to the next key), and each Stage 1 /
+  Stage 2 / resolution SELF child gets `SELF_CHILD_TIMEOUT_MS` = 5 min
+  (`fetchSelfChild`). 8 min of dispatching + 5 min for the last child stays
+  under the 15-minute cron limit, so a coordinator always records its run and
+  releases its lease. The watch-run dispatcher is deliberately NOT capped:
+  its 2-minute D1 lease already re-claims a hung round, and alert ids are
+  idempotent per round (§5).
 
-  Workers Logs (`[observability] enabled = true`) would show the cause
-  directly. Enabling it is the user's call: Paid includes a monthly quota
-  and bills beyond it.
+  **Workers Logs are on** (`[observability]`, full sampling): the measured
+  idle base is ~1.6 invocations a minute, far inside Paid's included 20M
+  events a month. Dashboard → Workers → brochure-engine → Logs.
 
 **On demand:**
 - `POST /ingest?store=<id>`, the same path the fan-out hits.
 - In `/__ops`: the Vision Drain and Background Vision start/stop buttons.
 - `GET /__ops/api/digest` previews today's digest.
-  `POST /__ops/api/digest {"confirm":true}` sends it now.
+  `POST /__ops/api/digest {"confirm":true}` sends it now — refused (409)
+  while push is off.
 
 ## 8. Per-invocation budgets (re-do this math before adding stores/watches)
 
@@ -896,22 +941,25 @@ Local: connector `node dev.mjs` (:8787); engine `node dev.mjs` /
   Rotation is safe: nothing outside the Worker's own `env` consumes it (no CI,
   no frontend, no other service), and the cron fan-out reads the same binding
   its receiving routes compare against, so sender and receiver rotate together.
-  Avoid rotating within a minute of 05:45 UTC or 06:00 UTC Tue/Wed/Fri. Allow
+  Avoid rotating within a minute of 05:45 UTC or 06:00 UTC Mon–Thu. Allow
   ~1–2 minutes for edge propagation — a stale colo returns 403 briefly.
 
   With this in place a maintenance session should never need to ask for the
   secret again unless it has been deliberately rotated.
-- `NTFY_TOPIC` (engine) — **SET 2026-10-08.** It carries price-watch alerts
-  and the daily health digest. Its value is cached locally in
+- `NTFY_TOPIC` (engine) — set 2026-10-08, but **push is OFF since
+  2026-10-09** (user decision): `NTFY_PUSH = "off"` in wrangler.toml
+  `[vars]` builds no notifier. Nothing else changes — alerts are written to
+  D1 and shown on `#/alerts`, the digest is a daily `cron:digest` ops row,
+  `/__ops` shows Notifier: DISABLED. To turn push back on, delete that one
+  line and deploy. The topic value is cached locally in
   `C:\Users\majed\Desktop\claude\.ntfy.topic`, outside both repos; never
-  commit it. To receive pushes, the user subscribes to that topic in the
-  ntfy app.
+  commit it.
 - `OPS_TOKEN` (engine) guards `/__ops`.
 - **Mistral keys** (`MINISTRAL_14B_API_KEY_1/_2` and the older
   `MISTRAL_*` names) all feed ONE pool through `buildMistralPools`.
   ⚠️ A secret does nothing unless `buildMistralPools` reads it. The Ops
-  Keys panel shows which keys are live: 2 on 2026-10-08, the rest
-  budget-exhausted.
+  Keys panel shows which keys are live: **all 5 on 2026-10-09**, each an
+  independent workspace with its own 30 a minute.
 - `PAAPI_ACCESS_KEY/SECRET_KEY/PARTNER_TAG` (connector, **unset**) — would
   activate Amazon PA-API, no code change.
 
@@ -1027,28 +1075,24 @@ runbooks are in git history and HISTORY):
 | 3, phone push | `NTFY_TOPIC` is set (§9). |
 | 5, stale README/CHANGELOG | Refreshed 2026-10-08. |
 
+**Decided by the user on 2026-10-09** (the performance brief, HISTORY §59):
+
+- **D1 → ALLOW Arabic-only.** `business-acceptance-v5`: the mandatory
+  condition is `product_name` = an English name OR a validated `name_ar`.
+  No English name is generated (still "refuse rather than guess"); the card
+  shows the model's Arabic, search matches it through `match_text`, and the
+  frontend already falls back to `nameAr` on every path. The backlog was
+  published from stored R2 reads at zero model cost (`verification/rejudge`).
+- **D2 → PRESERVE Danube's price recognition.** The observed prices are
+  accurate; no restrictive rule without demonstrated errors. G4 (multi-tag
+  abstain) stays unbuilt.
+- **ntfy push → OFF** (`NTFY_PUSH`, §9); every internal record stays.
+
 **Decisions waiting for the user.** Each was measured, not guessed, and
 none is built:
 
-- **D1. Read but not servable: no English name.** About 21% of offers
-  Vision has read stay unserved. Most fail `business-acceptance-v4` because
-  `english_name` is missing. Admitting them means generating an English
-  name, which is a guess and against "refuse rather than guess". The
-  options:
-  - keep refusing them;
-  - a second, targeted read for the name only;
-  - serve Arabic-only cards behind a flag.
-
-  HISTORY §56.
-- **D2. Danube: 586 unpriced products.** Single-tag crops read well. But
-  nothing in D4D's data tells a single-tag crop from a multi-tag one, so a
-  "take the price from the crop" rule would misprice the multi-tag crops.
-  The options:
-  - a "one price tag?" model check, validated on its own labelled sample;
-  - showing "price on flyer".
-
-  HISTORY §56.
-- **D3. Mkhazin is on probation, 1 of 4 weeks.** Mkhazin replaced Grand
+- **D3. Mkhazin is on probation, 1 of 4 weeks** (user, 2026-10-09: keep
+  evaluating, allow more time). Mkhazin replaced Grand
   Hyper in the store list. Grand Hyper has had no current D4D flyer since
   2026-08-25. The admission rule is 4 consecutive weekly flyers on D4D.
   Mkhazin has published exactly one (W39, valid 2026-09-27 → 10-02), and
