@@ -6397,6 +6397,14 @@ Two production surprises, both handled:
   deploy. Its lease kept the 15:50 fire out, and the 15:52 fire resumed from
   the 15:46 cursor: an interrupted run recovered exactly as designed.
 
+**Search compatibility** (live `/offers`, 16:50): Arabic-only rows are found
+by their Vision Arabic name, their English brand and generic words (`مايونيز
+نور` → Noor 946 ml; `rana`, `مخلل` → the Rana pickle; `nadec`, `حليب` → the
+Nadec 12×1 L). A spelling variant is not: `نادك` 36 offers, `ناديك` 28, `nadec`
+88, and English-named rows show the same split. That is the existing
+brand-alias vocabulary gap (Brand Lexicon, HANDOFF §11 TODO 0c), not a new one;
+an alias set such as نادك/ناديك → NADEC is the fix, in both matcher mirrors.
+
 Not measurable yet:
 - the first `cron:digest` row with `push: 'disabled'` (05:00 UTC, 2026-10-10);
 - Stage 1 admitting a new Arabic-only read at ingestion (needs new offers);
