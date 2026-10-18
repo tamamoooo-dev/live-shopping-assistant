@@ -6454,5 +6454,9 @@ HTML and the three changed frontend modules matched their source hashes.
 Cloudflare version `09281311-fcd9-4a29-86a5-d348ae362df5` served the initial
 engine release; live health, brochures, English/Arabic search and Browse
 checks returned HTTP 200. Inspecting those responses found a further
-slash-separated alternative-size denominator, addressed in engine `f38e6fe`;
-the existing frontend honors that withheld value without another code change.
+slash-separated alternative-size denominator. The first fix (`f38e6fe`) was
+blocked by a preservation test and never deployed. Engine `8fe94ac` fixes it
+while preserving the proven per-packet count for `5 x 83g / 90g`; its 91-file
+suite and CI passed. Final Cloudflare version:
+`cceddc34-d611-44ee-8951-23649be342ab`. The existing frontend honors the
+withheld value without another code change.

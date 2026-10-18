@@ -1062,7 +1062,7 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
-- **Published release, 2026-10-18:** engine `87ebe3e` and frontend `54b7abd`
+- **Published release, 2026-10-18:** engine `8fe94ac` and frontend `54b7abd`
   are on main; both CI runs and GitHub Pages deployment passed. Live Worker
   routes returned HTTP 200, and the published frontend modules matched source. Both matcher copies
   include the tested wording/type fixes. Flyer comparisons and product sheets
