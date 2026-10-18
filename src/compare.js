@@ -145,12 +145,12 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
   // and the product-type word often lands in only one language ("guava
   // raspberry pomegranate 3ltr" / "ندى عصير فراولة") — gating on a single name
   // silently dropped a third of the engine's genuinely-relevant offers.
-  const probe = { name: `${offer.name || ''} ${offer.nameAr || ''}`.trim(), brand: '', size: '' };
+  const probe = { name: `${offer.name || ''} ${offer.nameAr || ''}`.trim(), brand: '', size: offer.size || '' };
   if (!isRelevant(probe, query)) return null;
   const rel = relevance(probe, query);
   if (rel < REL_FLOOR) return null;
   if (!coversQuery(probe, query)) return null;
-  const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, '');
+  const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, offer.size || '');
   // `unitPrice` and `size` are the engine's own answers (offers/enrich.js
   // applyUnitPrice): it read the extractor's `unit` field and the retailer's
   // Arabic text, neither of which reaches this module. match.js `unitPrice`
@@ -162,6 +162,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     size: offer.size || '',
     nameAr: offer.nameAr || null,
     unitPrice: offer.unitPrice || null,
+    unitPriceResolved: Object.hasOwn(offer, 'unitPrice'),
   };
   return {
     source: 'flyer',
@@ -206,7 +207,7 @@ function canonicalFlyerListing(offer, query, storeLabelFn = (x) => x) {
   const arQuery = /[؀-ۿ]/.test(query || '');
   const name = arQuery ? offer.nameAr || offer.name : offer.name || offer.nameAr;
   if (!name) return null;
-  const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, '');
+  const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, offer.size || '');
   // `unitPrice` and `size` are the engine's own answers (offers/enrich.js
   // applyUnitPrice): it read the extractor's `unit` field and the retailer's
   // Arabic text, neither of which reaches this module. match.js `unitPrice`
@@ -218,6 +219,7 @@ function canonicalFlyerListing(offer, query, storeLabelFn = (x) => x) {
     size: offer.size || '',
     nameAr: offer.nameAr || null,
     unitPrice: offer.unitPrice || null,
+    unitPriceResolved: Object.hasOwn(offer, 'unitPrice'),
   };
   return {
     source: 'flyer',

@@ -6422,3 +6422,30 @@ Not measurable yet:
   that starts nothing (never marked done).
 - Production: both deploys stamped; schedule accepted by Cloudflare;
   `NTFY_PUSH=off` bound.
+
+## §60 · Resource use and unit-price safeguards (2026-10-18; prepared, not published)
+
+The live audit found useful source text omitted from enriched-offer retrieval,
+wording splits and unsafe quantity interpretations. The engine release retains
+source and accepted response fields, threads stored size into ranking, uses the
+Saudi validity date, rejects literal-null names and protects arithmetic for
+body-weight ranges, alternatives and additive packs. Its production base is
+`fba1144`; no database migration, new service or changed extraction prompt is
+needed. Existing production already skips re-reading published current crops,
+caps failed reads at three attempts and rejudges stored evidence for free. A D1
+capture found zero current offers due, despite historical queued rows.
+
+This frontend mirrors the tested wording and product-family changes. It also
+preserves an explicitly withheld engine unit price in comparison, the product
+sheet and reference-quantity calculations; older responses that omit the field
+retain their fallback. The engine applies the same boundary to flyer watches.
+The normal and canonical flyer comparison paths both carry the decision.
+
+Validation: original diagnostic unit errors 7→2, with uncertain values withheld;
+separate 32-image holdout 18/18 scored values preserved (14 exclusions), and
+authored EN/AR query hits 35/64→51/64 through actual D1 store SQL in SQLite.
+All 32 holdout shelf prices matched the images. References were assistant
+annotations; this is not a catalogue-wide accuracy or precision estimate.
+Matcher vectors agree on 7,207 cases, with the same 46 known divergences.
+See the engine release report for raw fixtures, live SQL resource costs and
+remaining measurement errors. Engine and frontend must publish together.
