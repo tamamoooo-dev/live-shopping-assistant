@@ -1,0 +1,13 @@
+*
+!.gitignore
+!REPORT.md
+!audit.mjs
+!evaluate.mjs
+!responses.json.gz
+!summary.json
+!verified-pairs.json
+!browser-smoke.mjs
+!browser-smoke.json
+!images/
+images/*
+!images/*.jpg

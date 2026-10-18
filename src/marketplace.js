@@ -23,7 +23,7 @@
 
 import { openBrochureViewer } from './viewer.js?v=20260924.2';
 import { localLandingForOffer, storeLabel, storeColor } from './brochure.js';
-import { unitPrice, eachPriceLabel, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, offerMatchItem, queryTokens, stageBand } from './match.js';
+import { unitPrice, eachPriceLabel, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, parseSize, matchStage, offerMatchItem, queryTokens, stageBand } from './match.js';
 import { featuredScore, featuredContext, recordChoice, isPrimaryPriceTier } from './featured.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.v2.js';
@@ -326,19 +326,38 @@ function unitOutliers(pool) {
 // D4D lists branch/language variants of the SAME flyer offer (same store, same
 // price, near-identical OCR name). Collapse them for the grid: within one
 // store+price bucket, a listing whose name tokens overlap an already-kept
-// listing's by ≥70% is a duplicate.
+// listing's by ≥70% is a duplicate only when identity evidence is compatible.
+// Replacing a word can name a real variant (saffron/cardamom, black/green);
+// overlap alone must not hide it. Extra/missing OCR words can still collapse.
 function dedupeFlyers(listings) {
   const kept = [];
-  const buckets = new Map(); // store|price -> [tokenSet]
+  const buckets = new Map(); // store|price -> [{listing, tokens}]
   for (const l of listings) {
     const key = `${l.store.id}|${l.price}`;
     const toks = new Set(normalizeText(l.name).split(' ').filter(Boolean));
+    // Use the explicit stored size when an engine offer is available. Noisy
+    // Arabic name parsing must not contradict the same stored pack on copies.
+    const size = l.offer ? parseSize('', l.offer.size || '') : l.size;
     const seen = buckets.get(key) || [];
     let dup = false;
     for (const prior of seen) {
+      const other = prior.listing;
+      // Different Registry IDs alone do not prove different products: a
+      // visually identical slipper offer currently has two canonical IDs.
+      if (l.brandSlug && other.brandSlug && l.brandSlug !== other.brandSlug) continue;
+      // Parsed sizes already share base units. Ignore parser provenance, but
+      // protect both the item size and the pack count, even at equal totals.
+      if (size?.unit && prior.size?.unit) {
+        if (size.unit !== prior.size.unit) continue;
+        if (['each', 'pack'].some(field => size[field] > 0 && prior.size[field] > 0 &&
+          Math.abs(size[field] - prior.size[field]) > 1e-8)) continue;
+      }
       let inter = 0;
-      for (const t of toks) if (prior.has(t)) inter += 1;
-      const union = prior.size + toks.size - inter;
+      for (const t of toks) if (prior.tokens.has(t)) inter += 1;
+      // A subset may be abbreviated OCR; words replaced on BOTH sides are
+      // unresolved identity evidence. Keep both rather than guess a variant.
+      if (inter < toks.size && inter < prior.tokens.size) continue;
+      const union = prior.tokens.size + toks.size - inter;
       if (union > 0 && inter / union >= 0.7) {
         dup = true;
         break;
@@ -346,7 +365,7 @@ function dedupeFlyers(listings) {
     }
     if (!dup) {
       kept.push(l);
-      seen.push(toks);
+      seen.push({ listing: l, tokens: toks, size });
       buckets.set(key, seen);
     }
   }

@@ -6523,3 +6523,25 @@ real Chrome stale-cache/module-graph check. Index import versions advance as a
 unit. Evidence and reproduction: engine
 benchmarks/search-followup-2026-10-18/REPORT.md. Model stays 14B; no inference,
 production data write, migration or architecture change.
+
+## 63. Preserve real variants during flyer deduplication (2026-10-18)
+
+The 70% store/price/name overlap rule hid real equal-price variants. Eighteen
+original flyer crops confirmed seven distinct pairs: coffee flavours, olive
+colours, cotton-bud materials, Nutty Bites nuts, dishwash volumes, turkey forms
+and knife-set counts. Each pair now keeps both cards; actual Oks scrubber and
+assorted slipper copies still collapse. Differing Registry IDs alone were
+rejected as a distinction: the verified slipper copies have fragmented IDs.
+
+Deduplication now protects known brands and explicit stored item/pack sizes,
+and keeps names with words replaced on both sides. Identical names and
+compatible subset abbreviations still use the existing overlap threshold.
+Some unresolved OCR variants can remain as extra cards; counts are not precision.
+
+Baseline 4c8eee6 versus candidate: 71 frozen actual engine-response query sets,
+no lost previously visible IDs, all nine inspected pair checks pass. All 16
+frontend test files pass; matching vectors are unchanged. Real Chrome rendered
+two flavours while collapsing a third copy, with stale-module simulation.
+Index import versions advance together. Engine/API/schema/model/prompt remain
+unchanged, with no inference or data writes. Reproduction and limits:
+benchmarks/dedupe-2026-10-18/REPORT.md.

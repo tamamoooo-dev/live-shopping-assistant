@@ -1062,6 +1062,14 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
+- **Flyer deduplication, 2026-10-18 (HISTORY §63):** seven visually verified
+  equal-price variant pairs now keep both products; two verified copy pairs
+  still collapse. Brand/explicit pack-size conflicts and replaced words veto
+  the old overlap heuristic. No prior visible ID is lost in 71 captured-query
+  replays. Conservative matching may retain extra OCR duplicates. Frontend only;
+  16 test files and an actual Chrome grid/cache check pass. Evidence:
+  `benchmarks/dedupe-2026-10-18/REPORT.md`.
+
 - **Search follow-up, 2026-10-18 (HISTORY §62):** observed brands now fill a
   missing existing client brand field through exact lexicon resolution only.
   Four visually confirmed reference failures recover: final exact target hits

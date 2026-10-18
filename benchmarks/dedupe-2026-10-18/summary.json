@@ -1,0 +1,632 @@
+{
+  "checkedAt": "2026-10-18T14:37:04.045Z",
+  "baselineFrontend": "4c8eee6",
+  "engineUnchanged": "69684af",
+  "fixtureSha256": "d74145f46151e3a27c4ff134b28807bf8b84e6b354d5eb3f2baca51e7fd2cae6",
+  "queries": 71,
+  "verifiedChecks": [
+    {
+      "q": "saloumi cotton buds",
+      "ids": [
+        "prime:central:d4d:98547288",
+        "prime:central:d4d:98547285"
+      ],
+      "expectedAfter": 2,
+      "note": "Plastic and bamboo are separately named on crops",
+      "images": [
+        {
+          "path": "images/98547288.jpg",
+          "sha256": "555e83b70e747ff8cd187f4179f0083b21737ce6f16a9ce3fb2b2759f61ec266"
+        },
+        {
+          "path": "images/98547285.jpg",
+          "sha256": "b690f5c0d36c2d1fa9f2d61555361be6c61e6dca20ecfdf65f005225e9837f58"
+        }
+      ],
+      "before": 1,
+      "after": 2
+    },
+    {
+      "q": "al suman coffee",
+      "ids": [
+        "prime:central:d4d:99136479",
+        "prime:central:d4d:99136488"
+      ],
+      "expectedAfter": 2,
+      "note": "Saffron and cardamom are distinct flavours",
+      "images": [
+        {
+          "path": "images/99136479.jpg",
+          "sha256": "7b046fddfed25df835f81e9842f9bfc2751db72ffaaa4f2c7e6d3152aa14ed7c"
+        },
+        {
+          "path": "images/99136488.jpg",
+          "sha256": "725fd698bcb6f2fa9c676b938af10fff0e1f24136aa23a6d4861bcdb69585e2e"
+        }
+      ],
+      "before": 1,
+      "after": 2
+    },
+    {
+      "q": "alisa olives",
+      "ids": [
+        "tamimi:central:d4d:99050775",
+        "tamimi:central:d4d:99050562"
+      ],
+      "expectedAfter": 2,
+      "note": "Black and green olives are distinct",
+      "images": [
+        {
+          "path": "images/99050775.jpg",
+          "sha256": "c67c4dc3f1ea12d7a76161f4626d9c76c35c0c3a9c064bd438126f2e62a2a20c"
+        },
+        {
+          "path": "images/99050562.jpg",
+          "sha256": "cafdca2b15be6d852109dc31b4737a7e3bea1f05d22870eb69dc1ba62dfd387c"
+        }
+      ],
+      "before": 1,
+      "after": 2
+    },
+    {
+      "q": "tiffany nutty bites",
+      "ids": [
+        "prime:central:d4d:99136362",
+        "prime:central:d4d:99136365"
+      ],
+      "expectedAfter": 2,
+      "note": "Cashew and almond are distinct",
+      "images": [
+        {
+          "path": "images/99136362.jpg",
+          "sha256": "1f1011f78bb2998a441a9d689f88c74ee20a7172d6a6ab8122e064a07a8f0ba4"
+        },
+        {
+          "path": "images/99136365.jpg",
+          "sha256": "416a84a0921a2f74d801f3512f461853bb14c1a98fcf2724ed6c9e7fdd9b7576"
+        }
+      ],
+      "before": 1,
+      "after": 2
+    },
+    {
+      "q": "deto clean dishwash",
+      "ids": [
+        "prime:central:d4d:99160464",
+        "prime:central:d4d:99160407"
+      ],
+      "expectedAfter": 2,
+      "note": "1 L and 1.5 L are different listed tiers at the same price",
+      "images": [
+        {
+          "path": "images/99160464.jpg",
+          "sha256": "6e48fe7de710eb3c91c2223ce8a5993f84605cc45a4d30dd1bbc13822cbbb160"
+        },
+        {
+          "path": "images/99160407.jpg",
+          "sha256": "34147c60aef908d3785c8118d5f0ba967adc34becf409152a059194bf1e0d89b"
+        }
+      ],
+      "before": 1,
+      "after": 2
+    },
+    {
+      "q": "salima turkey",
+      "ids": [
+        "prime:central:d4d:99137232",
+        "prime:central:d4d:99137235"
+      ],
+      "expectedAfter": 2,
+      "note": "Mini burgers and meatballs are distinct",
+      "images": [
+        {
+          "path": "images/99137232.jpg",
+          "sha256": "c2c8fd30fe8ddb047b37ebee700fdf807ec717e41a26262f8e67fe2695f2c762"
+        },
+        {
+          "path": "images/99137235.jpg",
+          "sha256": "43f4bd2c8979ffdda7de52a99262a3018ae7ff5de02c64113dd973f2ef7cd3f8"
+        }
+      ],
+      "before": 1,
+      "after": 2
+    },
+    {
+      "q": "مجموعة سكاكين التقشير",
+      "ids": [
+        "prime:central:d4d:98546637",
+        "prime:central:d4d:98546631"
+      ],
+      "expectedAfter": 2,
+      "note": "3 and 4 piece sets are distinct",
+      "images": [
+        {
+          "path": "images/98546637.jpg",
+          "sha256": "9466cbccd3c279d8c6b634ba6b44c1d2b6aebe5944dbd294cbd6683c918de34f"
+        },
+        {
+          "path": "images/98546631.jpg",
+          "sha256": "3a5e4d436d615fba1c3417181fed93fd786dac60ec7821c043ccb40ff301153e"
+        }
+      ],
+      "before": 1,
+      "after": 2
+    },
+    {
+      "q": "oks steel scrubber",
+      "ids": [
+        "marksave:central:d4d:99063894",
+        "marksave:central:d4d:99062379"
+      ],
+      "expectedAfter": 1,
+      "note": "Same six-scrubber pack and same price; true duplicate",
+      "images": [
+        {
+          "path": "images/99063894.jpg",
+          "sha256": "e7d83f03140f7f19359340bbfe8437aecc79e72d6fdcb12be0e2fd7c5a50c64a"
+        },
+        {
+          "path": "images/99062379.jpg",
+          "sha256": "3ed0f91c9542ef466ac7c6d19f06712da983272ebd1109b7cb0523689e4573c1"
+        }
+      ],
+      "before": 1,
+      "after": 1
+    },
+    {
+      "q": "men slipper",
+      "ids": [
+        "nesto:central:d4d:99091161",
+        "nesto:central:d4d:99079401"
+      ],
+      "expectedAfter": 1,
+      "note": "Same assorted slipper picture, price and text; true duplicate",
+      "images": [
+        {
+          "path": "images/99091161.jpg",
+          "sha256": "911eb2b7ecf47f755d413079dc0898844d009e51ba30c3f172d2d4b87bdae83f"
+        },
+        {
+          "path": "images/99079401.jpg",
+          "sha256": "9d1659cbfba2277562afbeb6b2ffe7c2c93dbc745d21648c921f4b74ba2865f2"
+        }
+      ],
+      "before": 1,
+      "after": 1
+    }
+  ],
+  "losses": [],
+  "counts": [
+    {
+      "q": "فراوله",
+      "before": 82,
+      "after": 83,
+      "admitted": 91
+    },
+    {
+      "q": "strawberry",
+      "before": 80,
+      "after": 81,
+      "admitted": 91
+    },
+    {
+      "q": "زبادي فراولة",
+      "before": 5,
+      "after": 5,
+      "admitted": 5
+    },
+    {
+      "q": "فراولة مجمدة",
+      "before": 4,
+      "after": 4,
+      "admitted": 6
+    },
+    {
+      "q": "طماطم",
+      "before": 115,
+      "after": 116,
+      "admitted": 120
+    },
+    {
+      "q": "tomato",
+      "before": 114,
+      "after": 114,
+      "admitted": 120
+    },
+    {
+      "q": "معجون طماطم",
+      "before": 23,
+      "after": 24,
+      "admitted": 26
+    },
+    {
+      "q": "ليمون",
+      "before": 94,
+      "after": 97,
+      "admitted": 106
+    },
+    {
+      "q": "lemon",
+      "before": 88,
+      "after": 89,
+      "admitted": 106
+    },
+    {
+      "q": "حليب",
+      "before": 115,
+      "after": 116,
+      "admitted": 120
+    },
+    {
+      "q": "حليب فراولة",
+      "before": 10,
+      "after": 10,
+      "admitted": 10
+    },
+    {
+      "q": "بيض",
+      "before": 23,
+      "after": 23,
+      "admitted": 26
+    },
+    {
+      "q": "eggs",
+      "before": 19,
+      "after": 20,
+      "admitted": 26
+    },
+    {
+      "q": "ويفر رينجو",
+      "before": 4,
+      "after": 4,
+      "admitted": 4
+    },
+    {
+      "q": "زبادي يوناني نادك",
+      "before": 9,
+      "after": 9,
+      "admitted": 12
+    },
+    {
+      "q": "nadec greek yoghurt",
+      "before": 9,
+      "after": 9,
+      "admitted": 12
+    },
+    {
+      "q": "alsafi labneh",
+      "before": 7,
+      "after": 7,
+      "admitted": 9
+    },
+    {
+      "q": "cornflakes",
+      "before": 13,
+      "after": 13,
+      "admitted": 14
+    },
+    {
+      "q": "ماء أروى 1.5L",
+      "before": 9,
+      "after": 9,
+      "admitted": 9
+    },
+    {
+      "q": "rice 1kg",
+      "before": 94,
+      "after": 97,
+      "admitted": 120
+    },
+    {
+      "q": "sunflower oil",
+      "before": 54,
+      "after": 54,
+      "admitted": 66
+    },
+    {
+      "q": "زيت زيتون عافية",
+      "before": 4,
+      "after": 4,
+      "admitted": 4
+    },
+    {
+      "q": "حليب المراعي",
+      "before": 26,
+      "after": 26,
+      "admitted": 30
+    },
+    {
+      "q": "حليب نادك",
+      "before": 14,
+      "after": 14,
+      "admitted": 14
+    },
+    {
+      "q": "banana",
+      "before": 13,
+      "after": 13,
+      "admitted": 13
+    },
+    {
+      "q": "موز",
+      "before": 13,
+      "after": 13,
+      "admitted": 13
+    },
+    {
+      "q": "apple",
+      "before": 55,
+      "after": 55,
+      "admitted": 62
+    },
+    {
+      "q": "تفاح",
+      "before": 57,
+      "after": 58,
+      "admitted": 62
+    },
+    {
+      "q": "mango",
+      "before": 25,
+      "after": 25,
+      "admitted": 29
+    },
+    {
+      "q": "مانجو",
+      "before": 28,
+      "after": 28,
+      "admitted": 29
+    },
+    {
+      "q": "strawberry milk",
+      "before": 10,
+      "after": 10,
+      "admitted": 10
+    },
+    {
+      "q": "strawberry waffle",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "وافل فراولة",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "جيلي فراولة",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "lemon squeezer",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "عصارة ليمون",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "white eggs",
+      "before": 5,
+      "after": 6,
+      "admitted": 6
+    },
+    {
+      "q": "بيض سمان",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "sunflower oil 1.5L",
+      "before": 54,
+      "after": 54,
+      "admitted": 66
+    },
+    {
+      "q": "لبنة الصافي",
+      "before": 7,
+      "after": 7,
+      "admitted": 9
+    },
+    {
+      "q": "زيتون",
+      "before": 111,
+      "after": 111,
+      "admitted": 120
+    },
+    {
+      "q": "olive oil",
+      "before": 104,
+      "after": 104,
+      "admitted": 118
+    },
+    {
+      "q": "egg roll",
+      "before": 4,
+      "after": 4,
+      "admitted": 8
+    },
+    {
+      "q": "rice flour",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "huggies diapers",
+      "before": 17,
+      "after": 17,
+      "admitted": 17
+    },
+    {
+      "q": "حفاضات هجيز",
+      "before": 17,
+      "after": 17,
+      "admitted": 17
+    },
+    {
+      "q": "parachute shampoo",
+      "before": 2,
+      "after": 2,
+      "admitted": 2
+    },
+    {
+      "q": "sunsilk shampoo",
+      "before": 14,
+      "after": 14,
+      "admitted": 20
+    },
+    {
+      "q": "كوكتيل فواكه غلوريا",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "كوكتيل فواكه جلوريا",
+      "before": 1,
+      "after": 1,
+      "admitted": 1
+    },
+    {
+      "q": "عسل لانجنيز",
+      "before": 6,
+      "after": 6,
+      "admitted": 6
+    },
+    {
+      "q": "عسل لنجنيز",
+      "before": 6,
+      "after": 6,
+      "admitted": 6
+    },
+    {
+      "q": "ماوس تراندز",
+      "before": 2,
+      "after": 2,
+      "admitted": 2
+    },
+    {
+      "q": "كريمة بندق بنده",
+      "before": 3,
+      "after": 3,
+      "admitted": 3
+    },
+    {
+      "q": "ساعة swiszone",
+      "before": 3,
+      "after": 3,
+      "admitted": 4
+    },
+    {
+      "q": "ساعة سويز",
+      "before": 0,
+      "after": 0,
+      "admitted": 0
+    },
+    {
+      "q": "hazelnut spread panda",
+      "before": 3,
+      "after": 3,
+      "admitted": 3
+    },
+    {
+      "q": "كريمة طبخ",
+      "before": 5,
+      "after": 5,
+      "admitted": 5
+    },
+    {
+      "q": "panda cream",
+      "before": 2,
+      "after": 2,
+      "admitted": 2
+    },
+    {
+      "q": "nutella hazelnut spread",
+      "before": 3,
+      "after": 3,
+      "admitted": 3
+    },
+    {
+      "q": "al suman coffee",
+      "before": 10,
+      "after": 11,
+      "admitted": 11
+    },
+    {
+      "q": "قهوة الصمان",
+      "before": 0,
+      "after": 0,
+      "admitted": 0
+    },
+    {
+      "q": "alisa olives",
+      "before": 3,
+      "after": 5,
+      "admitted": 5
+    },
+    {
+      "q": "زيتون اليسا",
+      "before": 5,
+      "after": 5,
+      "admitted": 5
+    },
+    {
+      "q": "tiffany nutty bites",
+      "before": 3,
+      "after": 5,
+      "admitted": 6
+    },
+    {
+      "q": "saloumi cotton buds",
+      "before": 1,
+      "after": 2,
+      "admitted": 2
+    },
+    {
+      "q": "deto clean dishwash",
+      "before": 1,
+      "after": 2,
+      "admitted": 2
+    },
+    {
+      "q": "salima turkey",
+      "before": 1,
+      "after": 2,
+      "admitted": 2
+    },
+    {
+      "q": "مجموعة سكاكين التقشير",
+      "before": 2,
+      "after": 3,
+      "admitted": 3
+    },
+    {
+      "q": "oks steel scrubber",
+      "before": 1,
+      "after": 1,
+      "admitted": 2
+    },
+    {
+      "q": "men slipper",
+      "before": 9,
+      "after": 9,
+      "admitted": 15
+    }
+  ],
+  "hashes": {
+    "src/marketplace.js": "4191fe0b35cdb175a9536c5425ae44364fdcc59881221720e4bd795a1939e1ea",
+    "index.html": "c7cea3c89a04e96466f6137f904d6f627e40c0fe7e63d5fecad28782cad6fa69"
+  },
+  "limitations": "Development replay of captured engine responses, not a blind or catalogue-wide accuracy benchmark. Inspected pairs include development cases. Conservative identity handling may retain extra OCR duplicates."
+}

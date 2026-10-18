@@ -1,0 +1,177 @@
+{
+  "reviewedAt": "2026-10-18T14:31:46.043Z",
+  "annotation": "Assistant visual review after discovering candidate collisions; not blind",
+  "pairs": [
+    {
+      "q": "saloumi cotton buds",
+      "ids": [
+        "prime:central:d4d:98547288",
+        "prime:central:d4d:98547285"
+      ],
+      "expectedAfter": 2,
+      "note": "Plastic and bamboo are separately named on crops",
+      "images": [
+        {
+          "path": "images/98547288.jpg",
+          "sha256": "555e83b70e747ff8cd187f4179f0083b21737ce6f16a9ce3fb2b2759f61ec266"
+        },
+        {
+          "path": "images/98547285.jpg",
+          "sha256": "b690f5c0d36c2d1fa9f2d61555361be6c61e6dca20ecfdf65f005225e9837f58"
+        }
+      ]
+    },
+    {
+      "q": "al suman coffee",
+      "ids": [
+        "prime:central:d4d:99136479",
+        "prime:central:d4d:99136488"
+      ],
+      "expectedAfter": 2,
+      "note": "Saffron and cardamom are distinct flavours",
+      "images": [
+        {
+          "path": "images/99136479.jpg",
+          "sha256": "7b046fddfed25df835f81e9842f9bfc2751db72ffaaa4f2c7e6d3152aa14ed7c"
+        },
+        {
+          "path": "images/99136488.jpg",
+          "sha256": "725fd698bcb6f2fa9c676b938af10fff0e1f24136aa23a6d4861bcdb69585e2e"
+        }
+      ]
+    },
+    {
+      "q": "alisa olives",
+      "ids": [
+        "tamimi:central:d4d:99050775",
+        "tamimi:central:d4d:99050562"
+      ],
+      "expectedAfter": 2,
+      "note": "Black and green olives are distinct",
+      "images": [
+        {
+          "path": "images/99050775.jpg",
+          "sha256": "c67c4dc3f1ea12d7a76161f4626d9c76c35c0c3a9c064bd438126f2e62a2a20c"
+        },
+        {
+          "path": "images/99050562.jpg",
+          "sha256": "cafdca2b15be6d852109dc31b4737a7e3bea1f05d22870eb69dc1ba62dfd387c"
+        }
+      ]
+    },
+    {
+      "q": "tiffany nutty bites",
+      "ids": [
+        "prime:central:d4d:99136362",
+        "prime:central:d4d:99136365"
+      ],
+      "expectedAfter": 2,
+      "note": "Cashew and almond are distinct",
+      "images": [
+        {
+          "path": "images/99136362.jpg",
+          "sha256": "1f1011f78bb2998a441a9d689f88c74ee20a7172d6a6ab8122e064a07a8f0ba4"
+        },
+        {
+          "path": "images/99136365.jpg",
+          "sha256": "416a84a0921a2f74d801f3512f461853bb14c1a98fcf2724ed6c9e7fdd9b7576"
+        }
+      ]
+    },
+    {
+      "q": "deto clean dishwash",
+      "ids": [
+        "prime:central:d4d:99160464",
+        "prime:central:d4d:99160407"
+      ],
+      "expectedAfter": 2,
+      "note": "1 L and 1.5 L are different listed tiers at the same price",
+      "images": [
+        {
+          "path": "images/99160464.jpg",
+          "sha256": "6e48fe7de710eb3c91c2223ce8a5993f84605cc45a4d30dd1bbc13822cbbb160"
+        },
+        {
+          "path": "images/99160407.jpg",
+          "sha256": "34147c60aef908d3785c8118d5f0ba967adc34becf409152a059194bf1e0d89b"
+        }
+      ]
+    },
+    {
+      "q": "salima turkey",
+      "ids": [
+        "prime:central:d4d:99137232",
+        "prime:central:d4d:99137235"
+      ],
+      "expectedAfter": 2,
+      "note": "Mini burgers and meatballs are distinct",
+      "images": [
+        {
+          "path": "images/99137232.jpg",
+          "sha256": "c2c8fd30fe8ddb047b37ebee700fdf807ec717e41a26262f8e67fe2695f2c762"
+        },
+        {
+          "path": "images/99137235.jpg",
+          "sha256": "43f4bd2c8979ffdda7de52a99262a3018ae7ff5de02c64113dd973f2ef7cd3f8"
+        }
+      ]
+    },
+    {
+      "q": "مجموعة سكاكين التقشير",
+      "ids": [
+        "prime:central:d4d:98546637",
+        "prime:central:d4d:98546631"
+      ],
+      "expectedAfter": 2,
+      "note": "3 and 4 piece sets are distinct",
+      "images": [
+        {
+          "path": "images/98546637.jpg",
+          "sha256": "9466cbccd3c279d8c6b634ba6b44c1d2b6aebe5944dbd294cbd6683c918de34f"
+        },
+        {
+          "path": "images/98546631.jpg",
+          "sha256": "3a5e4d436d615fba1c3417181fed93fd786dac60ec7821c043ccb40ff301153e"
+        }
+      ]
+    },
+    {
+      "q": "oks steel scrubber",
+      "ids": [
+        "marksave:central:d4d:99063894",
+        "marksave:central:d4d:99062379"
+      ],
+      "expectedAfter": 1,
+      "note": "Same six-scrubber pack and same price; true duplicate",
+      "images": [
+        {
+          "path": "images/99063894.jpg",
+          "sha256": "e7d83f03140f7f19359340bbfe8437aecc79e72d6fdcb12be0e2fd7c5a50c64a"
+        },
+        {
+          "path": "images/99062379.jpg",
+          "sha256": "3ed0f91c9542ef466ac7c6d19f06712da983272ebd1109b7cb0523689e4573c1"
+        }
+      ]
+    },
+    {
+      "q": "men slipper",
+      "ids": [
+        "nesto:central:d4d:99091161",
+        "nesto:central:d4d:99079401"
+      ],
+      "expectedAfter": 1,
+      "note": "Same assorted slipper picture, price and text; true duplicate",
+      "images": [
+        {
+          "path": "images/99091161.jpg",
+          "sha256": "911eb2b7ecf47f755d413079dc0898844d009e51ba30c3f172d2d4b87bdae83f"
+        },
+        {
+          "path": "images/99079401.jpg",
+          "sha256": "9d1659cbfba2277562afbeb6b2ffe7c2c93dbc745d21648c921f4b74ba2865f2"
+        }
+      ]
+    }
+  ]
+}
