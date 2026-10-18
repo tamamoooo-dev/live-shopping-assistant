@@ -6423,7 +6423,7 @@ Not measurable yet:
 - Production: both deploys stamped; schedule accepted by Cloudflare;
   `NTFY_PUSH=off` bound.
 
-## §60 · Resource use and unit-price safeguards (2026-10-18; prepared, not published)
+## §60 · Resource use and unit-price safeguards (2026-10-18; published)
 
 The live audit found useful source text omitted from enriched-offer retrieval,
 wording splits and unsafe quantity interpretations. The engine release retains
@@ -6448,4 +6448,11 @@ All 32 holdout shelf prices matched the images. References were assistant
 annotations; this is not a catalogue-wide accuracy or precision estimate.
 Matcher vectors agree on 7,207 cases, with the same 46 known divergences.
 See the engine release report for raw fixtures, live SQL resource costs and
-remaining measurement errors. Engine and frontend must publish together.
+remaining measurement errors. Engine `87ebe3e` and frontend `54b7abd` were
+published to main with passing CI. GitHub Pages deployment succeeded; live
+HTML and the three changed frontend modules matched their source hashes.
+Cloudflare version `09281311-fcd9-4a29-86a5-d348ae362df5` served the initial
+engine release; live health, brochures, English/Arabic search and Browse
+checks returned HTTP 200. Inspecting those responses found a further
+slash-separated alternative-size denominator, addressed in engine `f38e6fe`;
+the existing frontend honors that withheld value without another code change.

@@ -1062,12 +1062,12 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
-- **Prepared release, 2026-10-18 (not yet published):** resource improvements
-  in the engine's `codex/resource-improvements-2026-10-18` checkout and this
-  frontend's `codex/resource-matching-2026-10-18` checkout. Both matcher copies
+- **Published release, 2026-10-18:** engine `87ebe3e` and frontend `54b7abd`
+  are on main; both CI runs and GitHub Pages deployment passed. Live Worker
+  routes returned HTTP 200, and the published frontend modules matched source. Both matcher copies
   include the tested wording/type fixes. Flyer comparisons and product sheets
   respect an engine-withheld unit price. Shared vectors pass 7,207 cases with
-  the same 46 known divergences. Release both together under section 9;
+  the same 46 known divergences. Future releases follow section 9;
   detailed measurements are in the engine's
   `benchmarks/resource-release-2026-10-18/REPORT.md`. Original diagnostic unit
   errors fell 7→2; a separate 32-image holdout preserved all 18 scored correct
