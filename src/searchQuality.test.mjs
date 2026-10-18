@@ -78,3 +78,35 @@ const model=computeComparison('huggies diapers',[],[recovered,competing],null);
 assert.equal(model.cheapest.offer.id,recovered.id,'identity lock keeps the same structured evidence that admitted the offer');
 assert.ok(flyerListing({id:'ringo',store:'danube',name:'Teashop Ringo Wafer',nameAr:'وافر سكويت رينغو تشوب',price:9.99},'ويفر رينجو'));
 console.log('Frontend search quality: recovered crop reaches comparison without changing its name or inventing arithmetic.');
+
+// Second release: visually verified names, alternate scripts and negative brands.
+for(const [q,name,brand] of [
+ ['كوكتيل فواكه غلوريا','GLORIA FRUIT COCKTAIL IN LIGHT SYRUP 425 GM','GLORIA'],
+ ['كوكتيل فواكه جلوريا','كوكتل فواكه في شراب خفيف 425 جرام غلوريا','GLORIA'],
+ ['عسل لانجنيز','Langnese Pure Bee Honey (2Kg)','Langnese'],
+ ['عسل لنجنيز','Langnese Pure Bee Honey (2Kg)','Langnese'],
+ ['ماوس تراندز','TR-MU570 Rechargeable Wireless Mouse','TRANDS'],
+ ['ساعة swiszone',"Swiszone Gent's Chain Watch",'Swiszone'],
+ ['كريمة بندق بنده','Panda Hazelnut Cocoa Spread (350g)','Panda'],
+ ['hazelnut spread panda','كريم الشوكولاته بالبندق بندا (350 جرام) بنده','Panda'],
+])assert.ok(matchStage({name,brand},q)>=3,q);
+for(const [q,name] of [
+ ['عسل لانجنيز','Al Shifa Pure Honey'],
+ ['ماوس تراندز','Logitech Wireless Mouse'],
+ ['كوكتيل فواكه غلوريا','Del Monte Fruit Cocktail'],
+ ['كريمة بندق بنده','Nutella Hazelnut Spread'],
+ ['ساعة سويز',"Swiszone Gent's Chain Watch"],
+]){
+ assert.ok(tokenCoverage({name},q)<1,'brand cannot be guessed: '+q);
+}
+for(const name of ['Panda Cooking Cream','Panda Dairy Cream','Panda Hazelnut Face Cream'])assert.ok(matchStage({name},'كريمة بندق بنده')<3,name);
+assert.equal(productFamily('كريمة بندق بنده'),'spread');
+assert.equal(productFamily('Panda Hazelnut Cocoa Spread'),'spread');
+assert.equal(productFamily('قشطة بنده'),'cream');
+assert.notEqual(productFamily('Hazelnut Face Cream'),'spread');
+assert.notEqual(productFamily('Whipping Cream'),'spread');
+console.log('Follow-up: observed translations and compound spread preserve wrong-brand/dairy/cosmetic controls.');
+
+assert.ok(flyerListing({id:'nutella-short-name',store:'carrefour',name:'NUTELLA CHOCO SPREAD 750G',brandSlug:'nutella',price:29,size:'750g',category:'sauces-spreads'},'nutella hazelnut spread'),'retain an existing partial-name Nutella result');
+
+assert.ok(flyerListing({id:'trands',store:'lulu',name:'TR-MU570 Rechargeable Wireless Mouse',brandSlug:'trands',price:30},'ماوس تراندز'),'the existing brand field reaches frontend admission');

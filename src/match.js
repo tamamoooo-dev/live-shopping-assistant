@@ -76,7 +76,11 @@ export function canonicalMatchText(text) {
 // product name (and vice versa) for the tracked staples and a few common words.
 // Deliberately small — it only needs to cover the equivalence/summary layer, not
 // translate the whole catalogue.
+// A named hazelnut spread is not dairy cream or cosmetic cream. Keep the
+// compound intact across scripts; never make generic cream equal to spread.
+const HAZELNUT_SPREAD_WORDINGS = ['hazelnut spread', 'hazelnut cocoa spread', 'كريمه بندق', 'كريمه البندق', 'كريمه الشوكولاته بالبندق', 'كريم الشوكولاته بالبندق'];
 const SEARCH_WORDINGS = [
+  HAZELNUT_SPREAD_WORDINGS,
   ['cornflakes', 'corn flakes'], ['sunflower', 'sun flower'],
   ['dishwashing', 'dish washing'], ['mouthwash', 'mouth wash'],
   ['almond', 'almonds'], ['diaper', 'diapers'],
@@ -129,6 +133,16 @@ const SYNONYMS = [
   ['waffle', 'waffles', 'وافل'],
   ['jelly', 'جيلي'],
   ['squeezer', 'juicer', 'عصاره'],
+  ['gloria', 'جلوريا', 'غلوريا'],
+  ['cocktail', 'كوكتيل', 'كوكتل'],
+  ['fruit', 'fruits', 'فواكه'],
+  ['honey', 'عسل'],
+  ['langnese', 'لانجنيز', 'لنجنيز'],
+  ['mouse', 'ماوس'],
+  ['trands', 'تراندز'],
+  ['watch', 'watches', 'ساعه', 'ساعات'],
+  ['panda', 'بنده', 'بندا'],
+  ['hazelnut', 'بندق', 'بالبندق'],
   ['juice', 'عصير'],
   ['butter', 'زبده', 'زبدة'],
   // fat-content descriptors: "منزوع الدسم" and "خالي الدسم" both mean skimmed
@@ -392,6 +406,8 @@ function familyKey(word) {
 // Tier order: derived > base > produce (see the tier note above).
 export function productFamily(name) {
   const normalized = normalizeText(name);
+  const padded = ' ' + normalized + ' ';
+  if (HAZELNUT_SPREAD_WORDINGS.some(phrase => padded.includes(' ' + phrase + ' '))) return 'spread';
   if (/(^| )(spring rolls?|egg rolls?|سبرينغ رولز|سبرنج رول|رول (?:ال)?بيض)( |$)/.test(normalized)) return 'pastry';
   if (/(^| )dish (wash|washing)( |$)/.test(normalized)) return 'care';
   if (/(^| )حبوب (?:ال)?افطار( |$)/.test(normalized)) return 'cereal';

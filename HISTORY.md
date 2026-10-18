@@ -6496,3 +6496,30 @@ visitors; an isolated real Chrome check passed with old unversioned modules.
 Engine SQL grouping also passed 118 exact result/order comparisons and live
 read-only D1 probes, avoiding statement-size and repeated-synonym memory limits.
 The measured SQL samples do not demonstrate a latency saving.
+
+## 62. Search follow-up: observed brand reaches the client (2026-10-18)
+
+The five residual reference failures were checked against their original flyer
+crops. Exact script/wording bridges recover Gloria fruit cocktail, Langnese
+honey and Panda hazelnut spread. The named spread remains distinct from dairy
+and cosmetic cream. Compound wording keeps separate lexical words so a shorter
+existing Nutella listing remains visible. Both matcher copies stay aligned.
+
+The TRANDS mouse had its brand in the engine's accepted observation but no
+client brand. The existing brand lexicon now resolves TRANDS. Servable enrichment
+fills a missing existing brandSlug only from an exact known brand, preserving
+existing values and leaving unknown strings unresolved. No field, product ID,
+schema, stored observation or displayed name is added or rewritten.
+
+Against deployed engine e0670b5/frontend aa2addc on the same 12,972-row snapshot,
+exact final target hits improve 53/60 to 57/60. All 60 diagnostic queries retain
+all previous final offer IDs. Names/prices/sizes/unit prices match across 2,331
+common comparisons. The watch reference says سويز but its crop says Swiszone;
+that unverified equivalence is not forced. Two remaining exact-ID misses are
+duplicate representatives. These are development checks, not global accuracy.
+
+Validation: 92 engine and 15 frontend test files; 7,207 unchanged shared vectors;
+real Chrome stale-cache/module-graph check. Index import versions advance as a
+unit. Evidence and reproduction: engine
+benchmarks/search-followup-2026-10-18/REPORT.md. Model stays 14B; no inference,
+production data write, migration or architecture change.

@@ -1062,6 +1062,14 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
+- **Search follow-up, 2026-10-18 (HISTORY §62):** observed brands now fill a
+  missing existing client brand field through exact lexicon resolution only.
+  Four visually confirmed reference failures recover: final exact target hits
+  improve 53/60→57/60; all previous final offer IDs survive across 60 queries.
+  Names/prices/sizes match in 2,331 common comparisons. The fifth failure was
+  an unverified سويز/Swiszone reference. No architecture/schema/model change.
+  Evidence: engine `benchmarks/search-followup-2026-10-18/REPORT.md`.
+
 - **Search quality release, 2026-10-18:** tested against a frozen catalogue of
   12,972 current browseable offers, with 48 Arabic/English queries. Strawberry
   fruit in the first ten price-sorted flyer results improved 7→10 (including
