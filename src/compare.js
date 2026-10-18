@@ -31,6 +31,7 @@ import {
   unitPrice,
   sizeLabel,
   parseSize,
+  offerPackageSize,
   groupEquivalents,
   isRelevant,
   relevance,
@@ -151,7 +152,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
   const rel = relevance(probe, query);
   if (rel < REL_FLOOR) return null;
   if (!coversQuery(probe, query)) return null;
-  const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, offer.size || '');
+  const size = offerPackageSize(offer);
   // `unitPrice` and `size` are the engine's own answers (offers/enrich.js
   // applyUnitPrice): it read the extractor's `unit` field and the retailer's
   // Arabic text, neither of which reaches this module. match.js `unitPrice`
@@ -163,7 +164,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     size: offer.size || '',
     nameAr: offer.nameAr || null,
     unitPrice: offer.unitPrice || null,
-    unitPriceResolved: Object.hasOwn(offer, 'unitPrice'),
+    unitPriceResolved: Object.hasOwn(offer, 'unitPrice') || size === null,
   };
   return {
     source: 'flyer',
@@ -208,7 +209,7 @@ function canonicalFlyerListing(offer, query, storeLabelFn = (x) => x) {
   const arQuery = /[؀-ۿ]/.test(query || '');
   const name = arQuery ? offer.nameAr || offer.name : offer.name || offer.nameAr;
   if (!name) return null;
-  const size = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, offer.size || '');
+  const size = offerPackageSize(offer);
   // `unitPrice` and `size` are the engine's own answers (offers/enrich.js
   // applyUnitPrice): it read the extractor's `unit` field and the retailer's
   // Arabic text, neither of which reaches this module. match.js `unitPrice`
@@ -220,7 +221,7 @@ function canonicalFlyerListing(offer, query, storeLabelFn = (x) => x) {
     size: offer.size || '',
     nameAr: offer.nameAr || null,
     unitPrice: offer.unitPrice || null,
-    unitPriceResolved: Object.hasOwn(offer, 'unitPrice'),
+    unitPriceResolved: Object.hasOwn(offer, 'unitPrice') || size === null,
   };
   return {
     source: 'flyer',

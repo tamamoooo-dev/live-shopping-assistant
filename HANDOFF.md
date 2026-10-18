@@ -1062,6 +1062,13 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
+- **Package arithmetic, 2026-10-18 (HISTORY §64):** six crop-verified Arabic
+  ml multipacks now use their full count for unit prices. Summary/sheet prefer
+  the explicit stored size and withhold ambiguous single-size labels. Shelf
+  prices and query admission are preserved. 93 engine / 17 frontend test files,
+  shared vectors and real Chrome pass. Evidence and limits:
+  `benchmarks/comparison-2026-10-18/REPORT.md`.
+
 - **Flyer deduplication, 2026-10-18 (HISTORY §63):** seven visually verified
   equal-price variant pairs now keep both products; two verified copy pairs
   still collapse. Brand/explicit pack-size conflicts and replaced words veto

@@ -1,0 +1,489 @@
+{
+  "checkedAt": "2026-10-18T16:29:33.759Z",
+  "baselineEngine": "69684af",
+  "baselineFrontend": "2639875",
+  "catalogueRows": 12972,
+  "unitChanges": [
+    {
+      "id": "ramez:central:d4d:99146022",
+      "name": null,
+      "nameAr": "بوك شيكه قشطه 4×125 مل",
+      "price": 10.5,
+      "size": "4×125 مل",
+      "before": {
+        "value": 84,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "after": {
+        "value": 21,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "eachBefore": null,
+      "eachAfter": {
+        "value": 2.625,
+        "pack": 4
+      },
+      "image": "https://cdn.d4donline.com/u/a/26/10/14/fafdcc4c732df4e0ee6bca08facaec02.jpg"
+    },
+    {
+      "id": "tamimi:central:d4d:99050418",
+      "name": null,
+      "nameAr": "مشروبات أصناف متنوعة، سونتوب أو صن كولا جويس درينكس،",
+      "price": 15.75,
+      "size": "18 × 125 مل",
+      "before": {
+        "value": 126,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "after": {
+        "value": 7,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "eachBefore": null,
+      "eachAfter": {
+        "value": 0.875,
+        "pack": 18
+      },
+      "image": "https://cdn.d4donline.com/u/a/26/10/13/f1dcafd493b1a28fa2cbcbb20b19c56b.jpg"
+    },
+    {
+      "id": "ramez:central:d4d:99146175",
+      "name": "nadoc Banana Flavored Milk 18×125 مل",
+      "nameAr": "نادك حليب مفلطور 18×125 مل",
+      "price": 17.5,
+      "size": "18×125 مل",
+      "before": {
+        "value": 140,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "after": {
+        "value": 7.777777777777778,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "eachBefore": null,
+      "eachAfter": {
+        "value": 0.9722222222222222,
+        "pack": 18
+      },
+      "image": "https://cdn.d4donline.com/u/a/26/10/14/7a10cfbd88f73aabaedffe06cfa19002.jpg"
+    },
+    {
+      "id": "ramez:central:d4d:99146169",
+      "name": "Luna Strawberry Flavour Vitamin D 18*200 مل",
+      "nameAr": "لونا حليب ملون الموز",
+      "price": 19.95,
+      "size": "18*200 مل",
+      "before": {
+        "value": 99.74999999999999,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "after": {
+        "value": 5.541666666666666,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "eachBefore": null,
+      "eachAfter": {
+        "value": 1.1083333333333332,
+        "pack": 18
+      },
+      "image": "https://cdn.d4donline.com/u/a/26/10/14/79996ad28fb9b4b3d8cd4405e8e44a46.jpg"
+    },
+    {
+      "id": "danube:central:d4d:98686281",
+      "name": null,
+      "nameAr": "حليب السعودية ١٨×٢٠٠ مل",
+      "price": 29.99,
+      "size": "١٨×٢٠٠ مل",
+      "before": {
+        "value": 149.95,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "after": {
+        "value": 8.330555555555556,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "eachBefore": null,
+      "eachAfter": {
+        "value": 1.6661111111111113,
+        "pack": 18
+      },
+      "image": "https://cdn.d4donline.com/u/a/26/10/7/584b69666a74e6ebda4eb246523d2e5e.jpg"
+    },
+    {
+      "id": "ramez:central:d4d:99146442",
+      "name": null,
+      "nameAr": "كنزا مشروب غازي",
+      "price": 35.95,
+      "size": "30 × 250 مل",
+      "before": {
+        "value": 143.8,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "after": {
+        "value": 4.793333333333334,
+        "unit": "l",
+        "label": "SAR/L",
+        "source": "derived"
+      },
+      "eachBefore": null,
+      "eachAfter": {
+        "value": 1.1983333333333335,
+        "pack": 30
+      },
+      "image": "https://cdn.d4donline.com/u/a/26/10/14/6fa149890a999d9f0d448266cbf716a6.jpg"
+    }
+  ],
+  "shelfPriceChanges": 0,
+  "packageProjectionChanges": 532,
+  "packageProjectionWithheld": 339,
+  "queries": 71,
+  "admissionLosses": [],
+  "headlineChanges": [
+    {
+      "q": "حليب فراولة",
+      "before": {
+        "headlineId": "farm:central:d4d:99041841",
+        "name": "لونا حليب طعم الفراولة بالفيتامين",
+        "price": 19.99,
+        "kind": "best-value",
+        "up": {
+          "value": 5.552777777777777,
+          "unit": "L",
+          "source": "derived"
+        },
+        "size": {
+          "unit": "ml",
+          "each": 200,
+          "pack": 18,
+          "total": 3600,
+          "src": "measure"
+        },
+        "offers": 3,
+        "shared": []
+      },
+      "after": {
+        "headlineId": "ramez:central:d4d:99146169",
+        "name": "لونا حليب ملون الموز",
+        "price": 19.95,
+        "kind": "best-buy",
+        "up": {
+          "value": 5.541666666666666,
+          "unit": "L",
+          "source": "derived"
+        },
+        "size": {
+          "unit": "ml",
+          "each": 200,
+          "pack": 18,
+          "total": 3600,
+          "src": "measure"
+        },
+        "offers": 3,
+        "shared": []
+      },
+      "admittedBefore": [
+        "lulu:central:d4d:99104118",
+        "ramez:central:d4d:99146169",
+        "farm:central:d4d:99041841",
+        "farm:central:d4d:99041706",
+        "alwafa:central:d4d:99094491",
+        "nesto:central:d4d:99155604",
+        "farm:central:d4d:99041751",
+        "prime:central:d4d:99135366",
+        "farm:central:d4d:99041823",
+        "farm:central:d4d:99041394"
+      ],
+      "admittedAfter": [
+        "lulu:central:d4d:99104118",
+        "ramez:central:d4d:99146169",
+        "farm:central:d4d:99041841",
+        "farm:central:d4d:99041706",
+        "alwafa:central:d4d:99094491",
+        "nesto:central:d4d:99155604",
+        "farm:central:d4d:99041751",
+        "prime:central:d4d:99135366",
+        "farm:central:d4d:99041823",
+        "farm:central:d4d:99041394"
+      ]
+    },
+    {
+      "q": "بيض",
+      "before": {
+        "headlineId": "marksave:central:d4d:99061971",
+        "name": "البطاطه البيض الأبيض كبير جدة 10 حبات الوطنية",
+        "price": 7.5,
+        "kind": "cheapest",
+        "up": null,
+        "size": {
+          "unit": "pcs",
+          "each": 1,
+          "pack": 10,
+          "total": 10,
+          "src": "count"
+        },
+        "offers": 7,
+        "shared": []
+      },
+      "after": {
+        "headlineId": "marksave:central:d4d:99061971",
+        "name": "البطاطه البيض الأبيض كبير جدة 10 حبات الوطنية",
+        "price": 7.5,
+        "kind": "cheapest",
+        "up": null,
+        "size": {
+          "unit": "pcs",
+          "each": 1,
+          "pack": 10,
+          "total": 10,
+          "src": "count-weak"
+        },
+        "offers": 7,
+        "shared": []
+      },
+      "admittedBefore": [
+        "marksave:central:d4d:99061971",
+        "marksave:central:d4d:99061992",
+        "nesto:central:d4d:99155952",
+        "nesto:central:d4d:99094020",
+        "lulu:central:d4d:99104424",
+        "tamimi:central:d4d:99049539",
+        "almadina:central:d4d:99109842",
+        "prime:central:d4d:98546790",
+        "nesto:central:d4d:99082332",
+        "nesto:central:d4d:99090525",
+        "nesto:central:d4d:99088227",
+        "nesto:central:d4d:99078759",
+        "nesto:central:d4d:99155889",
+        "amarket:central:d4d:99077466",
+        "farm:central:d4d:99040761",
+        "farm:central:d4d:99042225",
+        "tamimi:central:d4d:99050151",
+        "farm:central:d4d:99041781",
+        "alwafa:central:d4d:99096480",
+        "alwafa:central:d4d:99096243",
+        "alwafa:central:d4d:99075264",
+        "alwafa:central:d4d:99075027",
+        "danube:central:d4d:98685636",
+        "alwafa:central:d4d:99097017",
+        "alwafa:central:d4d:99075876",
+        "farm:central:d4d:99041436"
+      ],
+      "admittedAfter": [
+        "marksave:central:d4d:99061971",
+        "marksave:central:d4d:99061992",
+        "nesto:central:d4d:99155952",
+        "nesto:central:d4d:99094020",
+        "lulu:central:d4d:99104424",
+        "tamimi:central:d4d:99049539",
+        "almadina:central:d4d:99109842",
+        "prime:central:d4d:98546790",
+        "nesto:central:d4d:99082332",
+        "nesto:central:d4d:99090525",
+        "nesto:central:d4d:99088227",
+        "nesto:central:d4d:99078759",
+        "nesto:central:d4d:99155889",
+        "amarket:central:d4d:99077466",
+        "farm:central:d4d:99040761",
+        "farm:central:d4d:99042225",
+        "tamimi:central:d4d:99050151",
+        "farm:central:d4d:99041781",
+        "alwafa:central:d4d:99096480",
+        "alwafa:central:d4d:99096243",
+        "alwafa:central:d4d:99075264",
+        "alwafa:central:d4d:99075027",
+        "danube:central:d4d:98685636",
+        "alwafa:central:d4d:99097017",
+        "alwafa:central:d4d:99075876",
+        "farm:central:d4d:99041436"
+      ]
+    },
+    {
+      "q": "eggs",
+      "before": {
+        "headlineId": "marksave:central:d4d:99061971",
+        "name": "البطاطه البيض الأبيض كبير جدة 10 حبات الوطنية",
+        "price": 7.5,
+        "kind": "cheapest",
+        "up": null,
+        "size": {
+          "unit": "pcs",
+          "each": 1,
+          "pack": 10,
+          "total": 10,
+          "src": "count"
+        },
+        "offers": 7,
+        "shared": []
+      },
+      "after": {
+        "headlineId": "marksave:central:d4d:99061971",
+        "name": "البطاطه البيض الأبيض كبير جدة 10 حبات الوطنية",
+        "price": 7.5,
+        "kind": "cheapest",
+        "up": null,
+        "size": {
+          "unit": "pcs",
+          "each": 1,
+          "pack": 10,
+          "total": 10,
+          "src": "count-weak"
+        },
+        "offers": 7,
+        "shared": []
+      },
+      "admittedBefore": [
+        "marksave:central:d4d:99061971",
+        "marksave:central:d4d:99061992",
+        "nesto:central:d4d:99155952",
+        "nesto:central:d4d:99094020",
+        "lulu:central:d4d:99104424",
+        "tamimi:central:d4d:99049539",
+        "almadina:central:d4d:99109842",
+        "prime:central:d4d:98546790",
+        "nesto:central:d4d:99082332",
+        "nesto:central:d4d:99090525",
+        "nesto:central:d4d:99088227",
+        "nesto:central:d4d:99078759",
+        "nesto:central:d4d:99155889",
+        "amarket:central:d4d:99077466",
+        "farm:central:d4d:99040761",
+        "farm:central:d4d:99042225",
+        "tamimi:central:d4d:99050151",
+        "farm:central:d4d:99041781",
+        "alwafa:central:d4d:99096480",
+        "alwafa:central:d4d:99096243",
+        "alwafa:central:d4d:99075264",
+        "alwafa:central:d4d:99075027",
+        "danube:central:d4d:98685636",
+        "alwafa:central:d4d:99097017",
+        "alwafa:central:d4d:99075876",
+        "farm:central:d4d:99041436"
+      ],
+      "admittedAfter": [
+        "marksave:central:d4d:99061971",
+        "marksave:central:d4d:99061992",
+        "nesto:central:d4d:99155952",
+        "nesto:central:d4d:99094020",
+        "lulu:central:d4d:99104424",
+        "tamimi:central:d4d:99049539",
+        "almadina:central:d4d:99109842",
+        "prime:central:d4d:98546790",
+        "nesto:central:d4d:99082332",
+        "nesto:central:d4d:99090525",
+        "nesto:central:d4d:99088227",
+        "nesto:central:d4d:99078759",
+        "nesto:central:d4d:99155889",
+        "amarket:central:d4d:99077466",
+        "farm:central:d4d:99040761",
+        "farm:central:d4d:99042225",
+        "tamimi:central:d4d:99050151",
+        "farm:central:d4d:99041781",
+        "alwafa:central:d4d:99096480",
+        "alwafa:central:d4d:99096243",
+        "alwafa:central:d4d:99075264",
+        "alwafa:central:d4d:99075027",
+        "danube:central:d4d:98685636",
+        "alwafa:central:d4d:99097017",
+        "alwafa:central:d4d:99075876",
+        "farm:central:d4d:99041436"
+      ]
+    },
+    {
+      "q": "strawberry milk",
+      "before": {
+        "headlineId": "farm:central:d4d:99041841",
+        "name": "Luna Strawberry Flavoured Milk Vitamin D 18 x 200ml",
+        "price": 19.99,
+        "kind": "best-value",
+        "up": {
+          "value": 5.552777777777777,
+          "unit": "L",
+          "source": "derived"
+        },
+        "size": {
+          "unit": "ml",
+          "each": 200,
+          "pack": 18,
+          "total": 3600,
+          "src": "measure"
+        },
+        "offers": 3,
+        "shared": []
+      },
+      "after": {
+        "headlineId": "ramez:central:d4d:99146169",
+        "name": "Luna Strawberry Flavour Vitamin D 18*200 مل",
+        "price": 19.95,
+        "kind": "best-buy",
+        "up": {
+          "value": 5.541666666666666,
+          "unit": "L",
+          "source": "derived"
+        },
+        "size": {
+          "unit": "ml",
+          "each": 200,
+          "pack": 18,
+          "total": 3600,
+          "src": "measure"
+        },
+        "offers": 3,
+        "shared": []
+      },
+      "admittedBefore": [
+        "lulu:central:d4d:99104118",
+        "ramez:central:d4d:99146169",
+        "farm:central:d4d:99041841",
+        "farm:central:d4d:99041706",
+        "alwafa:central:d4d:99094491",
+        "nesto:central:d4d:99155604",
+        "farm:central:d4d:99041751",
+        "prime:central:d4d:99135366",
+        "farm:central:d4d:99041823",
+        "farm:central:d4d:99041394"
+      ],
+      "admittedAfter": [
+        "lulu:central:d4d:99104118",
+        "ramez:central:d4d:99146169",
+        "farm:central:d4d:99041841",
+        "farm:central:d4d:99041706",
+        "alwafa:central:d4d:99094491",
+        "nesto:central:d4d:99155604",
+        "farm:central:d4d:99041751",
+        "prime:central:d4d:99135366",
+        "farm:central:d4d:99041823",
+        "farm:central:d4d:99041394"
+      ]
+    }
+  ],
+  "hashes": {
+    "src/match.js": "befbaf85f1cd3378fed185abc1b3a47aa7418b7904b767518100dd3e56abdbe3",
+    "src/compare.js": "044c239302b97e67efee958e1b35a9ebc7d47ec47459cd5027d738c1efd2c231",
+    "src/viewer/insights.js": "01cab04e1ec502b9fe6801dac234beafed7cd918f507edee222ee9dd72881418",
+    "index.html": "1fcd2e2eb4d2ae4e3cdcfc4b22014fdda2aaf09b5020510b436d5eb7925770b3",
+    "engine/src/matching.js": "1d924e030bf92465869d4d28396b9e808809a6d84c0762f076b916c770bd9305"
+  },
+  "limitation": "Development checks and assistant crop inspection; not independent, blind or catalogue-wide accuracy annotation. Package projections are compared exhaustively but not all individually image-labelled."
+}

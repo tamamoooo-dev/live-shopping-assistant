@@ -1,0 +1,14 @@
+*
+!.gitignore
+!REPORT.md
+!audit.mjs
+!prepare.mjs
+!evaluate.mjs
+!live-check.mjs
+!browser-smoke.mjs
+!browser-smoke.json
+!summary.json
+!cases.json
+!images/
+images/*
+!images/*.jpg

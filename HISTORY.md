@@ -6545,3 +6545,25 @@ two flavours while collapsing a third copy, with stale-module simulation.
 Index import versions advance together. Engine/API/schema/model/prompt remain
 unchanged, with no inference or data writes. Reproduction and limits:
 benchmarks/dedupe-2026-10-18/REPORT.md.
+
+## 64. Arabic multipack denominator and package consistency (2026-10-18)
+
+Six live offers printed Arabic ml multipacks but the engine pack grammar omitted
+مل and used a single item as the denominator. Adding that exact unit fixes all
+six observed prices: Saudia 18×200ml goes 149.95→8.33 SAR/L, Luna 99.75→5.54;
+shelf prices stay unchanged. All six changed offers were visually checked.
+
+Summary and product-sheet quantities now share an explicit-size-first projection
+over the existing parser. Names can add counts only at the same item magnitude.
+Ambiguous ranges, alternatives and compound sums have no invented single-size
+label; accepted engine unit prices remain authoritative. A legacy compound with
+no engine unit price is withheld. The index versions viewer/insights.js too.
+
+Same 12,972-row catalogue: six unit-price changes, zero shelf-price changes;
+532 package projection changes (339 withheld), not individually annotated.
+Same 71-query comparison replay: no admitted-ID losses, only the two strawberry
+milk language queries change their headline ID to the corrected cheaper offer.
+93 engine / 17 frontend test files and 7,207 unchanged vectors pass. Real Chrome
+verifies stale-module loading, summary/sheet package sizes and the prior grid
+variant/copy control. Model/prompt/schema/architecture stay unchanged; no model
+call, reindex or data write. Evidence: benchmarks/comparison-2026-10-18/REPORT.md.

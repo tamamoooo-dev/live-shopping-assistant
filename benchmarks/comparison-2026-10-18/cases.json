@@ -1,0 +1,80 @@
+{
+  "reviewedAt": "2026-10-18T16:26:55.440Z",
+  "annotation": "Assistant inspection after discovery; not blind",
+  "unitCases": [
+    {
+      "id": "99146022",
+      "pack": 4,
+      "eachMl": 125,
+      "totalLitres": 0.5,
+      "shelfPrice": 10.5,
+      "expectedPricePerL": 21,
+      "imageSha256": "cc7ba795ae69995e48f3ddfd4788dbc405478f571d35938ef2496b21e308334d"
+    },
+    {
+      "id": "99050418",
+      "pack": 18,
+      "eachMl": 125,
+      "totalLitres": 2.25,
+      "shelfPrice": 15.75,
+      "expectedPricePerL": 7,
+      "imageSha256": "61bee0007a6b1ee58d3213078424b320adb11af9fad2bb9fd8dd3b360a3a8d4a"
+    },
+    {
+      "id": "99146175",
+      "pack": 18,
+      "eachMl": 125,
+      "totalLitres": 2.25,
+      "shelfPrice": 17.5,
+      "expectedPricePerL": 7.777777777777778,
+      "imageSha256": "aea0b7e00c29cd686b6fe036484fd11c13ae9aad3f5dcad676066d315239d814"
+    },
+    {
+      "id": "99146169",
+      "pack": 18,
+      "eachMl": 200,
+      "totalLitres": 3.6,
+      "shelfPrice": 19.95,
+      "expectedPricePerL": 5.541666666666666,
+      "imageSha256": "5546f0131434b49ef9348a655b5e90d85ba7d72e369e925c548aa5b056b7f320"
+    },
+    {
+      "id": "98686281",
+      "pack": 18,
+      "eachMl": 200,
+      "totalLitres": 3.6,
+      "shelfPrice": 29.99,
+      "expectedPricePerL": 8.330555555555556,
+      "imageSha256": "238a34bd53e47861d1b5cef8b9ee2943c28e7bf9f174be528711f8d24741b56f"
+    },
+    {
+      "id": "99146442",
+      "pack": 30,
+      "eachMl": 250,
+      "totalLitres": 7.5,
+      "shelfPrice": 35.95,
+      "expectedPricePerL": 4.793333333333334,
+      "imageSha256": "66dfe72fc7650338b40f93c6f1bc19174abe7c7bd1256f38cc0ff86038119501"
+    }
+  ],
+  "packageCases": [
+    {
+      "id": "99136101",
+      "expect": "8 x 135g = 1080g",
+      "image": "Revony paste 8x135GM",
+      "imageSha256": "d7c40f53ae32f7706f840f3ec9fe23bbdcbc28d1097a8e6b6e45d23ceba7aa38"
+    },
+    {
+      "id": "98683452",
+      "expect": "2 x 1.5 L; alternative 3 L has equal total",
+      "image": "Abu Zahra oil",
+      "imageSha256": "47916fb354388fc7739ce4c8ccba3b05d0bcfe7bfbcbda86eaa80d8bfdea8d62"
+    },
+    {
+      "id": "99119655",
+      "expect": "2 x 1.5 L + 500ml, explicit compound; do not label 3L",
+      "image": "Noor oil",
+      "imageSha256": "019d01854f5f1776ac2d3b37469b953f7c3dfd675aeffdb5a37d74520b28d772"
+    }
+  ]
+}

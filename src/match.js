@@ -907,6 +907,31 @@ export function sizeContradicts(itemSize, qSize) {
 }
 
 // Human label for a parsed size, for display in the summary.
+// Use the explicit observed package before incidental measurements in names,
+// matching the engine's packageSize priority. Names can add a missing count
+// only beside the same per-item magnitude. No new size arithmetic lives here.
+export function offerPackageSize(offer) {
+  const raw = offer?.size || '';
+  if (/[\d٠-٩۰-۹]\s*[-–]\s*[\d٠-٩۰-۹]|\bOR\b|\bAssorted Sizes\b/i.test(raw)) return null;
+  if (String(raw).includes('/')) {
+    const choices = String(raw).split('/').map(part => parseSize('', part)).filter(sz => sz.unit);
+    if (choices.length > 1 && choices.some(sz => sz.unit !== choices[0].unit || sz.total !== choices[0].total)) return null;
+  }
+  if (String(raw).includes('+')) {
+    const measured = String(raw).split('+').map(part => parseSize('', part))
+      .filter(sz => sz.unit === 'g' || sz.unit === 'ml');
+    // A sum of different measured items needs the engine's richer quantity
+    // projection. Do not label only its first term as the whole package.
+    if (measured.length > 1) return null;
+  }
+  const explicit = parseSize('', raw);
+  const combined = parseSize(`${offer?.name || ''} ${offer?.nameAr || ''}`, raw);
+  if (!explicit.unit) return combined;
+  if (explicit.pack === 1 && combined.unit === explicit.unit &&
+      combined.each === explicit.each && combined.pack > 1) return combined;
+  return explicit;
+}
+
 export function sizeLabel(sz) {
   if (!sz || !sz.unit || sz.total == null) return '';
   if (sz.unit === 'pcs') return `${sz.total} pcs`;

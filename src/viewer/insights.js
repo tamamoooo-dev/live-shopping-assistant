@@ -5,7 +5,7 @@
 // History doc (/prices via pricesForQuery) — no new endpoints, no duplicated
 // backend logic. Pure functions; missing data just means fewer lines.
 
-import { parseSize, sizeLabel, unitPrice } from '../match.js';
+import { offerPackageSize, sizeLabel, unitPrice } from '../match.js';
 import { cleanOfferName } from '../brochure.js';
 import { priceStatus } from './priceStatus.js';
 import { t, tn } from '../i18n.js';
@@ -29,7 +29,7 @@ export function historyQuery(offer) {
 // of every loose item in the flyer, which is the whole of fresh produce, deli,
 // butchery and fish.
 export function offerSize(offer) {
-  const sz = parseSize(`${offer.name || ''} ${offer.nameAr || ''}`, offer.size || '');
+  const sz = offerPackageSize(offer);
   const sized = !!(sz && sz.unit && sz.total);
   const up = unitPrice({
     _size: sized ? sz : null,
@@ -38,7 +38,7 @@ export function offerSize(offer) {
     nameAr: offer.nameAr,
     size: offer.size || '',
     unitPrice: offer.unitPrice || null,
-    unitPriceResolved: Object.hasOwn(offer, 'unitPrice'),
+    unitPriceResolved: Object.hasOwn(offer, 'unitPrice') || sz === null,
   });
   // The engine's per-item price, carried through UNPARSED. It travels beside
   // the unit price because the sheet shows them together, and it is adopted
