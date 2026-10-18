@@ -6460,3 +6460,39 @@ while preserving the proven per-packet count for `5 x 83g / 90g`; its 91-file
 suite and CI passed. Final Cloudflare version:
 `cceddc34-d611-44ee-8951-23649be342ab`. The existing frontend honors the
 withheld value without another code change.
+
+## §61 · Product identity in search and final offer admission (2026-10-18)
+
+Searching strawberry previously ranked jelly, waffle and yoghurt as fruit.
+Other offers matched engine source text but vanished in the frontend. The
+matcher mirrors now recognize the measured product-head failures and narrow
+Arabic/English wording and brand variations. Existing category evidence can
+disambiguate a fruit-only transcription, and the exact baby-diaper aisle can
+fill a missing diaper noun without asserting a count. A shared matching-only
+projection carries existing names, brand slug, category and size into engine
+staging, frontend admission and grid staging. Comparison identity checks keep
+that same evidence. Display names, prices and the public payload shape stay
+unchanged; the lowest-price contract still orders genuine matches by price.
+
+The replay uses a frozen 12,972-row production catalogue with real store SQL,
+engine handler, frontend admission, deduplication and comparators. Across 48
+Arabic/English queries, no admitted/deduplicated count decreased. In the
+targeted strawberry check, fruit in the first ten price-sorted flyer results
+improved 7→10 (frozen fruit included); exact final target hits improved
+32/60→53/60 available probes, with no previous success lost. References are
+assistant annotations and development checks, not a blind global accuracy
+estimate. Twenty-five original crops and a compressed reproducible catalogue
+are stored with the engine's `benchmarks/search-quality-2026-10-18/REPORT.md`.
+
+Validation: 92 engine test files, 15 frontend, 4 connector; 7,207 shared matcher
+vectors with the same 46 pinned divergences. Opposite-intent and wrong-brand
+checks protect explicit searches for the related products. No inference,
+production data write, migration, architecture change or model switch was
+needed. Five reference queries still miss their target; two further exact-id
+misses are duplicate representatives. The report names these limitations.
+
+Versioned imports keep the three changed matching modules coherent for cached
+visitors; an isolated real Chrome check passed with old unversioned modules.
+Engine SQL grouping also passed 118 exact result/order comparisons and live
+read-only D1 probes, avoiding statement-size and repeated-synonym memory limits.
+The measured SQL samples do not demonstrate a latency saving.

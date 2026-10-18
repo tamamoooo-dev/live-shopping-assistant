@@ -1062,6 +1062,17 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
+- **Search quality release, 2026-10-18:** tested against a frozen catalogue of
+  12,972 current browseable offers, with 48 Arabic/English queries. Strawberry
+  fruit in the first ten price-sorted flyer results improved 7→10 (including
+  frozen fruit); exact target offers surviving frontend admission/deduplication
+  improved 32/60→53/60 available probes, preserving all previous successes.
+  Matching uses existing brand/category/size evidence consistently across
+  admission, grid and comparison. No display name, price or quantity is invented;
+  the price-first genuine/related contract stays intact. Engine report and
+  reproducible snapshot: `benchmarks/search-quality-2026-10-18/REPORT.md`.
+  These are diagnostic/development checks, not global precision estimates.
+
 - **Published release, 2026-10-18:** engine `8fe94ac` and frontend `54b7abd`
   are on main; both CI runs and GitHub Pages deployment passed. Live Worker
   routes returned HTTP 200, and the published frontend modules matched source. Both matcher copies

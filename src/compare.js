@@ -39,6 +39,7 @@ import {
   expandToken,
   productFamily,
   offerFamily,
+  offerMatchItem,
   productType,
   normalizeText,
   canonicalMatchText,
@@ -145,7 +146,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
   // and the product-type word often lands in only one language ("guava
   // raspberry pomegranate 3ltr" / "ندى عصير فراولة") — gating on a single name
   // silently dropped a third of the engine's genuinely-relevant offers.
-  const probe = { name: `${offer.name || ''} ${offer.nameAr || ''}`.trim(), brand: '', size: offer.size || '' };
+  const probe = offerMatchItem(offer);
   if (!isRelevant(probe, query)) return null;
   const rel = relevance(probe, query);
   if (rel < REL_FLOOR) return null;
@@ -187,7 +188,7 @@ export function flyerListing(offer, query, storeLabelFn = (x) => x) {
     // yields nothing, fall back to the aggregator's own category (offerFamily).
     family: offerFamily(offer),
     type: productType(`${offer.name || ''} ${offer.nameAr || ''}`),
-    text: `${offer.name || ''} ${offer.nameAr || ''}`,
+    text: `${probe.name} ${probe.brand}`.trim(),
     // The engine's canonical Registry identity (Vision-canonical, one per real
     // product). When two offers share it, they ARE the same product — no
     // lexical re-derivation may overrule it.

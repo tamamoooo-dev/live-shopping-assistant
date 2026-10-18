@@ -23,7 +23,7 @@
 
 import { openBrochureViewer } from './viewer.js?v=20260924.2';
 import { localLandingForOffer, storeLabel, storeColor } from './brochure.js';
-import { unitPrice, eachPriceLabel, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, queryTokens, stageBand } from './match.js';
+import { unitPrice, eachPriceLabel, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, matchStage, offerMatchItem, queryTokens, stageBand } from './match.js';
 import { featuredScore, featuredContext, recordChoice, isPrimaryPriceTier } from './featured.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.v2.js';
@@ -121,7 +121,7 @@ function entryStage(e, query) {
     e._stage =
       e.kind === 'online'
         ? matchStage(e.it, query)
-        : matchStage({ name: entryText(e), brand: '' }, query);
+        : matchStage(e.listing.offer ? offerMatchItem(e.listing.offer) : { name: entryText(e), brand: '' }, query);
   }
   return e._stage;
 }
