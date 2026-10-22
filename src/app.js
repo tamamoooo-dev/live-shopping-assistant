@@ -11,6 +11,7 @@
 // one store or six is the same flow (the old All/Single mode toggle is gone).
 
 import { createMemory, adaptiveSearch } from './core.js';
+import { initKnowledgeSearch } from './knowledgeUI.js';
 import {
   loadBrochures,
   brochureForStore,
@@ -517,6 +518,7 @@ async function fillFlyer(slot, storeId, token) {
 initProfile(); // the local profile: created silently on first open, then reloaded
 applyI18n(); // language metadata (lang; dir stays ltr in Phase 1) + static shell
 initLangSwitch(); // the language chip beside the logo
+initKnowledgeSearch(input, form);
 renderChips();
 renderHomeChips();
 route();

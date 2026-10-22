@@ -1,0 +1,16 @@
+{
+  "version": "brochure-knowledge-v1",
+  "builtAt": "2026-10-22T13:28:36.980Z",
+  "exportedAt": "2026-10-22T13:28:23.162Z",
+  "source": "production-d1",
+  "observations": 44851,
+  "vision": 44500,
+  "aggregatorOnly": 351,
+  "combinations": 29232,
+  "entities": 7118,
+  "unknown": {
+    "brand": 7502,
+    "category": 21494,
+    "size": 12775
+  }
+}

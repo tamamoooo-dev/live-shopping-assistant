@@ -20,6 +20,7 @@ import { structureOfferName } from './productName.js';
 import { priceStatus } from './priceStatus.js';
 import { t, tn } from '../i18n.js';
 import { discountDotHtml } from '../discountStatus.js';
+import { openKnowledgeDialog } from '../knowledgeUI.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
 // Hero + cart thumbnails are cropped FROM THE STORED PAGE IMAGE (engine /asset,
@@ -391,6 +392,14 @@ export function createSheet(host, ctx) {
         </div>
       </div>`;
     body = sheet.querySelector('.ps-body');
+    const checkReading = document.createElement('button');
+    checkReading.type = 'button';
+    checkReading.className = 'knowledge-check-reading';
+    checkReading.textContent = t('knowledge.checkReading');
+    checkReading.addEventListener('click', () => openKnowledgeDialog({
+      name: offer.name || offer.nameAr || '', brand: offer.brand || '', size: offer.size || '',
+    }, { openSearch: ctx.openSearch }));
+    sheet.querySelector('.ps-actions').after(checkReading);
     setDetent(detent, { animate: false });
 
     // Self-hosted hero swap (cached per entry).

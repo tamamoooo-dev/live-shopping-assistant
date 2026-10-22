@@ -1,5 +1,9 @@
 # Super Search — Project Handoff
 
+2026-10-22 release: [BROCHURE-INDEX.md](BROCHURE-INDEX.md)
+describes the source-backed product graph, autocomplete controls, index browser,
+reading-check helper, verification, and snapshot refresh procedure.
+
 > **Purpose:** get a brand-new session productive fast, with minimal reading.
 > This document holds **current state only** — no milestone narratives.
 > **Maintenance rule:** when a phase completes, update the affected sections

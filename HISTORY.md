@@ -6567,3 +6567,13 @@ milk language queries change their headline ID to the corrected cheaper offer.
 verifies stale-module loading, summary/sheet package sizes and the prior grid
 variant/copy control. Model/prompt/schema/architecture stay unchanged; no model
 call, reindex or data write. Evidence: benchmarks/comparison-2026-10-18/REPORT.md.
+# 2026-10-22 — Brochure evidence index
+
+Read all 44,851 existing brochure offer records (44,069 Vision + 782 awaiting
+Vision), and generated 29,374 observed brand/category/variety/package
+combinations with source provenance. Added bilingual Space completion,
+independent size/variety suggestion controls, an index explorer and a
+reading-check helper. Assortments, unknown fields and conflicting readings do
+not create precise combinations. Registry identities and stored Vision reads
+remain unchanged. The compressed index runs in a dedicated browser Worker.
+See BROCHURE-INDEX.md for coverage, tests and refresh instructions.
