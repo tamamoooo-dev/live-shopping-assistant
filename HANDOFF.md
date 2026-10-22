@@ -1,5 +1,7 @@
 # Super Search — Project Handoff
 
+2026-10-22 reading revision: [READING-QUALITY.md](READING-QUALITY.md) covers separate external deal counts, authoritative package quantities, Arabic caption corroboration and image-review states.
+
 2026-10-22 release: [BROCHURE-INDEX.md](BROCHURE-INDEX.md)
 describes the source-backed product graph, autocomplete controls, index browser,
 reading-check helper, verification, and snapshot refresh procedure.

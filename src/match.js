@@ -911,6 +911,7 @@ export function sizeContradicts(itemSize, qSize) {
 // matching the engine's packageSize priority. Names can add a missing count
 // only beside the same per-item magnitude. No new size arithmetic lives here.
 export function offerPackageSize(offer) {
+  if (Object.hasOwn(offer || {}, 'packageContents')) return offer.packageContents;
   const raw = offer?.size || '';
   if (/[\d٠-٩۰-۹]\s*[-–]\s*[\d٠-٩۰-۹]|\bOR\b|\bAssorted Sizes\b/i.test(raw)) return null;
   if (String(raw).includes('/')) {

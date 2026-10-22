@@ -334,6 +334,9 @@ const STRINGS = {
     // would be a separate feature with its own failure mode (productName.js
     // already records what deriving words from OCR names costs).
     'summary.eachPrice': '{value} SAR each',
+    'market.saleReview': 'See the image to verify the price and quantity',
+    'market.saleQuantity': 'Offer: {count} packages · {size} per package',
+    'market.salePackagePrice': '{price} per package within the offer',
     'summary.flyerBadge': 'this week’s flyer',
     'summary.watch': '🔔 Watch price',
     'summary.watchTitle': 'Get an alert when this drops to your target price',
@@ -759,6 +762,9 @@ const STRINGS = {
     // the phrase never takes a number, which is exactly why the noun-free label
     // is the cheaper one in Arabic too.
     'summary.eachPrice': '{value} ريال للحبة',
+    'market.saleReview': 'راجع السعر والكمية في الصورة',
+    'market.saleQuantity': 'العرض: {count} عبوات · {size} للعبوة',
+    'market.salePackagePrice': '{price} للعبوة ضمن العرض',
     'summary.flyerBadge': 'نشرة هذا الأسبوع',
     'summary.watch': '🔔 متابعة السعر',
     'summary.watchTitle': 'احصل على تنبيه عندما ينخفض هذا إلى سعرك المستهدف',

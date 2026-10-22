@@ -319,7 +319,11 @@ export function createSheet(host, ctx) {
     const { label: sizeText, unit, each } = offerSize(offer);
     // Unit price then per-item price, the same order and the same pairing the
     // search cards use — "how good is this" before "what does one cost".
+    const sale = offer.saleQuantity;
     const meta = [
+      offer.quantityReviewRequired ? t('market.saleReview') : '',
+      sale?.count > 1 ? t('market.saleQuantity', { count: sale.count, size: sale.packageSize || '' }) : '',
+      sale?.count > 1 ? t('market.salePackagePrice', { price: `${fmt(sale.packagePrice)} SAR` }) : '',
       unit ? `${fmt(Math.round(unit.value * 100) / 100)} SAR/${unit.unit}` : '',
       eachPriceLabel(each),
     ].filter(Boolean).join(' · ');

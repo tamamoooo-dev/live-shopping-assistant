@@ -2942,3 +2942,6 @@ a.watch-name:hover { text-decoration: underline; }
 .knowledge-facets button { font-size:12px; }
 .knowledge-explorer { border-block:1px solid #8592aa44; padding:10px 0; }
 .knowledge-explorer h3 { font-size:16px; margin:5px 0; }
+
+.sale-quantity,.sale-package-price{display:block;flex-basis:100%;font-size:.8rem;line-height:1.5;color:var(--text-muted,#555)}
+.sale-quantity{font-weight:650;color:var(--text,#222)}

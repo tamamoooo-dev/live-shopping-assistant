@@ -409,12 +409,17 @@ export function cardImage(src, alt) {
 // wherever the unit price renders — the two answer different questions ("is
 // this good value" vs "what does one of them cost") and a card that shows one
 // without the other is the inconsistency this parameter exists to close.
-export function priceRow(price, oldPrice, currency, discountLabel, up, each = null) {
+export function priceRow(price, oldPrice, currency, discountLabel, up, each = null, sale = null, review = false) {
   const prices = el('div', 'card-prices');
   if (price != null) {
     prices.appendChild(el('span', 'price', money(price, currency)));
     if (oldPrice != null) prices.appendChild(el('span', 'old-price', money(oldPrice, currency)));
     if (discountLabel) prices.appendChild(el('span', 'discount', discountLabel));
+    if (review) prices.appendChild(el('span', 'sale-quantity', t('market.saleReview')));
+    if (sale?.count > 1) {
+      prices.appendChild(el('span', 'sale-quantity', t('market.saleQuantity', { count: sale.count, size: sale.packageSize || '' })));
+      prices.appendChild(el('span', 'sale-package-price', t('market.salePackagePrice', { price: money(sale.packagePrice, currency) })));
+    }
     const upLabel = unitPriceLabel({ up });
     if (upLabel) prices.appendChild(el('span', 'unit-price', upLabel));
     const eachLabel = eachPriceLabel(each);
@@ -596,7 +601,8 @@ function flyerCard(listing, badge, up) {
   const name = el('div', 'card-name', displayName);
   name.dir = 'auto';
   body.appendChild(name);
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up, offer.eachPrice || null));
+  if (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents')) body.appendChild(el('div', 'card-size', offer.size));
+  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true));
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));

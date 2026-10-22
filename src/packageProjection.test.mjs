@@ -17,3 +17,9 @@ const milk={id:'milk',store:'danube',name:'Saudia Milk',nameAr:'حليب الس�
 assert.equal(sizeLabel(flyerListing(milk,'milk').size),'18 × 200 ml');assert.equal(offerSize(milk).label,'18 × 200 ml');
 for(const size of ['150 - 180 GRAMS','430 ML / 1100 ML','7-14kg','250g OR 500g'])assert.equal(offerPackageSize({name:'Product',size}),null,'no selected size for '+size);
 console.log('Package projection: explicit fields, compatible name counts, compound withholding and sheet/summary consistency.');
+
+const externalWater={id:'deal-water',store:'hyperpanda',name:'Water',price:12.5,size:'2 × (6x1.5L)',saleQuantity:{count:2,packageSize:'6x1.5L',packagePrice:6.25},packageContents:{unit:'ml',total:18000,each:1500,pack:12,src:'measure'},unitPrice:{value:12.5/18,unit:'l'}};
+assert.equal(offerPackageSize(externalWater).total,18000);
+assert.equal(offerSize(externalWater).label,'2 × (6x1.5L)');
+assert.equal(flyerListing(externalWater,'water').up.value,12.5/18);
+assert.equal(offerPackageSize({...externalWater,packageContents:null,unitPrice:null}),null,'A withheld backend quantity cannot be re-derived in the client');

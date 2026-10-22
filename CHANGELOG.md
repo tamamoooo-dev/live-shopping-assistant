@@ -1,5 +1,7 @@
 # Changelog
 
+- **2026-10-22:** Product cards state how many packages an offer buys and its per-package price. Comparisons and the product sheet adopt the engine's complete quantity; uncertain price/quantity associations ask for an image check. Arabic caption recovery uses corroborated retailer text. See [READING-QUALITY.md](READING-QUALITY.md).
+
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 

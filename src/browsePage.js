@@ -209,12 +209,13 @@ function browseCard(offer) {
   const nameEl = el('div', 'card-name', name);
   nameEl.dir = 'auto';
   body.appendChild(nameEl);
+  if (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents')) body.appendChild(el('div', 'card-size', offer.size));
   // No unit price on a Browse card — that is unchanged, and deliberate: the
   // /browse projection omits `search_text` for cost, which would make its unit
   // price disagree with Search on 1,488 offers (browse/api.js cardDoc). The
   // PER-ITEM price is unaffected by that omission on all 74,173 live offers, so
   // it is safe to show and it is the one a browsing shopper can act on.
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', null, offer.eachPrice || null));
+  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', null, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true));
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));

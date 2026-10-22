@@ -47,7 +47,7 @@ export function offerSize(offer) {
   // contradict the unit price the engine sent.
   const each = offer.eachPrice || null;
   if (!sized) return { size: null, label: '', unit: up, each };
-  return { size: sz, label: sizeLabel(sz), unit: up, each };
+  return { size: sz, label: offer.saleQuantity ? offer.size : sizeLabel(sz), unit: up, each };
 }
 
 // The history variant that actually matches THIS product's size (never mix a
