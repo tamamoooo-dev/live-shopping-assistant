@@ -1,6 +1,7 @@
 # Search and Browse, 2026-10-23
 
-Local change, not deployed. Frontend asset version: `20261023.search2`.
+Frontend asset version: `20261023.search2`. Publishing uses the existing
+GitHub Pages deployment from `main`.
 
 - Empty input hides autocomplete, including when recent searches exist.
 - A product prefix (including one Arabic letter) completes a product category.
