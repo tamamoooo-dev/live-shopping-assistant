@@ -21,7 +21,7 @@ import { offerSizeLabel } from './salePresentation.js';
 import { loadBrowseSummary, browseOffers, storeLabel, storeColor, cleanOfferName, ENGINE_STORES } from './brochure.js';
 import { createMemory, adaptiveSearch } from './core.js';
 import {
-  el, productNameLines, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort, createMarketplace,
+  el, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort, createMarketplace,
 } from './marketplace.js?v=20260924.2';
 import {
   ONLINE_STORES, BEST_EFFORT_ONLINE_STORES, rankOnlineResults,
@@ -102,7 +102,7 @@ function emptyBlock(text) {
 }
 
 // The Browse offer card: marketplace primitives + honest Browse badges.
-function browseCard(offer, { compact = false } = {}) {
+function browseCard(offer) {
   const lang = getLang();
   const name =
     (lang === 'ar'
@@ -111,7 +111,7 @@ function browseCard(offer, { compact = false } = {}) {
   // A div with button semantics, NOT a <button>: the card carries its own
   // Add-to-Cart/Watch <button>s and buttons cannot nest (same contract as the
   // marketplace's flyerCard). Same keyboard behaviour.
-  const card = el('div', 'card card-flyer browse-card' + (compact ? ' browse-card-compact' : ''));
+  const card = el('div', 'card card-flyer browse-card');
   const discountIndicator = discountDot(offer);
   if (discountIndicator) card.appendChild(discountIndicator);
   card.setAttribute('role', 'button');
@@ -207,27 +207,16 @@ function browseCard(offer, { compact = false } = {}) {
   }
   const until = offer.validTo ? t('market.flyerUntil', { date: fmtDateShort(offer.validTo) }) : t('market.flyerTag');
   body.appendChild(storeBadge(storeLabel(offer.store), storeColor(offer.store), until));
-  const names = productNameLines(offer, name);
-  body.append(...(compact ? names.slice(0,1) : names));
-  const extra = compact ? el('details', 'browse-card-details') : body;
-  if (compact) {
-    const toggle = el('summary', null, t('browse.moreInfo'));
-    extra.append(toggle, names[0].cloneNode(true), ...names.slice(1));
-    extra.addEventListener('click', event => event.stopPropagation());
-    extra.addEventListener('keydown', event => event.stopPropagation());
-  }
-  if (offer.productTitleVersion) {
-    const brandName = document.documentElement.lang === 'ar' ? offer.brandNameAr || offer.brandNameEn : offer.brandNameEn || offer.brandNameAr;
-    if (brandName) extra.appendChild(el('div', 'card-meta', brandName));
-  }
+  const nameEl = el('div', 'card-name', name);
+  nameEl.dir = 'auto';
+  body.appendChild(nameEl);
   if (offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'))) body.appendChild(el('div', 'card-size', offerSizeLabel(offer)));
   // No unit price on a Browse card — that is unchanged, and deliberate: the
   // /browse projection omits `search_text` for cost, which would make its unit
   // price disagree with Search on 1,488 offers (browse/api.js cardDoc). The
   // PER-ITEM price is unaffected by that omission on all 74,173 live offers, so
   // it is safe to show and it is the one a browsing shopper can act on.
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', null, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true, offer.sizeOptions));
-  if (compact) body.appendChild(extra);
+  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', null, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true));
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));
@@ -249,7 +238,7 @@ function railBlock(rail) {
   head.appendChild(seeAll);
   section.appendChild(head);
   const scroller = el('div', 'browse-rail-scroll');
-  for (const offer of rail.items) scroller.appendChild(browseCard(offer, { compact: true }));
+  for (const offer of rail.items) scroller.appendChild(browseCard(offer));
   section.appendChild(scroller);
   return section;
 }

@@ -1,6 +1,7 @@
 # Search and Browse, 2026-10-23
 
-Frontend asset version: `20261023.search2`. Publishing uses the existing
+Card assets: `20261023.cards1`; autocomplete UI: `20261023.mobile1`;
+archive/autocomplete data: `20261023.search2`. Publishing uses the existing
 GitHub Pages deployment from `main`.
 
 Mobile follow-up: autocomplete UI asset `20261023.mobile1`. WebKit suppresses
@@ -27,9 +28,12 @@ WebKit and Android Chromium, including blur during a tap and source scope.
 - Browse home rails and listing grids request offers independently of the
   summary. A short, versioned session-storage cache survives page reloads;
   failed summaries can retry. Listing revisions reject obsolete filter results.
-- Rails use a compact name in the browsing language; a down-arrow expands
-  complete bilingual names and brand details. Size, price and quantity
-  disclosures stay visible.
+- Following the user's request to restore the first design, cards again use
+  one name, without the added brand row, expandable details or per-size price
+  breakdown. Browse uses the browsing language; Search retains its original
+  display name. Rails again stretch cards to the same height. Full bilingual
+  identity and brand/size details remain in the product sheet. Correct size,
+  offer quantity and per-item price disclosures remain on the card.
 - Popular brands retain ten icon tiles. All brands have their own route/tab
   (`#/browse/brands/all`), alphabetical with batches of 60.
 

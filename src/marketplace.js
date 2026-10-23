@@ -613,13 +613,11 @@ function flyerCard(listing, badge, up) {
   if (badge) body.appendChild(matchChip(badge));
   const until = offer.validTo ? t('market.flyerUntil', { date: fmtDateShort(offer.validTo) }) : t('market.flyerTag');
   body.appendChild(storeBadge(storeLabel(offer.store), storeColor(offer.store), until));
-  body.append(...productNameLines(offer, displayName));
-  if (offer.productTitleVersion) {
-    const brandName = document.documentElement.lang === 'ar' ? offer.brandNameAr || offer.brandNameEn : offer.brandNameEn || offer.brandNameAr;
-    if (brandName) body.appendChild(el('div', 'card-meta', brandName));
-  }
+  const name = el('div', 'card-name', displayName);
+  name.dir = 'auto';
+  body.appendChild(name);
   if (offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'))) body.appendChild(el('div', 'card-size', offerSizeLabel(offer)));
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true, offer.sizeOptions));
+  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true));
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));
