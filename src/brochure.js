@@ -448,7 +448,7 @@ let browseSummaryPromise = null;
 // version can survive a code deployment until their one-hour TTL expires.
 // Versioning this read makes the corrected counts visible immediately while
 // preserving the normal edge + session caching behaviour afterwards.
-const BROWSE_SUMMARY_CACHE_VERSION = '2026-10-23-grocery-dictionary-v1';
+const BROWSE_SUMMARY_CACHE_VERSION = '2026-10-23-price-size-binding-v1';
 const BROWSE_SUMMARY_STORAGE = `lsa.browse.summary.${BROWSE_SUMMARY_CACHE_VERSION}`;
 export function loadBrowseSummary() {
   if (!browseSummaryPromise) {

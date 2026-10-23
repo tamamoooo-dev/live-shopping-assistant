@@ -1,5 +1,11 @@
 # Super Search — Project Handoff
 
+2026-10-23 price/size association fix: engine rejects unbound sizes rather than
+assigning a carton quantity to a cheaper pack price. Browse reads use cache
+version `2026-10-23-price-size-binding-v1`; `packageProjection.test.mjs` verifies
+withheld server quantities stay unknown in comparisons and product details.
+Engine evidence: `benchmarks/price-size-association-2026-10-23/REPORT.md`.
+
 2026-10-23 Search/Browse revision:
 [SEARCH-BROWSE-UX.md](SEARCH-BROWSE-UX.md) documents progressive product → brand
 → refinement suggestions, source preservation, compact rails, brand tabs and

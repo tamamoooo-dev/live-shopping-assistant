@@ -6577,3 +6577,13 @@ reading-check helper. Assortments, unknown fields and conflicting readings do
 not create precise combinations. Registry identities and stored Vision reads
 remain unchanged. The compressed index runs in a dedicated browser Worker.
 See BROCHURE-INDEX.md for coverage, tests and refresh instructions.
+
+# 2026-10-23 — Keep package sizes bound to their selling price
+
+The engine now rejects an unbound carton size when a different, cheaper pack
+price is selected. Browse cache keys were refreshed so previous responses do
+not retain the wrong quantity. Client regression coverage confirms that an
+explicitly withheld size stays unknown in comparisons and product details even
+if an old caption contains the carton size. All frontend unit files pass;
+engine evidence is in benchmarks/price-size-association-2026-10-23/REPORT.md
+in the shopping-connector repository.

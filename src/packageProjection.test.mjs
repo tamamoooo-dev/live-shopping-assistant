@@ -23,3 +23,13 @@ assert.equal(offerPackageSize(externalWater).total,18000);
 assert.equal(offerSize(externalWater).label,'2 × (6x1.5L)');
 assert.equal(flyerListing(externalWater,'water').up.value,12.5/18);
 assert.equal(offerPackageSize({...externalWater,packageContents:null,unitPrice:null}),null,'A withheld backend quantity cannot be re-derived in the client');
+
+// A rejected carton size must stay unknown in Search, comparison and details,
+// even when an old caption still contains the other selling option's size.
+const unboundMilk={id:'tamimi-milk',store:'tamimi',name:'Nadec Milk 12x1L',nameAr:'حليب نادك ١٢×١ لتر',
+ price:16.99,size:null,sizeReading:null,packageContents:null,unitPrice:null,eachPrice:null,
+ quantityReviewRequired:true,quantityReviewReason:'different_package_prices'};
+assert.equal(offerPackageSize(unboundMilk),null);
+assert.equal(flyerListing(unboundMilk,'milk').up,null);
+assert.equal(offerSize(unboundMilk).label,'');
+assert.equal(offerSize(unboundMilk).unit,null);
