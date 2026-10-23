@@ -2,14 +2,14 @@
 // registry reassignment, external catalog, or implicit query rewriting.
 import { querySize, queryTokens } from './match.js';
 
-export function knowledgeText(value) {
+export function knowledgeText(value, preserveArticle = false) {
   return String(value ?? '').normalize('NFKC').toLowerCase()
     .replace(/[٠-٩]/g, c => String(c.charCodeAt(0) - 1632))
     .replace(/[۰-۹]/g, c => String(c.charCodeAt(0) - 1776))
     .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/[\u064b-\u065f\u0670ـ]/g, '')
     .replace(/ة/g, 'ه').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
     .replace(/(\d)(\p{L})/gu, '$1 $2').replace(/[^\p{L}\p{N}.]+/gu, ' ').trim()
-    .split(/\s+/).map(token => /^[\u0600-\u06ff]+$/.test(token)
+    .split(/\s+/).map(token => !preserveArticle && /^[\u0600-\u06ff]+$/.test(token)
       && token.replace(/^(وال|ال)/, '').length >= 2 ? token.replace(/^(وال|ال)/, '') : token).join(' ');
 }
 const words = value => knowledgeText(value).split(/\s+/).filter(Boolean);
@@ -44,7 +44,7 @@ export function createBrochureKnowledge(graph) {
     inverted.get(token).push(i);
   }));
   const phrases = [...entities.values()].filter(e => ['brand','category','variant'].includes(e.kind))
-    .flatMap(entity => (entity.aliases || []).map(alias => ({ entity, phrase: knowledgeText(alias) })))
+    .flatMap(entity => (entity.aliases || []).map(alias => ({ entity, phrase: knowledgeText(alias), exact:knowledgeText(alias,true) })))
     .sort((a,b) => b.phrase.length - a.phrase.length);
   function find(query, { limit = 80, fuzzy = false } = {}) {
     const sizeQuery = querySize(query);
@@ -53,7 +53,9 @@ export function createBrochureKnowledge(graph) {
     const normalized = ` ${knowledgeText(query)} `;
     const matches = phrases.filter(e => normalized.includes(` ${e.phrase} `));
     const queryCategory = matches.find(e => e.entity.kind === 'category')?.entity;
-    const queryBrand = matches.find(e => e.entity.kind === 'brand' && e.entity.normalized !== false)?.entity;
+    const brandMatches=matches.filter(e => e.entity.kind==='brand' && e.entity.normalized!==false);
+    const exactBrandText=' '+knowledgeText(query,true)+' ';
+    const queryBrand=(brandMatches.find(e=>exactBrandText.includes(' '+e.exact+' ')) || brandMatches[0])?.entity;
     const queryVariants = matches.filter(e => e.entity.kind === 'variant'
       && !matches.some(other => other.entity.kind !== 'variant' && other.phrase.includes(e.phrase)))
       .filter((entry, i, all) => !all.some((other,j) => j < i && other.phrase.includes(entry.phrase)))
@@ -108,7 +110,7 @@ export function createBrochureKnowledge(graph) {
     for (const row of candidates) {
       // Unclassified source text is valuable for review, but cannot support
       // precise category/variant/size completion from incidental OCR words.
-      if (!row.category || row.vision === 0) continue;
+      if (!row.category || row.vision === 0 || row.classificationReviewRequired || row.category==='category:review-required') continue;
       const allowed = row.fields.filter(e => ['brand', 'category'].includes(e.kind)
         || (!row.assortment && sizes && e.kind === 'size') || (!row.assortment && varieties && e.kind === 'variant'));
       // Finish an unfinished last word first; only then add the next facet.

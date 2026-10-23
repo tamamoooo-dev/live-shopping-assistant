@@ -1,8 +1,8 @@
-import { createBrochureKnowledge } from './brochureKnowledge.js';
+import { createBrochureKnowledge } from './brochureKnowledge.js?v=20261023.archive1';
 
 let indexPromise;
 function load() {
-  return indexPromise ||= fetch(new URL('../data/brochure-knowledge.json.gz', import.meta.url))
+  return indexPromise ||= fetch(new URL('../data/brochure-knowledge.json.gz?v=20261023.archive1', import.meta.url))
     .then(async response => {
       if (!response.ok) throw Error('Index unavailable');
       const stream = response.body.pipeThrough(new DecompressionStream('gzip'));

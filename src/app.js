@@ -12,6 +12,7 @@
 
 import { createMemory, adaptiveSearch } from './core.js';
 import { initKnowledgeSearch } from './knowledgeUI.js';
+import { rememberSearch } from './searchPreferences.js';
 import {
   loadBrochures,
   brochureForStore,
@@ -303,6 +304,7 @@ async function runSearch(query) {
   setBusy(true);
   status.textContent = tn('search.searching', selected.length);
   results.innerHTML = '';
+  rememberSearch(q);
   saveRecent(q);
 
   // The shopping summary sits ABOVE the results and is filled once every store

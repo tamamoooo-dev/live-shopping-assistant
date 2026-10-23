@@ -1,3 +1,4 @@
+import { salePresentation, sizeOptionsPresentation } from '../salePresentation.js';
 // viewer/sheet.js — the product bottom sheet: the viewer's central shopping
 // panel. Opens on a hotspot tap at HALF height, drags between three detents
 // (peek / half / full) with velocity snapping, hands scrolling to the body at
@@ -20,7 +21,6 @@ import { structureOfferName } from './productName.js';
 import { priceStatus } from './priceStatus.js';
 import { t, tn } from '../i18n.js';
 import { discountDotHtml } from '../discountStatus.js';
-import { openKnowledgeDialog } from '../knowledgeUI.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
 // Hero + cart thumbnails are cropped FROM THE STORED PAGE IMAGE (engine /asset,
@@ -322,10 +322,10 @@ export function createSheet(host, ctx) {
     const sale = offer.saleQuantity;
     const meta = [
       offer.quantityReviewRequired ? t('market.saleReview') : '',
-      sale?.count > 1 ? t('market.saleQuantity', { count: sale.count, size: sale.packageSize || '' }) : '',
-      sale?.count > 1 ? t('market.salePackagePrice', { price: `${fmt(sale.packagePrice)} SAR` }) : '',
+      ...salePresentation(sale, sale?.packagePrice != null ? `${fmt(sale.packagePrice)} SAR` : ''),
+      ...sizeOptionsPresentation(offer.sizeOptions, value=>`${fmt(value)} SAR`),
       unit ? `${fmt(Math.round(unit.value * 100) / 100)} SAR/${unit.unit}` : '',
-      eachPriceLabel(each),
+      sale?.count > 1 && each?.pack === sale.count ? '' : eachPriceLabel(each),
     ].filter(Boolean).join(' · ');
     const attrs = [
       sn.brand ? `<span class="ps-attr"><span class="ps-attr-k">${esc(t('sheet.brand'))}</span>${esc(sn.brand)}</span>` : '',
@@ -396,14 +396,6 @@ export function createSheet(host, ctx) {
         </div>
       </div>`;
     body = sheet.querySelector('.ps-body');
-    const checkReading = document.createElement('button');
-    checkReading.type = 'button';
-    checkReading.className = 'knowledge-check-reading';
-    checkReading.textContent = t('knowledge.checkReading');
-    checkReading.addEventListener('click', () => openKnowledgeDialog({
-      name: offer.name || offer.nameAr || '', brand: offer.brand || '', size: offer.size || '',
-    }, { openSearch: ctx.openSearch }));
-    sheet.querySelector('.ps-actions').after(checkReading);
     setDetent(detent, { animate: false });
 
     // Self-hosted hero swap (cached per entry).

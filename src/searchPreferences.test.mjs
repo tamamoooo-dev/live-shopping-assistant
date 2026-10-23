@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+const data=new Map([['lsa.app.recent',JSON.stringify(['حليب نادك كامل الدسم','خبز توست بر'])]]);
+globalThis.localStorage={getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v)};
+const {rememberSearch,preferredSuggestions,mergeSuggestions}=await import('./searchPreferences.js');
+assert.equal(preferredSuggestions('حلي')[0].value,'حليب نادك كامل الدسم','Adopts prior searches');
+const now=Date.now();for(let i=0;i<4;i++)rememberSearch('حليب المراعي قليل الدسم',now-86400000);
+rememberSearch('حليب نادك كامل الدسم',now);
+assert.equal(preferredSuggestions('حليب',now)[0].value,'حليب المراعي قليل الدسم','Repeated preference outranks one recent search');
+assert.equal(preferredSuggestions('نادك حلي',now)[0].value,'حليب نادك كامل الدسم','Word order does not lose preferences');
+assert.deepEqual(preferredSuggestions('هاتف'),[],'Preferences cannot suggest unrelated products');
+assert(preferredSuggestions('',now).length>0,'Focus can show historical preferences before typing');
+const merged=mergeSuggestions([{value:'حليب نادك',personal:true}],[{value:'حليب نادك'},{value:'حليب المراعي'}]);
+assert.equal(merged.length,2);assert.equal(merged[0].personal,true);
+assert.equal(JSON.parse(data.get('lsa.profile.data.searchHistory')).length,3);
+console.log('Persistent search history, frequency, recency, matching and merge passed.');

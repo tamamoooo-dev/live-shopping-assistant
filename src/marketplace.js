@@ -1,3 +1,4 @@
+import { salePresentation, offerSizeLabel, sizeOptionsPresentation } from './salePresentation.js';
 // marketplace.js — the ONE unified results experience (the "intelligent
 // marketplace"). Every result is simply an OFFER: live online results and this
 // week's flyer offers render in a single ranked grid, and the SOURCE is
@@ -30,6 +31,18 @@ import { openWatchDialog } from './alertsPage.v2.js';
 import { addToCart } from './cart.js';
 import { t, tn } from './i18n.js';
 import { discountDot } from './discountStatus.js';
+
+// Render both source languages with the same emphasis, regardless of query.
+export function productNameLines(offer, fallback = '') {
+  const ar = String(offer.nameAr || '').trim();
+  const en = String(offer.name || '').trim();
+  const lines = [{text:ar,lang:'ar',dir:'rtl'},{text:en,lang:'en',dir:'ltr'}].filter(x=>x.text);
+  if (document.documentElement.lang !== 'ar') lines.reverse();
+  if (!lines.length && fallback) lines.push({text:fallback,lang:'',dir:'auto'});
+  return lines.map(({text,lang,dir})=>{
+    const node=el('div','card-name',text);node.dir=dir;if(lang)node.lang=lang;return node;
+  });
+}
 
 const DEFAULT_VISIBLE = 12;
 
@@ -409,7 +422,7 @@ export function cardImage(src, alt) {
 // wherever the unit price renders — the two answer different questions ("is
 // this good value" vs "what does one of them cost") and a card that shows one
 // without the other is the inconsistency this parameter exists to close.
-export function priceRow(price, oldPrice, currency, discountLabel, up, each = null, sale = null, review = false) {
+export function priceRow(price, oldPrice, currency, discountLabel, up, each = null, sale = null, review = false, sizeOptions = null) {
   const prices = el('div', 'card-prices');
   if (price != null) {
     prices.appendChild(el('span', 'price', money(price, currency)));
@@ -417,12 +430,14 @@ export function priceRow(price, oldPrice, currency, discountLabel, up, each = nu
     if (discountLabel) prices.appendChild(el('span', 'discount', discountLabel));
     if (review) prices.appendChild(el('span', 'sale-quantity', t('market.saleReview')));
     if (sale?.count > 1) {
-      prices.appendChild(el('span', 'sale-quantity', t('market.saleQuantity', { count: sale.count, size: sale.packageSize || '' })));
-      prices.appendChild(el('span', 'sale-package-price', t('market.salePackagePrice', { price: money(sale.packagePrice, currency) })));
+      const [quantity, perItem] = salePresentation(sale, money(sale.packagePrice, currency));
+      prices.appendChild(el('span', 'sale-quantity', quantity));
+      prices.appendChild(el('span', 'sale-package-price', perItem));
     }
+    for (const label of sizeOptionsPresentation(sizeOptions, value=>money(value,currency))) prices.appendChild(el('span','unit-price',label));
     const upLabel = unitPriceLabel({ up });
     if (upLabel) prices.appendChild(el('span', 'unit-price', upLabel));
-    const eachLabel = eachPriceLabel(each);
+    const eachLabel = sale?.count > 1 && each?.pack === sale.count ? '' : eachPriceLabel(each);
     if (eachLabel) prices.appendChild(el('span', 'each-price', eachLabel));
   } else {
     prices.appendChild(el('span', 'no-price', t('market.tapForPrice')));
@@ -598,11 +613,13 @@ function flyerCard(listing, badge, up) {
   if (badge) body.appendChild(matchChip(badge));
   const until = offer.validTo ? t('market.flyerUntil', { date: fmtDateShort(offer.validTo) }) : t('market.flyerTag');
   body.appendChild(storeBadge(storeLabel(offer.store), storeColor(offer.store), until));
-  const name = el('div', 'card-name', displayName);
-  name.dir = 'auto';
-  body.appendChild(name);
-  if (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents')) body.appendChild(el('div', 'card-size', offer.size));
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true));
+  body.append(...productNameLines(offer, displayName));
+  if (offer.productTitleVersion) {
+    const brandName = document.documentElement.lang === 'ar' ? offer.brandNameAr || offer.brandNameEn : offer.brandNameEn || offer.brandNameAr;
+    if (brandName) body.appendChild(el('div', 'card-meta', brandName));
+  }
+  if (offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'))) body.appendChild(el('div', 'card-size', offerSizeLabel(offer)));
+  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true, offer.sizeOptions));
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));

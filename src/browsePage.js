@@ -1,3 +1,4 @@
+import { offerSizeLabel } from './salePresentation.js';
 // browsePage.js — the Browse pillar's UI (BROWSE-DESIGN.md §8): "walk this
 // week's market". Three views under one hash namespace, all thin compositions
 // over the engine's canonical Browse API (brochure.js — rule 7) and the
@@ -20,7 +21,7 @@
 import { loadBrowseSummary, browseOffers, storeLabel, storeColor, cleanOfferName, ENGINE_STORES } from './brochure.js';
 import { createMemory, adaptiveSearch } from './core.js';
 import {
-  el, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort, createMarketplace,
+  el, productNameLines, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort, createMarketplace,
 } from './marketplace.js?v=20260924.2';
 import {
   ONLINE_STORES, BEST_EFFORT_ONLINE_STORES, rankOnlineResults,
@@ -206,16 +207,18 @@ function browseCard(offer) {
   }
   const until = offer.validTo ? t('market.flyerUntil', { date: fmtDateShort(offer.validTo) }) : t('market.flyerTag');
   body.appendChild(storeBadge(storeLabel(offer.store), storeColor(offer.store), until));
-  const nameEl = el('div', 'card-name', name);
-  nameEl.dir = 'auto';
-  body.appendChild(nameEl);
-  if (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents')) body.appendChild(el('div', 'card-size', offer.size));
+  body.append(...productNameLines(offer, name));
+  if (offer.productTitleVersion) {
+    const brandName = document.documentElement.lang === 'ar' ? offer.brandNameAr || offer.brandNameEn : offer.brandNameEn || offer.brandNameAr;
+    if (brandName) body.appendChild(el('div', 'card-meta', brandName));
+  }
+  if (offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'))) body.appendChild(el('div', 'card-size', offerSizeLabel(offer)));
   // No unit price on a Browse card — that is unchanged, and deliberate: the
   // /browse projection omits `search_text` for cost, which would make its unit
   // price disagree with Search on 1,488 offers (browse/api.js cardDoc). The
   // PER-ITEM price is unaffected by that omission on all 74,173 live offers, so
   // it is safe to show and it is the one a browsing shopper can act on.
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', null, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true));
+  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', null, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true, offer.sizeOptions));
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));

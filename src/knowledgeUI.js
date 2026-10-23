@@ -1,75 +1,54 @@
 import { queryBrochureKnowledge } from './knowledgeClient.js';
 import { t, getLang } from './i18n.js';
+import { preferredSuggestions, mergeSuggestions } from './searchPreferences.js';
 
-export function initKnowledgeSearch(input, form) {
+export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge) {
   const list = document.getElementById('search-suggestions');
-  const sizes = document.getElementById('suggest-sizes');
-  const varieties = document.getElementById('suggest-varieties');
-  const help = document.getElementById('completion-help');
   let suggestions = [], active = -1, revision = 0, timer;
-  const options = () => ({ sizes: sizes.checked, varieties: varieties.checked });
-  for (const control of [sizes, varieties]) {
-    try { control.checked = localStorage.getItem(control.id) !== 'false'; } catch {}
-    control.addEventListener('change', () => {
-      try { localStorage.setItem(control.id, String(control.checked)); } catch {}
-      update();
-    });
-  }
   const close = () => {
-    revision++;
-    suggestions = [];
-    active = -1;
+    revision++; clearTimeout(timer);
+    suggestions = []; active = -1;
     list.hidden = true;
     input.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
-    help.hidden = true;
   };
   function accept(index) {
     if (!suggestions[index]) return;
-    input.value = `${suggestions[index].value} `;
-    input.focus();
-    close();
-    update();
+    input.value = suggestions[index].value;
+    close(); input.focus();
   }
-  function highlight() {
-    [...list.children].forEach((el, i) => el.setAttribute('aria-selected', String(i === active)));
-    if (active >= 0) input.setAttribute('aria-activedescendant', `completion-${active}`);
-    else input.removeAttribute('aria-activedescendant');
+  function paint(found) {
+    suggestions = found; active = -1;
+    input.removeAttribute('aria-activedescendant');
+    list.replaceChildren();
+    for (const [i, suggestion] of found.entries()) {
+      const li = document.createElement('li');
+      li.id = `completion-${i}`; li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', 'false'); li.dir = 'auto';
+      const title = document.createElement('strong'); title.textContent = suggestion.value;
+      li.append(title);
+      li.addEventListener('pointerdown', event => { event.preventDefault(); accept(i); });
+      list.append(li);
+    }
+    list.hidden = !found.length;
+    input.setAttribute('aria-expanded', String(!!found.length));
   }
-  async function update() {
-    const current = ++revision;
-    const query = input.value;
-    if (!query.trim()) return close();
-    try {
-      const found = await queryBrochureKnowledge('suggest', { query, options: options() });
-      if (current !== revision || document.activeElement !== input) return;
-      suggestions = found;
-      active = -1;
-      list.replaceChildren();
-      for (const [i, suggestion] of found.entries()) {
-        const li = document.createElement('li');
-        li.id = `completion-${i}`;
-        li.setAttribute('role', 'option');
-        li.setAttribute('aria-selected', 'false');
-        li.dir = 'auto';
-        const title = document.createElement('strong');
-        title.textContent = suggestion.value;
-        const details = document.createElement('small');
-        details.textContent = `${t(`knowledge.${suggestion.kind}`)} · ${t('knowledge.evidence', { n: suggestion.observations, stores: suggestion.stores })}`;
-        li.append(title, details);
-        li.addEventListener('pointerdown', event => { event.preventDefault(); accept(i); });
-        list.append(li);
-      }
-      list.hidden = !found.length;
-      input.setAttribute('aria-expanded', String(!!found.length));
-      help.hidden = !found.length;
-    } catch { if (current === revision) close(); }
-  }
-  input.addEventListener('input', () => {
-    close(); // stale suggestions must never complete a newer query
+  function update() {
     clearTimeout(timer);
-    timer = setTimeout(update, 110);
-  });
+    const current = ++revision, query = input.value;
+    // Local preferences are synchronous, even on the first cold/offline visit.
+    const personal = preferredSuggestions(query);
+    paint(personal);
+    if (!query.trim()) return;
+    timer = setTimeout(async () => {
+      try {
+        const found = await lookup('suggest', { query, options: { sizes: true, varieties: true, lang: getLang() } });
+        if (current !== revision || document.activeElement !== input || active >= 0) return;
+        paint(mergeSuggestions(personal, found));
+      } catch { /* history remains usable when the background index is unavailable */ }
+    }, 160);
+  }
+  input.addEventListener('input', update);
   input.addEventListener('focus', update);
   input.addEventListener('blur', close);
   input.addEventListener('keydown', event => {
@@ -79,16 +58,13 @@ export function initKnowledgeSearch(input, form) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       active = (active + (event.key === 'ArrowDown' ? 1 : -1) + suggestions.length) % suggestions.length;
-      highlight();
+      [...list.children].forEach((el, i) => el.setAttribute('aria-selected', String(i === active)));
+      input.setAttribute('aria-activedescendant', `completion-${active}`);
     } else if (event.key === 'Enter' && active >= 0) {
       event.preventDefault(); accept(active);
-    } else if (event.key === ' ' && input.selectionStart === input.value.length && input.selectionEnd === input.value.length
-      && !input.value.endsWith(' ') && !suggestions[active < 0 ? 0 : active].correction) {
-      event.preventDefault(); accept(active < 0 ? 0 : active);
     }
   });
   form.addEventListener('submit', close);
-  document.getElementById('open-knowledge').addEventListener('click', () => openKnowledgeDialog({ name: input.value }));
 }
 
 export async function openKnowledgeDialog(observation = {}, { openSearch } = {}) {

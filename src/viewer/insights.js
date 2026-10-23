@@ -1,3 +1,4 @@
+import { offerSizeLabel } from '../salePresentation.js';
 // viewer/insights.js — "viewer intelligence": the short, human lines the
 // product sheet shows ("This is the lowest recorded price", "Offer ends
 // tomorrow", "Historical low reached 3 weeks ago"). Everything is DERIVED
@@ -46,8 +47,8 @@ export function offerSize(offer) {
   // above is this client's reading, and dividing by it would let the sheet
   // contradict the unit price the engine sent.
   const each = offer.eachPrice || null;
-  if (!sized) return { size: null, label: '', unit: up, each };
-  return { size: sz, label: offer.saleQuantity ? offer.size : sizeLabel(sz), unit: up, each };
+  if (!sized) return { size: null, label: offer.sizeReading ? offerSizeLabel(offer) : '', unit: up, each };
+  return { size: sz, label: offer.sizeReading ? offerSizeLabel(offer) : offer.saleQuantity ? offer.size : sizeLabel(sz), unit: up, each };
 }
 
 // The history variant that actually matches THIS product's size (never mix a

@@ -233,6 +233,8 @@ function detectBrand(text) {
 //   fallback  the old display string (cleanOfferName of the raw text) — for
 //             callers to show ONLY when no structured line could be derived.
 export function structureOfferName(offer) {
+  if (offer?.productTitleVersion) return { en: offer.name || '', ar: offer.nameAr || '',
+    brand: offer.brandNameAr || offer.brandNameEn || null, fallback: offer.name || '' };
   const raw = [offer && offer.name, offer && offer.nameAr]
     .filter(Boolean)
     .join(' ')

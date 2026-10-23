@@ -643,7 +643,7 @@ export function offerMatchItem(offer = {}) {
   const names = `${offer.name || ''} ${offer.nameAr || ''}`.trim();
   const categoryEvidence = offer.category === 'baby-diapers' && !productFamily(names) ? 'diapers' : '';
   return { name: [names, categoryEvidence].filter(Boolean).join(' '),
-    brand: offer.brandSlug || '', size: offer.size || '', category: offer.category };
+    brand: [offer.brandSlug, offer.brandNameAr, offer.brandNameEn].filter(Boolean).join(' '), size: offer.size || '', category: offer.category };
 }
 
 // What fraction of the query's tokens actually appear in the item (name+brand,

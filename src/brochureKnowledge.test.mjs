@@ -39,3 +39,16 @@ assert(k.facets(['brand:nadec','category:milk','variant:full-fat']).choices.ever
 const raw=createBrochureKnowledge({...graph,products:[{...graph.products[0],vision:0}]});
 assert.equal(raw.suggest('Nadec milk').length,0);
 console.log('Brochure knowledge: bilingual completion, source-only links, assortment, category, size, typo and conflict checks passed');
+
+// Arabic articles distinguish two real grocery brands: Al Rabie juice vs Rabea tea.
+const teaGraph={version:'brochure-knowledge-v1',entities:[e('brand','alrabie','Al Rabie','الربيع'),e('brand','rabea','Rabea','ربيع'),e('category','tea','tea','شاي')],products:[
+ {...graph.products[0],brand:'brand:alrabie',category:'category:tea',name:'Al Rabie tea',nameAr:'شاي الربيع'},
+ {...graph.products[0],brand:'brand:rabea',category:'category:tea',name:'Rabea tea',nameAr:'شاي ربيع'},
+]};
+const tea=createBrochureKnowledge(teaGraph);
+assert(tea.find('شاي ربيع').every(p=>p.brand==='brand:rabea'));
+assert(tea.find('شاي ربيع').length>0);
+assert(tea.find('شاي الربيع').every(p=>p.brand==='brand:alrabie'));
+assert(tea.find('شاي الربيع').length>0);
+const unverified=createBrochureKnowledge({...graph,products:[{...graph.products[0],classificationReviewRequired:true}]});
+assert.equal(unverified.suggest('Nadec milk').length,0);

@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {salePresentation as labels,offerSizeLabel,sizeOptionsPresentation} from './salePresentation.js';
+assert.match(labels({count:3,unitKind:'chicken',packageSize:'1000 g'},'16.66 ريال','ar').join(' '),/3 دجاجات.*للدجاجة/);
+assert.doesNotMatch(labels({count:3,unitKind:'chicken'},'16.66 ريال','ar').join(' '),/عبوة/);
+assert.match(labels({count:2,unitKind:'group',packageSize:'6 × 1.5L'},'6.25 ريال','ar').join(' '),/مجموعتان.*للمجموعة/);
+assert.match(labels({count:3,unitKind:'bag'},'1.66 ريال','ar').join(' '),/3 أكياس.*للكيس/);
+assert.match(labels({count:2,unitKind:'bottle'},'7.50 ريال','ar').join(' '),/قارورتان.*للقارورة/);
+assert.match(labels({count:2},'5 ريال','ar').join(' '),/حبتان.*للحبة/);
+assert(!labels({count:2},'5 ريال','ar')[0].endsWith('·'));
+assert.match(labels({count:2,unitKind:'pack'},'5 SAR','en')[0],/2 packs/);
+assert.deepEqual(labels(null,'5','ar'),[]);
+assert.match(offerSizeLabel({sizeDisplayAr:'300 جم أو 375 جم',assortedSizes:true},'ar'),/منوع.*بسعر واحد/);
+assert.doesNotMatch(offerSizeLabel({sizeDisplayAr:'300 جم أو 375 جم',assortedSizes:true},'ar'),/g|ml/);
+assert.match(offerSizeLabel({sizeDisplayAr:'800 جم أو 1400 جم',assortedSizes:true,priceBasis:{unit:'kg'}},'ar'),/السعر للكيلو/);
+const sizeRows=sizeOptionsPresentation([{displayAr:'300 جم',displayEn:'300g',saleCount:2,unitPrice:{value:20,unit:'kg'}}],p=>p+' ريال','ar');
+assert.match(sizeRows.join(' '),/الحجم نفسه.*300 جم.*20 ريال \/ كجم/);
+console.log('Arabic sale nouns, dual forms, unknown-container fallback and English labels passed.');
