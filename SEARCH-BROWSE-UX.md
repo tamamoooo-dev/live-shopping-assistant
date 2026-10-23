@@ -3,6 +3,14 @@
 Frontend asset version: `20261023.search2`. Publishing uses the existing
 GitHub Pages deployment from `main`.
 
+Mobile follow-up: autocomplete UI asset `20261023.mobile1`. WebKit suppresses
+the compatibility click after cancelled touch pointerdown, so a completed tap
+is accepted on `touchend` instead. Scrolls, cancelled/multitouch gestures and
+late worker responses cannot change the pressed choice. Mouse and keyboard
+selection keep their existing behavior. Input focus is restored without
+scrolling. `scripts/test-autocomplete-mobile.cjs` covers this using iPhone
+WebKit and Android Chromium, including blur during a tap and source scope.
+
 - Empty input hides autocomplete, including when recent searches exist.
 - A product prefix (including one Arabic letter) completes a product category.
   Choosing it opens brands; choosing a brand opens varieties and sizes.

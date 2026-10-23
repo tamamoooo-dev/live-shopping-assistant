@@ -5,8 +5,10 @@ import { preferredSuggestions, mergeSuggestions } from './searchPreferences.js';
 export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge) {
   const list = document.getElementById('search-suggestions');
   let suggestions = [], active = -1, revision = 0, timer;
+  let touch = null, pendingPaint = null;
   const close = () => {
     revision++; clearTimeout(timer);
+    touch = null; pendingPaint = null;
     suggestions = []; active = -1;
     list.hidden = true;
     input.setAttribute('aria-expanded', 'false');
@@ -14,10 +16,15 @@ export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge
   };
   function accept(index) {
     if (!suggestions[index]) return;
-    input.value = suggestions[index].value;
-    close(); input.focus(); update();
+    acceptValue(suggestions[index].value);
+  }
+  function acceptValue(value) {
+    input.value = value;
+    close(); input.focus({ preventScroll:true }); update();
   }
   function paint(found) {
+    // A late worker response must not replace the row under a pressed finger.
+    if (touch) { pendingPaint = found; return; }
     suggestions = found; active = -1;
     input.removeAttribute('aria-activedescendant');
     list.replaceChildren();
@@ -29,13 +36,46 @@ export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge
       li.append(title);
       // Keep focus, and consume the completed click before replacing the list.
       // Removing a row on pointerdown can send the click to a source below it.
-      li.addEventListener('pointerdown', event => event.preventDefault());
+      li.addEventListener('pointerdown', event => {
+        if (event.pointerType !== 'touch') event.preventDefault();
+      });
       li.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); accept(i); });
       list.append(li);
     }
     list.hidden = !found.length;
     input.setAttribute('aria-expanded', String(!!found.length));
   }
+  function finishTouch() {
+    touch = null;
+    const found = pendingPaint; pendingPaint = null;
+    if (document.activeElement !== input) close();
+    else if (found) paint(found);
+  }
+  list.addEventListener('touchstart', event => {
+    if (event.touches.length !== 1) { if (touch) touch.moved = true; return; }
+    const row = event.target.closest('[role="option"]');
+    const index = row ? [...list.children].indexOf(row) : -1;
+    if (!suggestions[index]) return;
+    const finger = event.touches[0];
+    touch = { id:finger.identifier, x:finger.clientX, y:finger.clientY,
+      value:suggestions[index].value, query:input.value, moved:false };
+  }, {passive:true});
+  list.addEventListener('touchmove', event => {
+    if (!touch) return;
+    const finger = [...event.touches].find(t => t.identifier === touch.id);
+    if (!finger || Math.hypot(finger.clientX-touch.x, finger.clientY-touch.y) > 10) touch.moved = true;
+  }, {passive:true});
+  list.addEventListener('touchcancel', finishTouch, {passive:true});
+  list.addEventListener('touchend', event => {
+    if (!touch || ![...event.changedTouches].some(t => t.identifier === touch.id)) return;
+    if (touch.moved || event.touches.length || touch.query !== input.value) { finishTouch(); return; }
+    // Safari may omit click after pointerdown was cancelled. Accept a completed
+    // tap here and suppress its compatibility mouse click before repainting.
+    event.preventDefault(); event.stopPropagation();
+    const value = touch.value;
+    touch = null; pendingPaint = null;
+    acceptValue(value);
+  }, {passive:false});
   function update() {
     clearTimeout(timer);
     const current = ++revision, query = input.value;
@@ -56,7 +96,7 @@ export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge
   }
   input.addEventListener('input', update);
   input.addEventListener('focus', update);
-  input.addEventListener('blur', close);
+  input.addEventListener('blur', () => { if (!touch) close(); });
   input.addEventListener('keydown', event => {
     if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === 'Escape') return close();
