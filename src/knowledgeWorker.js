@@ -1,17 +1,24 @@
-import { createBrochureKnowledge } from './brochureKnowledge.js?v=20261023.archive1';
+import { createBrochureKnowledge } from './brochureKnowledge.js?v=20261023.search2';
 
 let indexPromise;
-function load() {
-  return indexPromise ||= fetch(new URL('../data/brochure-knowledge.json.gz?v=20261023.archive1', import.meta.url))
+let suggestionPromise;
+function readIndex(file) {
+  return fetch(new URL(`../data/${file}`, import.meta.url))
     .then(async response => {
       if (!response.ok) throw Error('Index unavailable');
       const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
       return createBrochureKnowledge(await new Response(stream).json());
-    }).catch(error => { indexPromise = null; throw error; });
+    });
+}
+function load(suggestionsOnly) {
+  if (suggestionsOnly) return suggestionPromise ||= readIndex('brochure-suggestions.json.gz?v=20261023.search2')
+    .catch(error => { suggestionPromise = null; throw error; });
+  return indexPromise ||= readIndex('brochure-knowledge.json.gz?v=20261023.archive1')
+    .catch(error => { indexPromise = null; throw error; });
 }
 self.onmessage = async ({ data: { id, action, query, options, observation } }) => {
   try {
-    const index = await load();
+    const index = await load(action === 'suggest');
     let result;
     if (action === 'facets') result = index.facets(options.selected, options.lang);
     else if (action === 'suggest') result = index.suggest(query, options);

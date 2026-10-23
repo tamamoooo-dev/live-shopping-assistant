@@ -10,6 +10,11 @@ assert.equal(preferredSuggestions('نادك حلي',now)[0].value,'حليب نا
 assert.deepEqual(preferredSuggestions('هاتف'),[],'Preferences cannot suggest unrelated products');
 assert(preferredSuggestions('',now).length>0,'Focus can show historical preferences before typing');
 const merged=mergeSuggestions([{value:'حليب نادك',personal:true}],[{value:'حليب نادك'},{value:'حليب المراعي'}]);
+assert.equal(preferredSuggestions('ح',now,{stepwise:true})[0].value,'حليب','History first completes the product');
+assert.equal(preferredSuggestions('حليب',now,{stepwise:true,candidates:[{value:'حليب نادك'},{value:'حليب المراعي'}]})[0].value,'حليب المراعي','Next step preserves historical brand preference');
+rememberSearch('حليب أبو قوس كامل الدسم',now);
+assert.deepEqual(preferredSuggestions('حليب أبو قوس',now,{stepwise:true}),[],'Wait for a complete canonical refinement instead of offering an isolated adjective');
+assert.equal(preferredSuggestions('حليب',now,{stepwise:true,candidates:[{value:'حليب أبو قوس'}]})[0].value,'حليب أبو قوس','Keep a compound brand complete');
 assert.equal(merged.length,2);assert.equal(merged[0].personal,true);
-assert.equal(JSON.parse(data.get('lsa.profile.data.searchHistory')).length,3);
+assert.equal(JSON.parse(data.get('lsa.profile.data.searchHistory')).length,4);
 console.log('Persistent search history, frequency, recency, matching and merge passed.');

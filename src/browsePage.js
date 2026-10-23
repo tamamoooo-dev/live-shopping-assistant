@@ -69,7 +69,7 @@ function parseHash() {
   const [kind, id] = parts;
   if (kind === 'dept' && id) return { view: 'dept', id };
   if (kind === 'aisle' && id) return { view: 'aisle', id };
-  if (kind === 'brands') return { view: 'brands' };
+  if (kind === 'brands') return { view: 'brands', all: id === 'all' };
   if (kind === 'brand' && id) return { view: 'brand', id };
   if (kind === 'rail' && id && RAILS.includes(id)) return { view: 'rail', id };
   return { view: 'home' };
@@ -85,7 +85,7 @@ export function initBrowsePage() {
   const route = parseHash();
   host.innerHTML = '';
   if (route.view === 'home') renderHome(host, token);
-  else if (route.view === 'brands') renderBrandsIndex(host, token);
+  else if (route.view === 'brands') renderBrandsIndex(host, token, route.all);
   else renderListing(host, route, token);
 }
 
@@ -102,7 +102,7 @@ function emptyBlock(text) {
 }
 
 // The Browse offer card: marketplace primitives + honest Browse badges.
-function browseCard(offer) {
+function browseCard(offer, { compact = false } = {}) {
   const lang = getLang();
   const name =
     (lang === 'ar'
@@ -111,7 +111,7 @@ function browseCard(offer) {
   // A div with button semantics, NOT a <button>: the card carries its own
   // Add-to-Cart/Watch <button>s and buttons cannot nest (same contract as the
   // marketplace's flyerCard). Same keyboard behaviour.
-  const card = el('div', 'card card-flyer browse-card');
+  const card = el('div', 'card card-flyer browse-card' + (compact ? ' browse-card-compact' : ''));
   const discountIndicator = discountDot(offer);
   if (discountIndicator) card.appendChild(discountIndicator);
   card.setAttribute('role', 'button');
@@ -207,10 +207,18 @@ function browseCard(offer) {
   }
   const until = offer.validTo ? t('market.flyerUntil', { date: fmtDateShort(offer.validTo) }) : t('market.flyerTag');
   body.appendChild(storeBadge(storeLabel(offer.store), storeColor(offer.store), until));
-  body.append(...productNameLines(offer, name));
+  const names = productNameLines(offer, name);
+  body.append(...(compact ? names.slice(0,1) : names));
+  const extra = compact ? el('details', 'browse-card-details') : body;
+  if (compact) {
+    const toggle = el('summary', null, t('browse.moreInfo'));
+    extra.append(toggle, names[0].cloneNode(true), ...names.slice(1));
+    extra.addEventListener('click', event => event.stopPropagation());
+    extra.addEventListener('keydown', event => event.stopPropagation());
+  }
   if (offer.productTitleVersion) {
     const brandName = document.documentElement.lang === 'ar' ? offer.brandNameAr || offer.brandNameEn : offer.brandNameEn || offer.brandNameAr;
-    if (brandName) body.appendChild(el('div', 'card-meta', brandName));
+    if (brandName) extra.appendChild(el('div', 'card-meta', brandName));
   }
   if (offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'))) body.appendChild(el('div', 'card-size', offerSizeLabel(offer)));
   // No unit price on a Browse card — that is unchanged, and deliberate: the
@@ -219,6 +227,7 @@ function browseCard(offer) {
   // PER-ITEM price is unaffected by that omission on all 74,173 live offers, so
   // it is safe to show and it is the one a browsing shopper can act on.
   body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', null, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true, offer.sizeOptions));
+  if (compact) body.appendChild(extra);
   card.appendChild(body);
 
   card.addEventListener('click', () => openFlyerOffer(offer));
@@ -240,7 +249,7 @@ function railBlock(rail) {
   head.appendChild(seeAll);
   section.appendChild(head);
   const scroller = el('div', 'browse-rail-scroll');
-  for (const offer of rail.items) scroller.appendChild(browseCard(offer));
+  for (const offer of rail.items) scroller.appendChild(browseCard(offer, { compact: true }));
   section.appendChild(scroller);
   return section;
 }
@@ -256,6 +265,24 @@ async function renderHome(host, token) {
   const slot = el('div', 'browse-slot');
   slot.appendChild(loadingBlock());
   host.appendChild(slot);
+
+  // The offer endpoints are much cheaper than the complete market summary.
+  // Fill the rails independently so a cold summary never hides ready offers.
+  const railSlots = new Map();
+  const fillRail = rail => {
+    const target = railSlots.get(rail.id);
+    if (renderToken !== token || !target || target.dataset.ready || !rail.items?.length) return;
+    target.replaceChildren(railBlock(rail));
+    target.dataset.ready = 'true';
+  };
+  for (const id of RAILS) {
+    const target = el('div');
+    railSlots.set(id, target);
+    host.append(target);
+    browseOffers({rail:id, limit:12, offset:0}).then(data => {
+      if (data) fillRail({id, items:data.offers});
+    });
+  }
 
   const summary = await loadBrowseSummary();
   if (renderToken !== token) return;
@@ -296,9 +323,9 @@ async function renderHome(host, token) {
   if (brands.length) {
     const brandSection = el('section', 'browse-depts browse-brands');
     const bHead = el('div', 'browse-rail-head');
-    bHead.appendChild(el('h2', null, t('browse.brands')));
+    bHead.appendChild(el('h2', null, t('browse.popularBrands')));
     const all = el('a', 'browse-seeall', t('browse.allBrands', { count: brands.length }));
-    all.href = '#/browse/brands';
+    all.href = '#/browse/brands/all';
     bHead.appendChild(all);
     brandSection.appendChild(bHead);
     const row = el('div', 'browse-brand-row');
@@ -311,7 +338,7 @@ async function renderHome(host, token) {
   // 3. The rails: Biggest Drops, then Lowest Ever.
   for (const id of RAILS) {
     const rail = rails.get(id);
-    if (rail) slot.appendChild(railBlock(rail));
+    if (rail) fillRail(rail);
   }
 }
 
@@ -386,13 +413,22 @@ function brandsAtoZ(brands) {
 
 /* --- the all-brands index ------------------------------------------------------------ */
 
-async function renderBrandsIndex(host, token) {
+async function renderBrandsIndex(host, token, all = false) {
   const head = el('div', 'browse-list-head');
   const back = el('a', 'browse-back', `‹ ${t('browse.back')}`);
   back.href = '#/browse';
   head.appendChild(back);
   head.appendChild(el('h1', null, t('browse.brands')));
   host.appendChild(head);
+  const tabs = el('nav', 'browse-brand-tabs');
+  tabs.setAttribute('aria-label', t('browse.brands'));
+  for (const [isAll, label] of [[false, 'browse.popularBrands'], [true, 'browse.allBrandsTab']]) {
+    const tab = el('a', 'quick-chip' + (all === isAll ? ' is-active' : ''), t(label));
+    tab.href = '#/browse/brands' + (isAll ? '/all' : '');
+    if (all === isAll) tab.setAttribute('aria-current', 'page');
+    tabs.append(tab);
+  }
+  host.append(tabs);
   const slot = el('div', 'browse-slot');
   slot.appendChild(loadingBlock());
   host.appendChild(slot);
@@ -406,39 +442,28 @@ async function renderBrandsIndex(host, token) {
     return;
   }
   const row = el('div', 'browse-brand-row browse-brand-grid');
-  for (const brand of brandsAtoZ(brands)) row.appendChild(brandPill(brand));
   slot.appendChild(row);
+  const choices = all ? brandsAtoZ(brands) : brands.slice(0,10);
+  let shown = 0;
+  const more = el('button', 'browse-more', t('browse.loadMore'));
+  more.type = 'button';
+  const append = () => {
+    for (const brand of choices.slice(shown, shown + 60)) row.append(brandPill(brand));
+    shown += 60;
+    more.hidden = shown >= choices.length;
+  };
+  more.addEventListener('click', append);
+  slot.append(more);
+  append();
 }
 
 /* --- listings (dept / aisle / brand / rail) ------------------------------------------- */
 
 async function renderListing(host, route, token) {
-  // Resolve the page title (and the aisle chips for a department) from the
-  // cached summary — no extra request; fall back to the raw id gracefully.
-  const summary = await loadBrowseSummary();
-  if (renderToken !== token) return;
-
-  let title = railTitle(route.id);
-  let dept = null;
+  // Titles/facets must not hold the offers request behind a slower summary.
+  const summaryPromise = loadBrowseSummary();
+  const title = route.view === 'rail' ? railTitle(route.id) : route.id;
   let brandInfo = null; // the summary's { slug, en, ar, offers, stores } entry
-  if (route.view === 'brand') {
-    brandInfo = ((summary && summary.brands) || []).find((b) => b.slug === route.id) || null;
-    title = brandInfo ? nodeName(brandInfo) : route.id;
-  }
-  if (route.view === 'dept' || route.view === 'aisle') {
-    for (const d of (summary && summary.departments) || []) {
-      if (route.view === 'dept' && d.id === route.id) {
-        dept = d;
-        title = nodeName(d);
-      }
-      const aisle = d.aisles.find((a) => a.id === route.id);
-      if (route.view === 'aisle' && aisle) {
-        dept = d;
-        title = nodeName(aisle);
-      }
-    }
-    if (!dept) title = route.id;
-  }
 
   const head = el('div', 'browse-list-head');
   const back = el('a', 'browse-back', `‹ ${t('browse.back')}`);
@@ -471,7 +496,10 @@ async function renderListing(host, route, token) {
 
   // Aisle chips: a department page offers its aisles as one-tap refinements;
   // an aisle page shows its siblings (with itself active) for lateral moves.
-  if (dept && dept.aisles.length > 1) {
+  const aisleSlot = el('div');
+  host.appendChild(aisleSlot);
+  function renderAisles(dept) {
+    if (!dept || dept.aisles.length < 2) return;
     const chipRow = el('div', 'browse-chiprow');
     const allChip = el('a', 'quick-chip' + (route.view === 'dept' ? ' is-active' : ''), t('browse.allAisle'));
     allChip.href = `#/browse/dept/${dept.id}`;
@@ -483,7 +511,7 @@ async function renderListing(host, route, token) {
       chip.dir = 'auto';
       chipRow.appendChild(chip);
     }
-    host.appendChild(chipRow);
+    aisleSlot.replaceChildren(chipRow);
   }
 
   // Controls: sort (not for rails — a rail IS an ordering) + store filter.
@@ -578,17 +606,21 @@ async function renderListing(host, route, token) {
     offset,
   });
 
-  async function fill(grid, moreBtn) {
+  let listingRevision = 0;
+  async function fill(grid, moreBtn, revision) {
+    const requestOffset = offset;
+    moreBtn.disabled = true;
     const data = await browseOffers(params());
-    if (renderToken !== token) return;
+    if (renderToken !== token || revision !== listingRevision) return;
+    moreBtn.disabled = false;
     if (data && data.families) renderFamilies(data.families);
-    if (!data && offset === 0) {
+    if (!data && requestOffset === 0) {
       gridSlot.innerHTML = '';
       gridSlot.appendChild(emptyBlock(t('browse.unavailable')));
       return;
     }
     const offers = (data && data.offers) || [];
-    if (offset === 0 && !offers.length) {
+    if (requestOffset === 0 && !offers.length) {
       gridSlot.innerHTML = '';
       gridSlot.appendChild(emptyBlock(t('browse.empty')));
       return;
@@ -598,6 +630,7 @@ async function renderListing(host, route, token) {
   }
 
   function reload() {
+    const revision = ++listingRevision;
     offset = 0;
     gridSlot.innerHTML = '';
     gridSlot.appendChild(loadingBlock());
@@ -607,10 +640,10 @@ async function renderListing(host, route, token) {
     moreBtn.hidden = true;
     moreBtn.addEventListener('click', () => {
       offset += PAGE_SIZE;
-      fill(grid, moreBtn);
+      fill(grid, moreBtn, revision);
     });
-    fill(grid, moreBtn).then(() => {
-      if (renderToken !== token) return;
+    fill(grid, moreBtn, revision).then(() => {
+      if (renderToken !== token || revision !== listingRevision) return;
       const spinner = gridSlot.querySelector('.browse-loading');
       if (spinner) spinner.remove();
       if (grid.childNodes.length) {
@@ -621,9 +654,27 @@ async function renderListing(host, route, token) {
   }
 
   reload();
-  if (route.view === 'brand') {
-    renderOnlineBrand(host, brandInfo && brandInfo.en ? brandInfo.en : title, token);
-  }
+  summaryPromise.then(data => {
+    if (renderToken !== token || !data) return;
+    if (route.view === 'brand') {
+      brandInfo = (data.brands || []).find(b => b.slug === route.id);
+      if (brandInfo) {
+        host.querySelector('h1').textContent = nodeName(brandInfo);
+        const meta = host.querySelector('.browse-brand-meta');
+        meta.append(el('p', 'browse-brand-stats', t('browse.brandStats', {offers:brandInfo.offers, stores:brandInfo.stores})));
+      }
+    } else if (['dept','aisle'].includes(route.view)) {
+      for (const d of data.departments || []) {
+        const node = route.view === 'dept' ? (d.id === route.id ? d : null) : d.aisles.find(a => a.id === route.id);
+        if (node) { host.querySelector('h1').textContent = nodeName(node); renderAisles(d); break; }
+      }
+    }
+  });
+  if (route.view === 'brand') summaryPromise.then(data => {
+    if (renderToken !== token) return;
+    const brand = data?.brands?.find(b => b.slug === route.id);
+    renderOnlineBrand(host, brand?.en || route.id, token);
+  });
 }
 
 // A brand page is the only Browse route that has a safe, canonical query.

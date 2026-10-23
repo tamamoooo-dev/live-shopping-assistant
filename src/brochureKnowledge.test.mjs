@@ -16,6 +16,10 @@ const graph = { version:'brochure-knowledge-v1', entities, products:[
   row('milk',['full-fat','low-fat'],'185',{assortment:true}),
 ] };
 const k = createBrochureKnowledge(graph);
+assert.equal(k.suggest('ح')[0].value, 'حليب', 'A single Arabic letter completes a product, without history');
+assert.equal(k.suggest('حلي')[0].value, 'حليب', 'Keep completing the product while the user types');
+assert(k.suggest('حليب').some(s=>s.value==='حليب نادك'), 'Choosing a product offers its brands');
+assert(k.suggest('حليب نادك').some(s=>s.value==='حليب نادك كامل الدسم'), 'Choosing a brand offers refinements');
 assert(k.suggest('نادك حليب').some(s=>s.value==='نادك حليب كامل الدسم'));
 assert(k.suggest('Nadec milk').some(s=>s.value==='Nadec milk full fat'));
 assert(k.suggest('نادك حليب كامل الدسم').some(s=>s.value.includes('18 × 200 مل')));

@@ -449,14 +449,27 @@ let browseSummaryPromise = null;
 // Versioning this read makes the corrected counts visible immediately while
 // preserving the normal edge + session caching behaviour afterwards.
 const BROWSE_SUMMARY_CACHE_VERSION = '2026-10-23-grocery-dictionary-v1';
+const BROWSE_SUMMARY_STORAGE = `lsa.browse.summary.${BROWSE_SUMMARY_CACHE_VERSION}`;
 export function loadBrowseSummary() {
   if (!browseSummaryPromise) {
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(BROWSE_SUMMARY_STORAGE));
+      if (cached && Date.now() - cached.at < 120000 && Array.isArray(cached.data?.departments)) {
+        browseSummaryPromise = Promise.resolve(cached.data);
+        return browseSummaryPromise;
+      }
+    } catch { /* storage is optional */ }
     browseSummaryPromise = fetch(
       `${ENGINE_BASE}/browse?v=${encodeURIComponent(BROWSE_SUMMARY_CACHE_VERSION)}`,
     )
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => (j && Array.isArray(j.departments) ? j : null))
-      .catch(() => null);
+      .catch(() => null)
+      .then(data => {
+        if (!data) browseSummaryPromise = null; // a transient failure can retry
+        else try { sessionStorage.setItem(BROWSE_SUMMARY_STORAGE, JSON.stringify({at:Date.now(), data})); } catch {}
+        return data;
+      });
   }
   return browseSummaryPromise;
 }

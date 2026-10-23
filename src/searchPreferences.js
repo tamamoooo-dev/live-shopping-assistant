@@ -27,15 +27,38 @@ export function rememberSearch(value, now = Date.now()) {
     ...rows.filter(r => normalize(r.value) !== key)].slice(0, 100);
   profileSet('searchHistory', session);
 }
-export function preferredSuggestions(query, now = Date.now()) {
+export function preferredSuggestions(query, now = Date.now(), { stepwise = false, candidates } = {}) {
   const key = normalize(query), tokens = key.split(' ').filter(Boolean);
-  return history().filter(r => {
+  const ranked = history().filter(r => {
     const candidate = normalize(r.value).split(' ');
     return tokens.every((token, i) => candidate.some(w => i === tokens.length - 1 ? w.startsWith(token) : w === token));
   }).map(r => ({ ...r, score: Math.log2(1 + r.count) * 4
     + 3 / (1 + Math.max(0, now - r.at) / 86400000) + Number(normalize(r.value).startsWith(key)) * 2 }))
-    .sort((a, b) => b.score - a.score || b.at - a.at).slice(0, 6)
-    .map(r => ({ value: r.value, kind: 'history', personal: true }));
+    .sort((a, b) => b.score - a.score || b.at - a.at);
+  // History ranks complete canonical facets, including compound brand names
+  // and variants. It must not truncate "أبو قوس" or "كامل الدسم" to one word.
+  if (stepwise && candidates) {
+    const ordered = new Map();
+    for (const row of ranked) {
+      const historical = normalize(row.value).split(' ');
+      for (const candidate of candidates) if (normalize(candidate.value).split(' ').every(w => historical.includes(w))) {
+        const id = normalize(candidate.value);
+        if (!ordered.has(id)) ordered.set(id, {...candidate, personal:true});
+      }
+    }
+    return [...ordered.values()].slice(0,6);
+  }
+  return ranked.slice(0,6)
+    .map(r => {
+      let value = r.value;
+      if (stepwise && tokens.length) {
+        const raw = query.trim().split(/\s+/), parts = r.value.split(/\s+/);
+        const last = tokens.at(-1);
+        const partial = parts.find(w => normalize(w).startsWith(last) && normalize(w) !== last);
+        value = tokens.length === 1 && partial ? [...raw.slice(0, -1), partial].join(' ') : query.trim();
+      }
+      return { value, kind: 'history', personal: true };
+    }).filter(r => normalize(r.value) !== key);
 }
 export function mergeSuggestions(personal, indexed, limit = 8) {
   const unique = new Map();

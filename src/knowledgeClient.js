@@ -5,7 +5,7 @@ const pending = new Map();
 export function queryBrochureKnowledge(action, payload = {}) {
   try {
     if (!worker) {
-      worker = new Worker(new URL('./knowledgeWorker.js?v=20261023.archive1', import.meta.url), { type: 'module' });
+      worker = new Worker(new URL('./knowledgeWorker.js?v=20261023.search2', import.meta.url), { type: 'module' });
       worker.onmessage = ({ data }) => {
         const request = pending.get(data.id);
         if (!request) return;

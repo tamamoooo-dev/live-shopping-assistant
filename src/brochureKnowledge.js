@@ -46,6 +46,22 @@ export function createBrochureKnowledge(graph) {
   const phrases = [...entities.values()].filter(e => ['brand','category','variant'].includes(e.kind))
     .flatMap(entity => (entity.aliases || []).map(alias => ({ entity, phrase: knowledgeText(alias), exact:knowledgeText(alias,true) })))
     .sort((a,b) => b.phrase.length - a.phrase.length);
+  const eligible = row => row.category && row.vision !== 0 && !row.classificationReviewRequired
+    && row.category !== 'category:review-required';
+  // Prefix completions use observed product categories, rather than incidental
+  // words in an OCR name. Aggregate once, instead of sorting every archive row
+  // again for each first-letter keystroke.
+  const starts = new Map();
+  for (const row of rows.filter(eligible)) for (const id of [row.category, row.brand]) {
+    const original = entities.get(id);
+    if (!original) continue;
+    const parent = original.kind === 'category' && entities.get(`category:${original.family}`);
+    for (const entity of new Set([original, parent].filter(Boolean))) {
+      const entry = starts.get(entity.id) || { entity, observations: 0 };
+      entry.observations += row.observations || 0;
+      starts.set(entity.id, entry);
+    }
+  }
   function find(query, { limit = 80, fuzzy = false } = {}) {
     const sizeQuery = querySize(query);
     const tokens = words(sizeQuery ? queryTokens(query).join(' ') : query).slice(0, 18);
@@ -104,13 +120,51 @@ export function createBrochureKnowledge(graph) {
     lang ||= /[\u0600-\u06ff]/.test(query) ? 'ar' : 'en';
     const tokens = words(query);
     if (!tokens.length) return [];
-    let candidates = find(query, { limit: 300 });
+    const normalized = knowledgeText(query);
+    const complete = [...starts.values()].some(({entity}) => entity.normalized !== false && (entity.aliases || [entity.en,entity.ar])
+      .some(alias => String(alias).normalize('NFKC').toLowerCase() === query.trim().normalize('NFKC').toLowerCase()));
+    if (!complete) {
+      const prefix = [...starts.values()].filter(({entity}) => !entity.id.startsWith('category:aisle:')
+        &&
+        knowledgeText(label(entity, lang)).startsWith(normalized)
+        && knowledgeText(label(entity, lang)) !== normalized)
+        .filter(({entity}) => {
+          const parent = entities.get(`category:${entity.family}`);
+          return entity.kind !== 'category' || !parent || parent.id === entity.id
+            || !knowledgeText(label(parent,lang)).startsWith(normalized);
+        });
+      prefix.sort((a,b) => Number(b.entity.kind === 'category') - Number(a.entity.kind === 'category')
+        || b.observations - a.observations || label(a.entity, lang).length - label(b.entity, lang).length);
+      const productPrefixes = prefix.filter(p => p.entity.kind === 'category');
+      const unique = new Map();
+      for (const {entity, observations} of productPrefixes.length ? productPrefixes : prefix) {
+        const value = label(entity,lang), key = knowledgeText(value);
+        if (!unique.has(key)) unique.set(key, {value, kind:entity.kind, observations});
+      }
+      if (unique.size) return [...unique.values()].slice(0,limit);
+    }
+    const matched = phrases.filter(p => ` ${normalized} `.includes(` ${p.phrase} `));
+    const needsBrand = matched.some(p => p.entity.kind === 'category')
+      && !matched.some(p => p.entity.kind === 'brand' && p.entity.normalized !== false);
+    let candidates = find(query, { limit: needsBrand ? rows.length : 300 });
     if (!candidates.length) candidates = find(query, { limit: 100, fuzzy: true });
+    if (needsBrand && candidates.length && !candidates[0].correction) {
+      const brands = new Map();
+      for (const row of candidates.filter(eligible)) {
+        const entity = entities.get(row.brand);
+        if (!entity) continue;
+        const prior = brands.get(entity.id) || {entity, observations:0};
+        prior.observations += row.observations || 0;
+        brands.set(entity.id, prior);
+      }
+      if (brands.size) return [...brands.values()].sort((a,b) => b.observations-a.observations).slice(0,limit)
+        .map(({entity, observations}) => ({value:`${query.trim()} ${label(entity,lang)}`, kind:'brand', observations}));
+    }
     const output = new Map();
     for (const row of candidates) {
       // Unclassified source text is valuable for review, but cannot support
       // precise category/variant/size completion from incidental OCR words.
-      if (!row.category || row.vision === 0 || row.classificationReviewRequired || row.category==='category:review-required') continue;
+      if (!eligible(row)) continue;
       const allowed = row.fields.filter(e => ['brand', 'category'].includes(e.kind)
         || (!row.assortment && sizes && e.kind === 'size') || (!row.assortment && varieties && e.kind === 'variant'));
       // Finish an unfinished last word first; only then add the next facet.

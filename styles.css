@@ -2753,6 +2753,16 @@ a.watch-name:hover { text-decoration: underline; }
   scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
 }
 .browse-rail-scroll > .card { scroll-snap-align: start; }
+.browse-rail-scroll { align-items: start; }
+.browse-card-details summary { cursor: pointer; color: var(--brand); font-size: 12px; padding: 5px 0; list-style: none; }
+.browse-card-details summary::-webkit-details-marker { display: none; }
+.browse-card-details summary::after { content: ' ⌄'; font-weight: 700; }
+.browse-card-details[open] summary::after { content: ' ⌃'; }
+.browse-card-details .card-name { display: block; min-height: 0; overflow: visible; margin-top: 5px; }
+.browse-card-details .card-meta { white-space: normal; }
+.browse-card-compact .card-body { gap: 4px; }
+.browse-brand-tabs { display: flex; gap: 8px; margin: 8px 0 14px; }
+.browse-brand-tabs a { text-decoration: none; }
 @media (min-width: 640px) { .browse-rail-scroll { grid-auto-columns: 180px; } }
 
 /* --- department tiles --- */

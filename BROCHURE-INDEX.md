@@ -69,6 +69,11 @@ The command uses the existing Wrangler account login and performs only SELECTs
 against production D1. `--wrangler <wrangler/bin/wrangler.js>` can select an
 installed CLI. It collects all pages before replacing the prior snapshot.
 
+After replacing the snapshot, run `node scripts/build-suggestion-index.mjs`
+from the frontend root. This rebuilds the smaller autocomplete projection;
+`src/suggestionProjection.test.mjs` rejects a projection from a different
+archive. See [SEARCH-BROWSE-UX.md](SEARCH-BROWSE-UX.md) for the current search UI.
+
 For a saved read-only export `{ exportedAt, source, records: [...] }`:
 
 ```powershell

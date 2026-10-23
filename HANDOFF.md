@@ -1,5 +1,10 @@
 # Super Search — Project Handoff
 
+2026-10-23 local Search/Browse revision (not deployed):
+[SEARCH-BROWSE-UX.md](SEARCH-BROWSE-UX.md) documents progressive product → brand
+→ refinement suggestions, source preservation, compact rails, brand tabs and
+the smaller archive-derived autocomplete projection.
+
 2026-10-22 reading revision: [READING-QUALITY.md](READING-QUALITY.md) covers separate external deal counts, authoritative package quantities, Arabic caption corroboration and image-review states.
 
 2026-10-22 release: [BROCHURE-INDEX.md](BROCHURE-INDEX.md)

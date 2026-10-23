@@ -15,7 +15,7 @@ export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge
   function accept(index) {
     if (!suggestions[index]) return;
     input.value = suggestions[index].value;
-    close(); input.focus();
+    close(); input.focus(); update();
   }
   function paint(found) {
     suggestions = found; active = -1;
@@ -27,7 +27,10 @@ export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge
       li.setAttribute('aria-selected', 'false'); li.dir = 'auto';
       const title = document.createElement('strong'); title.textContent = suggestion.value;
       li.append(title);
-      li.addEventListener('pointerdown', event => { event.preventDefault(); accept(i); });
+      // Keep focus, and consume the completed click before replacing the list.
+      // Removing a row on pointerdown can send the click to a source below it.
+      li.addEventListener('pointerdown', event => event.preventDefault());
+      li.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); accept(i); });
       list.append(li);
     }
     list.hidden = !found.length;
@@ -36,15 +39,18 @@ export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge
   function update() {
     clearTimeout(timer);
     const current = ++revision, query = input.value;
+    if (!query.trim()) { close(); return; }
     // Local preferences are synchronous, even on the first cold/offline visit.
-    const personal = preferredSuggestions(query);
-    paint(personal);
-    if (!query.trim()) return;
+    const personal = preferredSuggestions(query, Date.now(), { stepwise: true });
+    paint(mergeSuggestions(personal, []));
     timer = setTimeout(async () => {
       try {
-        const found = await lookup('suggest', { query, options: { sizes: true, varieties: true, lang: getLang() } });
+        // Rank a wider set locally so a favourite brand can outrank the eight
+        // most popular brands, while the visible list stays short.
+        const found = await lookup('suggest', { query, options: { sizes: true, varieties: true, limit:100, lang: getLang() } });
         if (current !== revision || document.activeElement !== input || active >= 0) return;
-        paint(mergeSuggestions(personal, found));
+        const preferred = preferredSuggestions(query, Date.now(), { stepwise:true, candidates:found });
+        paint(mergeSuggestions(preferred, found));
       } catch { /* history remains usable when the background index is unavailable */ }
     }, 160);
   }
@@ -61,7 +67,7 @@ export function initKnowledgeSearch(input, form, lookup = queryBrochureKnowledge
       [...list.children].forEach((el, i) => el.setAttribute('aria-selected', String(i === active)));
       input.setAttribute('aria-activedescendant', `completion-${active}`);
     } else if (event.key === 'Enter' && active >= 0) {
-      event.preventDefault(); accept(active);
+      event.preventDefault(); event.stopPropagation(); accept(active);
     }
   });
   form.addEventListener('submit', close);
