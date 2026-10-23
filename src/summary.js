@@ -62,6 +62,16 @@ const KICKER = {
   cheapest: t('summary.kicker.cheapest'),
 };
 
+// The Arabic product name leaves the brand to its own field (the engine adds
+// it only to a one-word name), so the summary shows it beside the name once.
+const foldName = (v) => String(v || '').toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+  .replace(/[\u064b-\u065f]/g, '').replace(/\s+/g, ' ').trim();
+export function nameWithBrand(l) {
+  const name = String(l?.name || '').trim();
+  const brand = String(l?.brand || '').trim();
+  return brand && !foldName(name).includes(foldName(brand)) ? `${name} · ${brand}` : name;
+}
+
 function nameLink(l, onOpenListing) {
   // Flyer links are source provenance, not storefront destinations. Route the
   // Best Price pick through the same local-only opener as every flyer card so
@@ -71,7 +81,7 @@ function nameLink(l, onOpenListing) {
     button.type = 'button';
     button.className = 'summary-name';
     button.dir = 'auto';
-    button.textContent = l.name;
+    button.textContent = nameWithBrand(l);
     button.addEventListener('click', () => onOpenListing(l));
     return button;
   }
@@ -79,7 +89,7 @@ function nameLink(l, onOpenListing) {
   const node = l.link ? document.createElement('a') : document.createElement('span');
   node.className = 'summary-name';
   node.dir = 'auto';
-  node.textContent = l.name;
+  node.textContent = nameWithBrand(l);
   if (l.link) {
     node.href = l.link;
     node.target = '_blank';
