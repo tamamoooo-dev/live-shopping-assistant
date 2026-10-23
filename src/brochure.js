@@ -448,7 +448,7 @@ let browseSummaryPromise = null;
 // version can survive a code deployment until their one-hour TTL expires.
 // Versioning this read makes the corrected counts visible immediately while
 // preserving the normal edge + session caching behaviour afterwards.
-const BROWSE_SUMMARY_CACHE_VERSION = '2026-08-07-brand-dedupe';
+const BROWSE_SUMMARY_CACHE_VERSION = '2026-10-23-grocery-dictionary-v1';
 export function loadBrowseSummary() {
   if (!browseSummaryPromise) {
     browseSummaryPromise = fetch(
@@ -471,6 +471,7 @@ export function browseOffers(params = {}) {
   for (const k of ['dept', 'aisle', 'brand', 'rail', 'store', 'sort', 'limit', 'offset']) {
     if (params[k] != null && params[k] !== '') qs.set(k, params[k]);
   }
+  qs.set('v', BROWSE_SUMMARY_CACHE_VERSION);
   const key = qs.toString();
   if (!browseOffersCache.has(key)) {
     if (browseOffersCache.size > 30) browseOffersCache.clear(); // tiny session cache
