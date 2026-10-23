@@ -9,7 +9,8 @@ assert.match(labels({count:2},'5 ريال','ar').join(' '),/حبتان.*للحب
 assert(!labels({count:2},'5 ريال','ar')[0].endsWith('·'));
 assert.match(labels({count:2,unitKind:'pack'},'5 SAR','en')[0],/2 packs/);
 assert.deepEqual(labels(null,'5','ar'),[]);
-assert.match(offerSizeLabel({sizeDisplayAr:'300 جم أو 375 جم',assortedSizes:true},'ar'),/منوع.*بسعر واحد/);
+assert.equal(offerSizeLabel({sizeDisplayAr:'300 جم أو 375 جم',assortedSizes:true},'ar'),'300 جم أو 375 جم');
+assert.equal(offerSizeLabel({sizeDisplayEn:'300g or 375g',assortedSizes:true},'en'),'300g or 375g');
 assert.doesNotMatch(offerSizeLabel({sizeDisplayAr:'300 جم أو 375 جم',assortedSizes:true},'ar'),/g|ml/);
 assert.match(offerSizeLabel({sizeDisplayAr:'800 جم أو 1400 جم',assortedSizes:true,priceBasis:{unit:'kg'}},'ar'),/السعر للكيلو/);
 const sizeRows=sizeOptionsPresentation([{displayAr:'300 جم',displayEn:'300g',saleCount:2,unitPrice:{value:20,unit:'kg'}}],p=>p+' ريال','ar');

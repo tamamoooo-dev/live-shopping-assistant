@@ -37,7 +37,8 @@ export function offerSizeLabel(offer,lang=getLang()) {
   if (offer.priceBasis && ['kg','l'].includes(offer.priceBasis.unit)) {
     return lang==='ar'?`أحجام متعددة: ${label} · السعر لل${offer.priceBasis.unit==='kg'?'كيلو':'تر'}`:`Assorted sizes: ${label} · price per ${offer.priceBasis.unit}`;
   }
-  return lang==='ar'?`منوع بأحجام متعددة وبسعر واحد: ${label}`:`Assorted sizes, same price: ${label}`;
+  // Several sizes do not establish that they share a price.
+  return label;
 }
 
 export function sizeOptionsPresentation(options,price,lang=getLang()) {
