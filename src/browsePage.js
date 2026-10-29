@@ -36,6 +36,10 @@ const RAILS = ['drops', 'lowest-ever'];
 const SORTS = ['discount', 'price'];
 const PAGE_SIZE = 24;
 const BRAND_BATCH = 60; // brands added per "More brands" tap on the home page
+// The brands page lists the same brands three ways: the most popular (sold in
+// the most stores), every brand A–Z (the original page), and the most offers.
+const BRAND_ORDERS = ['popular', 'az', 'offers'];
+const BRAND_TOP = 100; // the two ranked lists stop at the top 100
 const onlineMemory = createMemory('app');
 
 // Department tile icons — presentation only (the taxonomy stays pure data).
@@ -70,7 +74,8 @@ function parseHash() {
   const [kind, id] = parts;
   if (kind === 'dept' && id) return { view: 'dept', id };
   if (kind === 'aisle' && id) return { view: 'aisle', id };
-  if (kind === 'brands') return { view: 'brands' }; // also the old #/browse/brands/all links
+  // The old #/browse/brands/all links open A–Z, the original page.
+  if (kind === 'brands') return { view: 'brands', order: BRAND_ORDERS.includes(id) ? id : 'az' };
   if (kind === 'brand' && id) return { view: 'brand', id };
   if (kind === 'rail' && id && RAILS.includes(id)) return { view: 'rail', id };
   return { view: 'home' };
@@ -86,7 +91,7 @@ export function initBrowsePage() {
   const route = parseHash();
   host.innerHTML = '';
   if (route.view === 'home') renderHome(host, token);
-  else if (route.view === 'brands') renderBrandsIndex(host, token);
+  else if (route.view === 'brands') renderBrandsIndex(host, token, route.order);
   else renderListing(host, route, token);
 }
 
@@ -394,13 +399,18 @@ function brandIcon(slug, name, small = false) {
   return img;
 }
 
-function brandPill(brand) {
+// The corner badge shows what the list is ranked by: flyer offers, or (on the
+// most-popular list) how many stores carry the brand this week.
+function brandPill(brand, badge = 'offers') {
   const pill = el('a', 'browse-brand-pill');
   pill.href = `#/browse/brand/${brand.slug}`;
   const icon = el('span', 'browse-brand-icon');
   icon.appendChild(brandIcon(brand.slug, nodeName(brand)));
-  const count = el('span', 'browse-brand-count', `📄 ${brand.offers}`);
-  count.title = t('browse.brandFlyerCount', { count: brand.offers });
+  const byStores = badge === 'stores';
+  const count = el('span', 'browse-brand-count', byStores ? `🏪 ${brand.stores}` : `📄 ${brand.offers}`);
+  count.title = byStores
+    ? t('browse.brandStoreCount', { count: brand.stores })
+    : t('browse.brandFlyerCount', { count: brand.offers });
   count.setAttribute('aria-label', count.title);
   icon.appendChild(count);
   pill.appendChild(icon);
@@ -417,15 +427,35 @@ function brandsAtoZ(brands) {
   return brands.slice().sort((a, b) => nodeName(a).localeCompare(nodeName(b), lang, { sensitivity: 'base' }));
 }
 
+// One of the three brand lists (BRAND_ORDERS). Ties keep the summary's own
+// most-offers-first order (a stable sort of a copy).
+function brandsInOrder(brands, order) {
+  if (order === 'az') return brandsAtoZ(brands);
+  const [first, second] = order === 'popular' ? ['stores', 'offers'] : ['offers', 'stores'];
+  return brands
+    .slice()
+    .sort((a, b) => b[first] - a[first] || b[second] - a[second])
+    .slice(0, BRAND_TOP);
+}
+
 /* --- the all-brands index ------------------------------------------------------------ */
 
-async function renderBrandsIndex(host, token) {
+async function renderBrandsIndex(host, token, order = 'az') {
   const head = el('div', 'browse-list-head');
   const back = el('a', 'browse-back', `‹ ${t('browse.back')}`);
   back.href = '#/browse';
   head.appendChild(back);
   head.appendChild(el('h1', null, t('browse.brands')));
   host.appendChild(head);
+  const chips = el('div', 'browse-chiprow');
+  for (const id of BRAND_ORDERS) {
+    const chip = el('a', 'quick-chip' + (id === order ? ' is-active' : ''), t(`browse.brandOrder.${id}`));
+    chip.href = id === 'az' ? '#/browse/brands' : `#/browse/brands/${id}`;
+    chip.dir = 'auto';
+    if (id === order) chip.setAttribute('aria-current', 'page');
+    chips.appendChild(chip);
+  }
+  host.appendChild(chips);
   const slot = el('div', 'browse-slot');
   slot.appendChild(loadingBlock());
   host.appendChild(slot);
@@ -438,8 +468,12 @@ async function renderBrandsIndex(host, token) {
     slot.appendChild(emptyBlock(t('browse.unavailable')));
     return;
   }
+  const lead = el('p', 'browse-brand-order-lead', t(`browse.brandOrderLead.${order}`, { count: brands.length, top: BRAND_TOP }));
+  lead.dir = 'auto';
+  slot.appendChild(lead);
   const row = el('div', 'browse-brand-row browse-brand-grid');
-  for (const brand of brandsAtoZ(brands)) row.appendChild(brandPill(brand));
+  const badge = order === 'popular' ? 'stores' : 'offers';
+  for (const brand of brandsInOrder(brands, order)) row.appendChild(brandPill(brand, badge));
   slot.appendChild(row);
 }
 

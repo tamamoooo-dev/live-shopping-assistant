@@ -2872,6 +2872,7 @@ a.watch-name:hover { text-decoration: underline; }
 }
 .browse-brand-grid { padding-bottom: 18px; }
 .browse-brands-more { margin-top: 16px; }
+.browse-brand-order-lead { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--muted); }
 
 /* --- brand page: identity hero + product families --- */
 .browse-brand-monogram {

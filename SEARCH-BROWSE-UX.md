@@ -40,6 +40,12 @@ WebKit and Android Chromium, including blur during a tap and source scope.
   `#/browse/brands/all` link opens the same page, with no tabs). Below the ten
   tiles a "More brands (N)" button adds the next 60 brands in place, in the same
   most-offers-first order, until the full list is shown.
+- 2026-10-29, also at the user's request, the brands page lists the brands
+  three ways, as chips: Most popular (`#/browse/brands/popular`, the top 100
+  by how many stores carry the brand this week, then offers; the badge shows
+  the store count), A–Z (`#/browse/brands`, every brand, the original page and
+  the default) and Most offers (`#/browse/brands/offers`, the top 100 by live
+  flyer offers). All three come from the cached `/browse` summary.
 
 ## Refresh
 
