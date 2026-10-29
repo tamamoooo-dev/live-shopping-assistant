@@ -35,6 +35,7 @@ import { discountDot } from './discountStatus.js';
 const RAILS = ['drops', 'lowest-ever'];
 const SORTS = ['discount', 'price'];
 const PAGE_SIZE = 24;
+const BRAND_BATCH = 60; // brands added per "More brands" tap on the home page
 const onlineMemory = createMemory('app');
 
 // Department tile icons — presentation only (the taxonomy stays pure data).
@@ -69,7 +70,7 @@ function parseHash() {
   const [kind, id] = parts;
   if (kind === 'dept' && id) return { view: 'dept', id };
   if (kind === 'aisle' && id) return { view: 'aisle', id };
-  if (kind === 'brands') return { view: 'brands', all: id === 'all' };
+  if (kind === 'brands') return { view: 'brands' }; // also the old #/browse/brands/all links
   if (kind === 'brand' && id) return { view: 'brand', id };
   if (kind === 'rail' && id && RAILS.includes(id)) return { view: 'rail', id };
   return { view: 'home' };
@@ -85,7 +86,7 @@ export function initBrowsePage() {
   const route = parseHash();
   host.innerHTML = '';
   if (route.view === 'home') renderHome(host, token);
-  else if (route.view === 'brands') renderBrandsIndex(host, token, route.all);
+  else if (route.view === 'brands') renderBrandsIndex(host, token);
   else renderListing(host, route, token);
 }
 
@@ -312,15 +313,31 @@ async function renderHome(host, token) {
   if (brands.length) {
     const brandSection = el('section', 'browse-depts browse-brands');
     const bHead = el('div', 'browse-rail-head');
-    bHead.appendChild(el('h2', null, t('browse.popularBrands')));
+    bHead.appendChild(el('h2', null, t('browse.brands')));
     const all = el('a', 'browse-seeall', t('browse.allBrands', { count: brands.length }));
-    all.href = '#/browse/brands/all';
+    all.href = '#/browse/brands';
     bHead.appendChild(all);
     brandSection.appendChild(bHead);
     const row = el('div', 'browse-brand-row');
     // 10, not 14: two clean rows of the 5-across icon grid (the phone layout).
     for (const brand of brands.slice(0, 10)) row.appendChild(brandPill(brand));
     brandSection.appendChild(row);
+    // The rest of the list grows in place under the same tiles, in the same
+    // most-offers-first order, one batch per tap until every brand is shown.
+    if (brands.length > 10) {
+      let shown = 10;
+      const more = el('button', 'browse-more browse-brands-more');
+      more.type = 'button';
+      const label = () => { more.textContent = t('browse.moreBrands', { count: brands.length - shown }); };
+      more.addEventListener('click', () => {
+        for (const brand of brands.slice(shown, shown + BRAND_BATCH)) row.appendChild(brandPill(brand));
+        shown += BRAND_BATCH;
+        if (shown >= brands.length) more.remove();
+        else label();
+      });
+      label();
+      brandSection.appendChild(more);
+    }
     slot.appendChild(brandSection);
   }
 
@@ -402,22 +419,13 @@ function brandsAtoZ(brands) {
 
 /* --- the all-brands index ------------------------------------------------------------ */
 
-async function renderBrandsIndex(host, token, all = false) {
+async function renderBrandsIndex(host, token) {
   const head = el('div', 'browse-list-head');
   const back = el('a', 'browse-back', `‹ ${t('browse.back')}`);
   back.href = '#/browse';
   head.appendChild(back);
   head.appendChild(el('h1', null, t('browse.brands')));
   host.appendChild(head);
-  const tabs = el('nav', 'browse-brand-tabs');
-  tabs.setAttribute('aria-label', t('browse.brands'));
-  for (const [isAll, label] of [[false, 'browse.popularBrands'], [true, 'browse.allBrandsTab']]) {
-    const tab = el('a', 'quick-chip' + (all === isAll ? ' is-active' : ''), t(label));
-    tab.href = '#/browse/brands' + (isAll ? '/all' : '');
-    if (all === isAll) tab.setAttribute('aria-current', 'page');
-    tabs.append(tab);
-  }
-  host.append(tabs);
   const slot = el('div', 'browse-slot');
   slot.appendChild(loadingBlock());
   host.appendChild(slot);
@@ -431,19 +439,8 @@ async function renderBrandsIndex(host, token, all = false) {
     return;
   }
   const row = el('div', 'browse-brand-row browse-brand-grid');
+  for (const brand of brandsAtoZ(brands)) row.appendChild(brandPill(brand));
   slot.appendChild(row);
-  const choices = all ? brandsAtoZ(brands) : brands.slice(0,10);
-  let shown = 0;
-  const more = el('button', 'browse-more', t('browse.loadMore'));
-  more.type = 'button';
-  const append = () => {
-    for (const brand of choices.slice(shown, shown + 60)) row.append(brandPill(brand));
-    shown += 60;
-    more.hidden = shown >= choices.length;
-  };
-  more.addEventListener('click', append);
-  slot.append(more);
-  append();
 }
 
 /* --- listings (dept / aisle / brand / rail) ------------------------------------------- */

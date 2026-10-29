@@ -2753,8 +2753,6 @@ a.watch-name:hover { text-decoration: underline; }
   scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
 }
 .browse-rail-scroll > .card { scroll-snap-align: start; }
-.browse-brand-tabs { display: flex; gap: 8px; margin: 8px 0 14px; }
-.browse-brand-tabs a { text-decoration: none; }
 @media (min-width: 640px) { .browse-rail-scroll { grid-auto-columns: 180px; } }
 
 /* --- department tiles --- */
@@ -2873,6 +2871,7 @@ a.watch-name:hover { text-decoration: underline; }
   border-radius: 999px; padding: 0 5px; line-height: 15px; white-space: nowrap;
 }
 .browse-brand-grid { padding-bottom: 18px; }
+.browse-brands-more { margin-top: 16px; }
 
 /* --- brand page: identity hero + product families --- */
 .browse-brand-monogram {

@@ -34,8 +34,12 @@ WebKit and Android Chromium, including blur during a tap and source scope.
   display name. Rails again stretch cards to the same height. Full bilingual
   identity and brand/size details remain in the product sheet. Correct size,
   offer quantity and per-item price disclosures remain on the card.
-- Popular brands retain ten icon tiles. All brands have their own route/tab
-  (`#/browse/brands/all`), alphabetical with batches of 60.
+- 2026-10-29, at the user's request, the brands UI is back to the first design:
+  the home section is titled "Brands" with its ten icon tiles and the "All N
+  brands" link to one alphabetical page (`#/browse/brands`; the old
+  `#/browse/brands/all` link opens the same page, with no tabs). Below the ten
+  tiles a "More brands (N)" button adds the next 60 brands in place, in the same
+  most-offers-first order, until the full list is shown.
 
 ## Refresh
 
