@@ -1,4 +1,5 @@
 import { offerSizeLabel } from './salePresentation.js';
+import { BRAND_ASSETS } from './identityAssets.js';
 // browsePage.js — the Browse pillar's UI (BROWSE-DESIGN.md §8): "walk this
 // week's market". Three views under one hash namespace, all thin compositions
 // over the engine's canonical Browse API (brochure.js — rule 7) and the
@@ -369,29 +370,14 @@ function brandMonogram(slug, name, small = false) {
   return m;
 }
 
-// Brands we ship a real logo for (icons/brands/<slug>.png). Every other brand —
-// and any image that fails to load — degrades to the deterministic monogram, so
-// a tile is never broken or blank.
-const BRAND_LOGOS = new Set([
-  'afia', 'alalali', 'alkabeer', 'almarai', 'alrabie', 'alsafi', 'alwatania',
-  'americana', 'anchor', 'aquafina', 'ariel', 'barbican', 'berain', 'bestway',
-  'california-garden', 'clorox', 'closeup', 'colgate', 'comfort', 'dari', 'deemah',
-  'dettol', 'doux', 'dove', 'downy', 'enchanteur', 'fairy', 'fine', 'foster-clarks',
-  'galaxy', 'garnier', 'geepas', 'gillette', 'goody', 'halwani', 'hanaa', 'harpic',
-  'head-shoulders', 'heinz', 'herfy', 'himalaya', 'huggies', 'indomie', 'johnsons',
-  'kdd', 'kinder', 'kiri', 'kitkat', 'kleenex', 'knorr', 'krypton', 'lays',
-  'lifebuoy', 'lipton', 'loacker', 'luna', 'lurpak', 'lux', 'maggi', 'montana',
-  'moussy', 'nada', 'nadec', 'nescafe', 'nestle', 'nido', 'nivea', 'nova',
-  'nutella', 'oreo', 'orinex', 'pampers', 'pantene', 'pepsi', 'persil', 'president',
-  'puck', 'quaker', 'rainbow', 'rani', 'sadia', 'samsung', 'sanita', 'seara',
-  'sensodyne', 'signal', 'snickers', 'sunbulah', 'sunsilk', 'tang', 'tanmiah',
-  'tide', 'twix', 'ulker', 'vaseline', 'veet', 'vimto',
-]);
-
+// The generated catalogue includes sourced logos, reconstructed marks and name marks.
 function brandIcon(slug, name, small = false) {
-  if (!BRAND_LOGOS.has(slug)) return brandMonogram(slug, name, small);
+  const asset = BRAND_ASSETS[slug];
+  if (!asset) return brandMonogram(slug, name, small);
   const img = el('img', 'browse-brand-logo' + (small ? ' is-small' : ''));
-  img.src = `./icons/brands/${slug}.png`;
+  img.src = new URL('../' + asset.file, import.meta.url).href;
+  if (asset.background) img.style.backgroundColor = asset.background;
+  if (asset.kind === 'packaging') img.classList.add('is-packaging');
   img.alt = name || slug;
   img.loading = 'lazy';
   img.decoding = 'async';

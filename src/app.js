@@ -11,6 +11,7 @@
 // one store or six is the same flow (the old All/Single mode toggle is gone).
 
 import { createMemory, adaptiveSearch } from './core.js';
+import { storeIcon } from './storeIdentity.js';
 import { initKnowledgeSearch } from './knowledgeUI.js';
 import { rememberSearch } from './searchPreferences.js';
 import {
@@ -178,9 +179,7 @@ function renderChips() {
     b.className = 'chip';
     b.dataset.store = s.id;
     b.setAttribute('aria-pressed', String(selected.has(s.id)));
-    const dot = document.createElement('span');
-    dot.className = 'chip-dot';
-    dot.style.background = s.color;
+    const dot = storeIcon(s.id);
     const label = document.createElement('span');
     label.textContent = s.label;
     b.append(dot, label);

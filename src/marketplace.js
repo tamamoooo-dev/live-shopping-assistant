@@ -1,8 +1,9 @@
 import { salePresentation, offerSizeLabel, sizeOptionsPresentation } from './salePresentation.js';
+import { storeIcon } from './storeIdentity.js';
 // marketplace.js — the ONE unified results experience (the "intelligent
 // marketplace"). Every result is simply an OFFER: live online results and this
 // week's flyer offers render in a single ranked grid, and the SOURCE is
-// metadata — a lightweight store badge (colored dot + name) plus a small
+// metadata — a lightweight store badge (local logo + name) plus a small
 // "flyer · until <date>" tag on flyer-sourced cards — never a separate
 // browsing experience (milestone directive: brochures and online stores must
 // not feel like separate systems).
@@ -390,8 +391,7 @@ function dedupeFlyers(listings) {
 // lightweight way for both worlds.
 export function storeBadge(label, color, flyerTag) {
   const row = el('div', 'card-store');
-  const dot = el('span', 'chip-dot');
-  dot.style.background = color;
+  const dot = storeIcon(label);
   row.appendChild(dot);
   row.appendChild(el('span', 'card-store-name', label));
   if (flyerTag) row.appendChild(el('span', 'card-src-flyer', flyerTag));
@@ -663,8 +663,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   const chips = new Map();
   for (const s of stores) {
     const chip = el('span', 'src-chip is-loading');
-    const dot = el('span', 'chip-dot');
-    dot.style.background = s.color;
+    const dot = storeIcon(s.id);
     chip.appendChild(dot);
     chip.appendChild(el('span', 'src-name', s.label));
     const state = el('span', 'src-state', '…');

@@ -24,6 +24,7 @@ Workers and internal ids keep the old names.
 | Document | What it holds |
 |---|---|
 | [HANDOFF.md](HANDOFF.md) | **Current state and the hard rules.** Start here: system map, crons, budgets, deploy, open decisions. |
+| [IDENTITY-ASSETS.md](IDENTITY-ASSETS.md) | Store/brand marks, provenance and identity verification. |
 | [HISTORY.md](HISTORY.md) | Every milestone's story: what, why, how it was verified. |
 | [BROWSE-DESIGN.md](BROWSE-DESIGN.md) | The Browse pillar's design. |
 | [docs/FEASIBILITY-VALIDATION.md](docs/FEASIBILITY-VALIDATION.md) | The measured authority for which stores can be integrated, or kept. |

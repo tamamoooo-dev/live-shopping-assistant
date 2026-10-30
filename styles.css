@@ -2834,6 +2834,7 @@ a.watch-name:hover { text-decoration: underline; }
   cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .browse-more:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.browse-more[hidden] { display: none; }
 
 /* --- brand tiles: a home-screen of app icons (5 across on a phone, 6 wider) --- */
 .browse-brand-row {
@@ -2848,10 +2849,8 @@ a.watch-name:hover { text-decoration: underline; }
   transition: transform 0.15s ease;
 }
 .browse-brand-pill:hover { transform: translateY(-2px); }
-/* The icon is the tap target's anchor; the count rides its corner as a badge.
-   It shrinks with its column (a 5-across grid on a 320px phone) but never
-   grows past the 52px the brand hero uses. */
-.browse-brand-icon { position: relative; display: block; width: 100%; max-width: 52px; }
+/* Keep wordmarks readable while fitting five columns on a narrow phone. */
+.browse-brand-icon { position: relative; display: block; width: 100%; max-width: 64px; }
 .browse-brand-icon .browse-brand-monogram,
 .browse-brand-icon .browse-brand-logo {
   width: 100%; height: auto; aspect-ratio: 1; font-size: 22px;
@@ -2894,6 +2893,17 @@ a.watch-name:hover { text-decoration: underline; }
 .browse-brand-logo.is-small {
   width: 20px; height: 20px; border-radius: 7px; padding: 2px;
 }
+.store-logo, .store-symbol {
+  display: inline-flex; width: 24px; height: 24px; flex: 0 0 24px;
+  align-items: center; justify-content: center; vertical-align: middle;
+  object-fit: contain; box-sizing: border-box; padding: 2px;
+  border-radius: 6px; background: #fff; color: #475569;
+}
+.store-logo.is-large, .store-symbol.is-large {
+  width: 40px; height: 40px; flex-basis: 40px; border-radius: 10px; padding: 3px;
+}
+.card-store .store-logo { width: 22px; height: 22px; flex-basis: 22px; }
+.browse-brand-logo.is-packaging { padding: 3px; }
 .browse-brand-hero {
   display: flex; align-items: center; gap: 14px; margin: 2px 2px 14px;
 }

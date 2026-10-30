@@ -1,5 +1,7 @@
 # Super Search — Project Handoff
 
+2026-10-30 identity refresh: all 873 registered brand entries and 21 stores have local standalone marks; product-photo brand fallbacks are removed. Source/classification and the 11 created name marks are documented in [IDENTITY-ASSETS.md](IDENTITY-ASSETS.md). The three brand ordering tabs are preserved.
+
 2026-10-23 price/size association fix: engine rejects unbound sizes rather than
 assigning a carton quantity to a cheaper pack price. Browse reads use cache
 version `2026-10-23-price-size-binding-v1`; `packageProjection.test.mjs` verifies

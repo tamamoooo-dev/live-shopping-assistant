@@ -6587,3 +6587,9 @@ explicitly withheld size stays unknown in comparisons and product details even
 if an old caption contains the carton size. All frontend unit files pass;
 engine evidence is in benchmarks/price-size-association-2026-10-23/REPORT.md
 in the shopping-connector repository.
+
+## 2026-10-30 — Store and brand identity images
+
+Replaced colored store indicators with local store logos in search, source cards and brochure headers. Browse now uses a generated local identity index instead of the small hardcoded logo set and product-photo avatars. The registry covers 873 brand entries: 513 sourced logos, 349 reconstructed marks and 11 explicitly created catalogue-name marks, with zero product-image fallbacks. Source URLs, product references, methods and prompts remain in the asset catalogue. DAVA and Pyary use their manufacturer marks; ambiguous catalogue names use neutral wordmarks. The release retains the current three brand ordering tabs.
+
+Validation: all 23 test modules passed. Browser checks loaded all 873 brand images at widths 320, 390 and 1280 without JavaScript errors, broken images or horizontal overflow; all 21 store files were validated. Live Browse contained 869 active brands and none were missing from the identity index at release verification.

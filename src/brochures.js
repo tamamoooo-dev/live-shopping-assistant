@@ -26,6 +26,7 @@ import {
 } from './brochure.js';
 import { openBrochureViewer, brochureDateLabel } from './viewer.js?v=20260924.2';
 import { t, tn } from './i18n.js';
+import { storeIcon } from './storeIdentity.js';
 
 let initialized = false;
 
@@ -48,9 +49,7 @@ function storeSection(store) {
 
   const head = document.createElement('div');
   head.className = 'bstore-head';
-  const dot = document.createElement('span');
-  dot.className = 'store-dot';
-  dot.style.background = store.color;
+  const dot = storeIcon(store.id, true);
   const name = document.createElement('span');
   name.className = 'bstore-name';
   name.textContent = store.label;
