@@ -30,7 +30,7 @@ import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.v2.js';
 import { addToCart } from './cart.js';
 import { t, tn, getLang } from './i18n.js';
-import { discountDot, discountPercent } from './discountStatus.js';
+import { discountDot, discountNumber } from './discountStatus.js';
 import { BRAND_ASSETS } from './identityAssets.js';
 
 // Render both source languages with the same emphasis, regardless of query.
@@ -406,7 +406,7 @@ export function cardTop(product, actions = [], fallbackDiscount = '') {
   if (dot) {
     const state = dot.className.match(/is-(low|mid|high)/)?.[1] || '';
     const pill = el('span', `card-discount is-${state}`);
-    const pct = el('span', 'card-discount-pct', `${Math.max(1, Math.round(discountPercent(product)))}%`);
+    const pct = el('span', 'card-discount-pct', `${discountNumber(product)}%`);
     pct.setAttribute('aria-hidden', 'true');
     pill.append(dot, pct);
     top.appendChild(pill);

@@ -468,6 +468,12 @@ button { font-family: inherit; }
 .product-discount-dot.is-low { background: var(--bad); }
 .product-discount-dot.is-mid { background: var(--good); }
 .product-discount-dot.is-high { background: var(--medium); }
+/* the brochure viewer's dot + its percentage as a bare number, dot-sized */
+.discount-mark { display: inline-flex; align-items: center; gap: 3px; flex: none; line-height: 1; }
+.discount-num { font-size: 13px; font-weight: 800; line-height: 12px; font-variant-numeric: tabular-nums; }
+.discount-mark.is-low .discount-num { color: var(--bad); }
+.discount-mark.is-mid .discount-num { color: var(--good); }
+.discount-mark.is-high .discount-num { color: var(--medium); }
 
 /* the one line over the image: discount (start) · bell + cart (end) */
 .card-top {
@@ -1932,7 +1938,7 @@ a.watch-name:hover { text-decoration: underline; }
   cursor: pointer;
   text-align: start;
 }
-.ps-rel-card > .product-discount-dot { position: absolute; top: 5px; left: 5px; }
+.ps-rel-card > .discount-mark { position: absolute; top: 5px; left: 5px; }
 .ps-rel-card:hover { border-color: var(--brand); }
 .ps-rel-card img, .ps-rel-noimg {
   width: 100%;
@@ -2445,13 +2451,20 @@ a.watch-name:hover { text-decoration: underline; }
   transition: border-color 0.12s, background 0.12s;
   -webkit-tap-highlight-color: transparent;
 }
-.vv-spot > .product-discount-dot {
+.vv-spot > .discount-mark {
   position: absolute;
   top: -6px;
   right: -6px;
+  flex-direction: row-reverse;
+}
+.vv-spot .product-discount-dot {
   width: 11px;
   height: 11px;
+  flex-basis: 11px;
   border-color: rgba(255, 255, 255, 0.95);
+}
+.vv-spot .discount-num, .vz-pane .discount-num, .ps-rel-card .discount-num {
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff;
 }
 .vv-spot.is-pressed,
 .vv-spot:focus-visible {
@@ -2509,7 +2522,7 @@ a.watch-name:hover { text-decoration: underline; }
   -webkit-tap-highlight-color: transparent;
 }
 .vz-pane:focus-visible { outline: 2px solid var(--brand); outline-offset: -4px; }
-.vz-pane > .product-discount-dot { position: absolute; top: 8px; left: 8px; z-index: 2; }
+.vz-pane > .discount-mark { position: absolute; top: 8px; left: 8px; z-index: 2; }
 /* The crop's own window: sized to the CROP, never to the screen, so no part of
    a neighbouring product can show at the edges. */
 .vz-frame {

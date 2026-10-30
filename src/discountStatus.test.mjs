@@ -1,4 +1,4 @@
-import { discountPercent, discountState } from './discountStatus.js';
+import { discountNumber, discountPercent, discountState } from './discountStatus.js';
 
 import assert from 'node:assert/strict';
 
@@ -11,5 +11,8 @@ assert.equal(discountState({ price: null, oldPrice: 20 }), null, 'missing curren
 assert.equal(discountState({ price: 10, oldPrice: 10 }), null, 'no actual discount has no dot');
 assert.equal(discountState({ price: 'not-a-price', oldPrice: 20 }), null, 'invalid price has no dot');
 assert.equal(discountPercent({ price: 75, oldPrice: 100 }), 25, 'percentage is derived from current and old price');
+assert.equal(discountNumber({ price: 5.95, oldPrice: 9 }), 34, 'the number beside the dot is the rounded percentage');
+assert.equal(discountNumber({ price: 99.8, oldPrice: 100 }), 1, 'a real discount never reads 0');
+assert.equal(discountNumber({ price: 10 }), null, 'no dot, no number');
 
 console.log('discount status tests passed');

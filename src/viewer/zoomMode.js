@@ -23,7 +23,7 @@
 
 import { attachGestures } from './gestures.js';
 import { paneFit } from './transform.js';
-import { discountDot } from '../discountStatus.js';
+import { discountMark } from '../discountStatus.js';
 
 const PER_SCREEN = 1;
 const FLICK_V = 0.45; // px/ms — matches the canvas page-turn threshold
@@ -133,7 +133,7 @@ export function createZoomMode(host, opts = {}) {
       paneEl.type = 'button';
       paneEl.className = 'vz-pane';
       paneEl.setAttribute('aria-label', labelOf(entry.offer));
-      const discountIndicator = discountDot(entry.offer);
+      const discountIndicator = discountMark(entry.offer);
       if (discountIndicator) paneEl.appendChild(discountIndicator);
       paneEl.addEventListener('click', () => onOpenProduct(entry)); // keyboard path
       // The frame is the crop's own window; the page image is offset inside it.
