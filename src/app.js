@@ -168,10 +168,10 @@ function renderChips() {
     b.className = 'chip';
     b.dataset.store = s.id;
     b.setAttribute('aria-pressed', String(selected.has(s.id)));
-    const dot = storeIcon(s.id);
-    const label = document.createElement('span');
-    label.textContent = s.label;
-    b.append(dot, label);
+    // Logo only, like the results strip; the name is the tooltip + a11y name.
+    b.setAttribute('aria-label', s.label);
+    b.title = s.label;
+    b.append(storeIcon(s.id));
     b.addEventListener('click', () => {
       b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
       syncChips();

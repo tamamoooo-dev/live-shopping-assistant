@@ -335,45 +335,62 @@ button { font-family: inherit; }
 .search-button:active { transform: none; }
 .search-button:disabled { opacity: 0.6; cursor: default; transform: none; box-shadow: none; }
 
-/* Store scope chips — the single scope control (no separate "mode"). */
+/* Store scope chips — the single scope control (no separate "mode"). ONE line
+   of equal logo tiles, styled like the results strip below; the store name is
+   each chip's tooltip and accessible name. The logo grows with the screen so
+   "All" + 8 sources fill a 320px phone and stop at 30px on wider screens.
+   A switched-off source fades to grey. */
+.chips,
+.sources-strip { --src-logo: clamp(20px, calc(11vw - 15px), 30px); }
 .chips {
   margin: 8px 0 2px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.chips::-webkit-scrollbar { display: none; }
 .chip {
+  flex: 1 1 0;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 14px;
+  justify-content: center;
+  padding: 5px;
   border: 1px solid var(--line);
   border-radius: var(--pill);
   background: var(--surface);
   color: var(--muted);
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
   transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.12s;
 }
 .chip:active { transform: scale(0.97); }
-.chip .chip-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.chip .store-logo,
+.chip .store-symbol {
+  width: var(--src-logo);
+  height: var(--src-logo);
   flex: 0 0 auto;
-  opacity: 0.45;
-  transition: opacity 0.15s;
+  filter: grayscale(1);
+  opacity: 0.4;
+  transition: filter 0.15s, opacity 0.15s;
 }
 .chip[aria-pressed="true"] {
   background: var(--brand-soft);
   border-color: transparent;
   color: var(--brand);
 }
-.chip[aria-pressed="true"] .chip-dot { opacity: 1; }
+.chip[aria-pressed="true"] .store-logo,
+.chip[aria-pressed="true"] .store-symbol { filter: none; opacity: 1; }
+.chip-all { padding: 5px 12px; }
 .chip-all[aria-pressed="true"] { background: var(--grad); color: #fff; }
+@media (max-width: 560px) {
+  .chips { gap: 4px; }
+  .chip { padding: 3px; border-radius: 12px; }
+  .chip-all { padding: 3px 6px; font-size: 12.5px; }
+}
 
 .status { margin: 10px 4px 2px; font-size: 13px; color: var(--muted); min-height: 18px; }
 
@@ -1075,6 +1092,8 @@ button { font-family: inherit; }
 .src-chip.is-failed { border-color: var(--warn-soft); }
 .src-chip.is-failed .src-state { color: var(--warn); }
 .src-chip.is-empty .src-state { color: var(--muted); font-weight: 600; }
+.src-chip .store-logo,
+.src-chip .store-symbol { width: var(--src-logo); height: var(--src-logo); flex: 0 0 auto; }
 .src-chip.is-empty .store-logo,
 .src-chip.is-failed .store-logo { opacity: 0.45; }
 @media (max-width: 560px) {
