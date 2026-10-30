@@ -1,12 +1,11 @@
-import { salePresentation, offerSizeLabel, sizeOptionsPresentation } from './salePresentation.js';
+import { salePresentation, saleCompact, offerSizeLabel } from './salePresentation.js';
 import { storeIcon } from './storeIdentity.js';
 // marketplace.js — the ONE unified results experience (the "intelligent
 // marketplace"). Every result is simply an OFFER: live online results and this
 // week's flyer offers render in a single ranked grid, and the SOURCE is
-// metadata — a lightweight store badge (local logo + name) plus a small
-// "flyer · until <date>" tag on flyer-sourced cards — never a separate
-// browsing experience (milestone directive: brochures and online stores must
-// not feel like separate systems).
+// metadata — the store's logo plus a "+N days" validity tag on flyer-sourced
+// cards — never a separate browsing experience (milestone directive:
+// brochures and online stores must not feel like separate systems).
 //
 // Two pieces, one factory:
 //   • the SOURCES STRIP — one line of per-store chips (store logo + count;
@@ -24,14 +23,15 @@ import { storeIcon } from './storeIdentity.js';
 //     from Amazon" failure mode).
 
 import { openBrochureViewer } from './viewer.js?v=20260924.2';
-import { localLandingForOffer, storeLabel, storeColor } from './brochure.js';
+import { localLandingForOffer, storeLabel } from './brochure.js';
 import { unitPrice, eachPriceLabel, productFamily, productType, queryFamily, freshProduceIntent, isProcessedProduce, producePresence, normalizeText, parseSize, matchStage, offerMatchItem, queryTokens, stageBand } from './match.js';
 import { featuredScore, featuredContext, recordChoice, isPrimaryPriceTier } from './featured.js';
 import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.v2.js';
 import { addToCart } from './cart.js';
-import { t, tn } from './i18n.js';
-import { discountDot } from './discountStatus.js';
+import { t, tn, getLang } from './i18n.js';
+import { discountDot, discountPercent } from './discountStatus.js';
+import { BRAND_ASSETS } from './identityAssets.js';
 
 // Render both source languages with the same emphasis, regardless of query.
 export function productNameLines(offer, fallback = '') {
@@ -47,7 +47,7 @@ export function productNameLines(offer, fallback = '') {
 
 const DEFAULT_VISIBLE = 12;
 
-// The card-building primitives (el/money/cardImage/priceRow/storeBadge) and
+// The card-building primitives (el/money/cardTop/cardImage/cardBody/…) and
 // the flyer-offer tap-through are EXPORTED: the Browse page composes its cards
 // from these same pieces, so there is exactly one card idiom and one "open an
 // offer" behaviour in the app (BROWSE-DESIGN.md §8 — reuse, never reimplement).
@@ -387,20 +387,36 @@ function dedupeFlyers(listings) {
 }
 
 // --- cards ---------------------------------------------------------------------
-// The store badge every card carries — the source is metadata, shown the same
-// lightweight way for both worlds.
-export function storeBadge(label, color, flyerTag) {
-  const row = el('div', 'card-store');
-  const dot = storeIcon(label);
-  row.appendChild(dot);
-  row.appendChild(el('span', 'card-store-name', label));
-  if (flyerTag) row.appendChild(el('span', 'card-src-flyer', flyerTag));
-  return row;
-}
+// ONE compact card for every source (search grid + Browse), top to bottom:
+//   • over the image, one line: the discount dot with its percentage ("23%"),
+//     and the watch bell + Add-to-Cart;
+//   • info: the store's logo, the flyer's remaining days ("+6 days"), and the
+//     brand's logo (its name when no logo is held and the name lacks it);
+//   • the product name, bold, on one line — ▸ opens whatever doesn't fit (the
+//     full name, the other language, the multi-buy terms, review notes);
+//   • the price (70%) and the struck old price (30%), on one line;
+//   • size / count, then the unit and per-item prices, on the last line.
+// Store and brand names live in the logos' tooltips and accessible names.
 
-// The compact match-tier chip (B) — sits at the top of the card body.
-function matchChip(badge) {
-  return el('span', `card-match ${badge.cls}`, badge.text);
+// The top row over the image. `fallbackDiscount` is a store's own discount
+// text, shown only when the prices alone can't place a dot.
+export function cardTop(product, actions = [], fallbackDiscount = '') {
+  const top = el('div', 'card-top');
+  const dot = discountDot(product);
+  if (dot) {
+    const state = dot.className.match(/is-(low|mid|high)/)?.[1] || '';
+    const pill = el('span', `card-discount is-${state}`);
+    const pct = el('span', 'card-discount-pct', `${Math.max(1, Math.round(discountPercent(product)))}%`);
+    pct.setAttribute('aria-hidden', 'true');
+    pill.append(dot, pct);
+    top.appendChild(pill);
+  } else if (fallbackDiscount) {
+    top.appendChild(el('span', 'card-discount', fallbackDiscount));
+  }
+  const acts = el('div', 'card-actions');
+  for (const b of actions) if (b) acts.appendChild(b);
+  top.appendChild(acts);
+  return top;
 }
 
 export function cardImage(src, alt) {
@@ -418,37 +434,306 @@ export function cardImage(src, alt) {
   return imgWrap;
 }
 
-// `each` is the engine's per-item price (`offer.eachPrice`) or null. It renders
-// wherever the unit price renders — the two answer different questions ("is
-// this good value" vs "what does one of them cost") and a card that shows one
-// without the other is the inconsistency this parameter exists to close.
-export function priceRow(price, oldPrice, currency, discountLabel, up, each = null, sale = null, review = false, sizeOptions = null) {
-  const prices = el('div', 'card-prices');
-  if (price != null) {
-    prices.appendChild(el('span', 'price', money(price, currency)));
-    if (oldPrice != null) prices.appendChild(el('span', 'old-price', money(oldPrice, currency)));
-    if (discountLabel) prices.appendChild(el('span', 'discount', discountLabel));
-    if (review) prices.appendChild(el('span', 'sale-quantity', t('market.saleReview')));
-    if (sale?.count > 1) {
-      const [quantity, perItem] = salePresentation(sale, money(sale.packagePrice, currency));
-      prices.appendChild(el('span', 'sale-quantity', quantity));
-      prices.appendChild(el('span', 'sale-package-price', perItem));
-    }
-    for (const label of sizeOptionsPresentation(sizeOptions, value=>money(value,currency))) prices.appendChild(el('span','unit-price',label));
-    const upLabel = unitPriceLabel({ up });
-    if (upLabel) prices.appendChild(el('span', 'unit-price', upLabel));
-    const eachLabel = sale?.count > 1 && each?.pack === sale.count ? '' : eachPriceLabel(each);
-    if (eachLabel) prices.appendChild(el('span', 'each-price', eachLabel));
-  } else {
-    prices.appendChild(el('span', 'no-price', t('market.tapForPrice')));
+// The store's logo, named by tooltip + accessible name; its name as text when
+// no logo is held or the image fails.
+function storeMark(id, label) {
+  const mark = el('span', 'card-store');
+  mark.title = label;
+  const icon = storeIcon(id || label);
+  if (icon.tagName !== 'IMG') {
+    mark.textContent = label;
+    mark.classList.add('is-text');
+    return mark;
   }
-  return prices;
+  mark.setAttribute('role', 'img');
+  mark.setAttribute('aria-label', label);
+  icon.addEventListener('error', () => {
+    mark.textContent = label;
+    mark.classList.add('is-text');
+    mark.removeAttribute('role');
+    mark.removeAttribute('aria-label');
+  }, { once: true });
+  mark.appendChild(icon);
+  return mark;
 }
 
-function onlineCard(store, item, badge, up) {
+// Whole days a flyer offer has left (0 = its last day, negative = ended), or
+// null without a validity date. Calendar days, local time.
+export function daysLeft(validTo) {
+  if (!validTo) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(validTo));
+  const end = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(validTo);
+  if (Number.isNaN(end.getTime())) return null;
+  end.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((end - today) / 86400000);
+}
+
+function daysTag(validTo) {
+  const n = daysLeft(validTo);
+  if (n == null) return null;
+  const text = n < 0 ? t('market.ended')
+    : n === 0 ? t('market.lastDay')
+      : t(`market.daysLeft.${n === 1 ? 'one' : getLang() === 'ar' && n > 10 ? 'many' : 'other'}`, { count: n });
+  const tag = el('span', `card-days${n < 0 ? ' is-ended' : n <= 1 ? ' is-urgent' : ''}`, text);
+  tag.title = t('market.flyerUntil', { date: fmtDateShort(validTo) });
+  return tag;
+}
+
+// Brand logo from the identity registry: the engine's brand slug, else the
+// online listing's brand name slugged the same way (archived marks included).
+// The name as text only where `allowText`: flyer names no longer carry the
+// brand, while an online store's brand field can hold its own slogan.
+const slugify = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+function brandMark(slug, brand, name, allowText = true) {
+  const key = slug || slugify(brand);
+  const asset = key ? BRAND_ASSETS[key] || BRAND_ASSETS[`archive-${key}`] : null;
+  const label = brand || slug || '';
+  const textMark = () => {
+    if (!allowText || !brand || normalizeText(name).includes(normalizeText(brand))) return null;
+    const span = el('span', 'card-brand-name', brand);
+    span.dir = 'auto';
+    return span;
+  };
+  if (!asset) return textMark();
+  const img = el('img', 'card-brand-logo');
+  img.src = new URL('../' + asset.file, import.meta.url).href;
+  if (asset.background) img.style.backgroundColor = asset.background;
+  img.alt = label;
+  img.title = label;
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.addEventListener('error', () => {
+    const text = textMark();
+    if (text) img.replaceWith(text);
+    else img.remove();
+  }, { once: true });
+  return img;
+}
+
+// The name row (bold, one line) and its ▸ panel. The triangle shows at once
+// when the panel has lines; a name cut short is found in one batched pass
+// (all widths read, then all toggles written) after the cards are attached,
+// and again on resize and when the web fonts land.
+let pendingTitles = [];
+let titleTimer = 0;
+function syncTitles(titles) {
+  const closed = titles.filter((t) => !t.classList.contains('is-open'));
+  const show = closed.map((t) => {
+    const name = t.querySelector('.card-name');
+    return t.dataset.more === '1' || name.scrollWidth > name.clientWidth + 1;
+  });
+  closed.forEach((t, i) => { t.querySelector('.card-more-toggle').hidden = !show[i]; });
+}
+function flushTitleSync() {
+  titleTimer = 0;
+  const ready = pendingTitles.filter((t) => t.isConnected);
+  // Not attached yet: one more pass shortly; after that, resize covers it.
+  const later = pendingTitles.filter((t) => !t.isConnected && !t.dataset.retried);
+  later.forEach((t) => { t.dataset.retried = '1'; });
+  pendingTitles = later;
+  if (later.length) titleTimer = setTimeout(flushTitleSync, 100);
+  syncTitles(ready);
+}
+function queueTitleSync(title) {
+  pendingTitles.push(title);
+  if (!titleTimer) titleTimer = setTimeout(flushTitleSync, 0);
+}
+const syncAllTitles = () => syncTitles([...document.querySelectorAll('.card-title')]);
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(syncAllTitles, 150);
+});
+document.fonts?.ready.then(syncAllTitles);
+
+// Whether a name reads right-to-left (its first strong letter is Arabic), so
+// the ▸ follows the name in its own reading order.
+const FIRST_STRONG = /[A-Za-z\u00C0-\u024F]|[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+const readsRtl = (s) => {
+  const m = FIRST_STRONG.exec(s || '');
+  return !!m && !/[A-Za-z\u00C0-\u024F]/.test(m[0]);
+};
+
+function cardTitle(name, more) {
+  const frag = document.createDocumentFragment();
+  const title = el('div', 'card-title');
+  title.dir = readsRtl(name) ? 'rtl' : 'ltr';
+  const nameEl = el('div', 'card-name', name);
+  nameEl.dir = 'auto';
+  const toggle = el('button', 'card-more-toggle');
+  toggle.type = 'button';
+  toggle.hidden = !more.length;
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-label', t('market.moreDetails'));
+  const panel = el('div', 'card-more');
+  panel.hidden = true;
+  for (const line of more) {
+    const row = el('div', null, line);
+    row.dir = 'auto';
+    panel.appendChild(row);
+  }
+  title.dataset.more = more.length ? '1' : '0';
+  toggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const open = !title.classList.contains('is-open');
+    title.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    panel.hidden = !open;
+  });
+  title.append(nameEl, toggle);
+  frag.append(title, panel);
+  queueTitleSync(title);
+  return frag;
+}
+
+function priceNumber(value) {
+  return Number(value).toFixed(2);
+}
+
+// Current price (70%) and the struck old price (30%), on one line. The old
+// price drops the currency the current price already states.
+function cardPrice(price, oldPrice, currency = 'SAR') {
+  const row = el('div', 'card-prices');
+  if (price == null) {
+    row.appendChild(el('span', 'no-price', t('market.tapForPrice')));
+    return row;
+  }
+  const now = el('span', 'price');
+  now.append(el('span', 'price-value', priceNumber(price)), el('span', 'price-cur', currency || 'SAR'));
+  row.appendChild(now);
+  if (oldPrice != null) {
+    row.classList.add('has-old');
+    const old = el('span', 'old-price', priceNumber(oldPrice));
+    old.title = money(oldPrice, currency || 'SAR');
+    row.appendChild(old);
+  }
+  return row;
+}
+
+// The last line: size / count first, then the unit and per-item prices. `each`
+// is the engine's per-item price (`offer.eachPrice`) — it renders wherever the
+// unit price renders, since the two answer different questions.
+function cardFoot({ size, up, each, sale, currency }) {
+  const what = [];
+  const cost = [];
+  if (size) what.push(size);
+  if (sale?.count > 1) {
+    const [count, perItem] = saleCompact(sale, money(sale.packagePrice, currency || 'SAR'));
+    what.push(count);
+    cost.push(perItem);
+  }
+  const upLabel = unitPriceLabel({ up });
+  if (upLabel) cost.push(upLabel);
+  const eachLabel = sale?.count > 1 && each?.pack === sale.count ? '' : eachPriceLabel(each);
+  if (eachLabel) cost.push(eachLabel);
+  if (!what.length && !cost.length) return null;
+  const foot = el('div', 'card-foot');
+  if (what.length) {
+    const w = el('span', 'card-foot-size', what.join(' · '));
+    w.dir = 'auto';
+    foot.appendChild(w);
+  }
+  if (cost.length) foot.appendChild(el('span', 'card-foot-cost', cost.join(' · ')));
+  return foot;
+}
+
+// The card body every source shares.
+//   spec: { store:{id,label}, validTo, brandSlug, brand, brandText, name,
+//           altName, price, oldPrice, currency, size, up, each, sale, review,
+//           more:[lines] }
+export function cardBody(spec) {
+  const body = el('div', 'card-body');
+  const info = el('div', 'card-info');
+  info.appendChild(storeMark(spec.store.id, spec.store.label));
+  const days = daysTag(spec.validTo);
+  if (days) info.appendChild(days);
+  const brand = brandMark(spec.brandSlug, spec.brand, spec.name, spec.brandText !== false);
+  if (brand) info.appendChild(brand);
+  body.appendChild(info);
+
+  const more = [];
+  if (spec.altName && spec.altName !== spec.name) more.push(spec.altName);
+  if (spec.sale?.count > 1) more.push(...salePresentation(spec.sale, money(spec.sale.packagePrice, spec.currency || 'SAR')));
+  if (spec.review) more.push(t('market.saleReview'));
+  more.push(...(spec.more || []));
+  body.appendChild(cardTitle(spec.name, more));
+
+  body.appendChild(cardPrice(spec.price, spec.oldPrice, spec.currency));
+  const foot = cardFoot(spec);
+  if (foot) body.appendChild(foot);
+  return body;
+}
+
+// A flyer offer's body (search grid + Browse): the size line follows the same
+// rule as before — a reading or a stored package, never a sale's pack.
+export function flyerCardBody(offer, name, { brand = '', up = null, more = [] } = {}) {
+  const altName = name === offer.nameAr ? offer.name : offer.nameAr;
+  const showSize = offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'));
+  return cardBody({
+    store: { id: offer.store, label: storeLabel(offer.store) },
+    validTo: offer.validTo,
+    brandSlug: offer.brandSlug || null,
+    brand,
+    name,
+    altName: altName ? String(altName).trim() : '',
+    price: offer.price,
+    oldPrice: offer.oldPrice ?? null,
+    currency: offer.currency || 'SAR',
+    size: showSize ? offerSizeLabel(offer) : '',
+    up,
+    each: offer.eachPrice || null,
+    sale: offer.saleQuantity || null,
+    review: offer.quantityReviewRequired === true,
+    more,
+  });
+}
+
+// The card's Add-to-Cart button; `entry` is what addToCart stores.
+export function cartButton(name, entry) {
+  const cartBtn = el('button', 'card-watch card-cart', '🛒');
+  cartBtn.type = 'button';
+  cartBtn.title = t('market.addCart');
+  cartBtn.setAttribute('aria-label', t('market.addCartAria', { name }));
+  cartBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addToCart(entry);
+    cartBtn.textContent = '✓';
+    cartBtn.classList.add('is-added');
+    setTimeout(() => {
+      if (!cartBtn.isConnected) return;
+      cartBtn.textContent = '🛒';
+      cartBtn.classList.remove('is-added');
+    }, 1200);
+  });
+  return cartBtn;
+}
+
+// The flyer offer as a cart line — the same id as the viewer sheet's add
+// (offer.id), so quantities merge whichever path added the product.
+export function flyerCartEntry(offer) {
+  return {
+    id: offer.id,
+    store: offer.store,
+    name: offer.name || null,
+    nameAr: offer.nameAr || null,
+    price: offer.price,
+    oldPrice: offer.oldPrice ?? null,
+    currency: offer.currency || 'SAR',
+    image: offer.imageUrl || null,
+    sourceUrl: offer.sourceUrl || null,
+    brochureId: offer.brochureId || null,
+    pageIndex: Number.isInteger(offer.pageIndex) ? offer.pageIndex : null,
+    validTo: offer.validTo || null,
+  };
+}
+
+function onlineCard(store, item, up) {
   const a = el('a', 'card');
-  const discountIndicator = discountDot(item);
-  if (discountIndicator) a.appendChild(discountIndicator);
   // Only navigate when the result carries a real absolute product URL — never
   // send the user to a broken/relative href (a card should always lead exactly
   // where it says, or stay put).
@@ -459,49 +744,17 @@ function onlineCard(store, item, badge, up) {
     a.rel = 'noopener';
   }
 
-  // Add to Cart: one tap puts THIS product on the local shopping list (same
-  // list the flyer viewer's sheet feeds), no page-leaving detour required.
+  const actions = [];
   if (item.id != null && item.price != null) {
-    const cartBtn = el('button', 'card-watch card-cart', '🛒');
-    cartBtn.type = 'button';
-    cartBtn.title = t('market.addCart');
-    cartBtn.setAttribute('aria-label', t('market.addCartAria', { name: item.name }));
-    cartBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      addToCart({
-        id: `${store.id}:${item.id}`,
-        store: store.id,
-        name: item.name,
-        nameAr: null,
-        price: item.price,
-        oldPrice: item.oldPrice ?? null,
-        currency: item.currency || 'SAR',
-        image: item.image || null,
-        sourceUrl: href,
-        validTo: null,
-      });
-      cartBtn.textContent = '✓';
-      cartBtn.classList.add('is-added');
-      setTimeout(() => {
-        if (!cartBtn.isConnected) return;
-        cartBtn.textContent = '🛒';
-        cartBtn.classList.remove('is-added');
-      }, 1200);
-    });
-    a.appendChild(cartBtn);
-  }
-
-  // Watch bell: one tap sets a target-price watch on THIS product.
-  //   • Amazon — an exact-product watch: the engine looks up THAT ASIN only
-  //     by its stable id (Keepa-style). Marketplace SKUs have no cross-store
-  //     equivalent, so this behaviour is preserved exactly.
-  //   • every other store — a cross-source watch: the engine generalizes it to
-  //     product + brand and includes Amazon in the sweep
-  //     (query + name + size) but let the engine super-search ALL stores and
-  //     this week's flyers daily and take the lowest trustworthy price, exactly
-  //     like the summary's "Watch price". One bell, best price everywhere.
-  if (item.id != null && item.price != null) {
+    // Watch bell: one tap sets a target-price watch on THIS product.
+    //   • Amazon — an exact-product watch: the engine looks up THAT ASIN only
+    //     by its stable id (Keepa-style). Marketplace SKUs have no cross-store
+    //     equivalent, so this behaviour is preserved exactly.
+    //   • every other store — a cross-source watch: the engine generalizes it to
+    //     product + brand and includes Amazon in the sweep
+    //     (query + name + size) but let the engine super-search ALL stores and
+    //     this week's flyers daily and take the lowest trustworthy price.
+    //     One bell, best price everywhere.
     const bell = el('button', 'card-watch', '🔔');
     bell.type = 'button';
     const exact = store.id === 'amazon';
@@ -541,87 +794,58 @@ function onlineCard(store, item, badge, up) {
             },
       );
     });
-    a.appendChild(bell);
+    actions.push(bell);
+    // Add to Cart: one tap puts THIS product on the local shopping list (same
+    // list the flyer viewer's sheet feeds), no page-leaving detour required.
+    actions.push(cartButton(item.name, {
+      id: `${store.id}:${item.id}`,
+      store: store.id,
+      name: item.name,
+      nameAr: null,
+      price: item.price,
+      oldPrice: item.oldPrice ?? null,
+      currency: item.currency || 'SAR',
+      image: item.image || null,
+      sourceUrl: href,
+      validTo: null,
+    }));
   }
-
+  a.appendChild(cardTop(item, actions, item.discountLabel));
   a.appendChild(cardImage(item.image, item.name));
-
-  const body = el('div', 'card-body');
-  if (badge) body.appendChild(matchChip(badge));
-  body.appendChild(storeBadge(store.label, store.color));
-  const name = el('div', 'card-name', item.name);
-  name.dir = 'auto';
-  body.appendChild(name);
-  const meta = [item.brand, item.size].filter(Boolean).join(' · ');
-  if (meta) body.appendChild(el('div', 'card-meta', meta));
   // No per-item price for an ONLINE listing, ever: it never passed through the
   // engine, so nothing computed one, and this module must not derive it (see
   // match.js eachPriceLabel).
-  body.appendChild(priceRow(item.price, item.oldPrice, item.currency, item.discountLabel, up, null));
-  a.appendChild(body);
+  a.appendChild(cardBody({
+    store: { id: store.id, label: store.label },
+    brand: item.brand || '',
+    brandText: false,
+    name: item.name,
+    price: item.price,
+    oldPrice: item.oldPrice ?? null,
+    currency: item.currency || 'SAR',
+    size: item.size || '',
+    up,
+  }));
   return a;
 }
 
-function flyerCard(listing, badge, up) {
+function flyerCard(listing, up) {
   const offer = listing.offer;
   // A div with button semantics, NOT a <button>: the card carries its own
   // Add-to-Cart <button> and buttons cannot nest. Same keyboard contract.
   const card = el('div', 'card card-flyer');
-  const discountIndicator = discountDot(offer);
-  if (discountIndicator) card.appendChild(discountIndicator);
   card.setAttribute('role', 'button');
   card.tabIndex = 0;
   const displayName = listing.name;
   card.title = t('market.flyerCardTitle', { name: displayName });
 
-  // Add to Cart — the same one-tap gesture online cards have (consistent
-  // regardless of source). Same id as the viewer sheet's add (offer.id), so
-  // quantities merge whichever path added the product.
-  const cartBtn = el('button', 'card-watch card-cart', '🛒');
-  cartBtn.type = 'button';
-  cartBtn.title = t('market.addCart');
-  cartBtn.setAttribute('aria-label', t('market.addCartAria', { name: displayName }));
-  cartBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    addToCart({
-      id: offer.id,
-      store: offer.store,
-      name: offer.name || null,
-      nameAr: offer.nameAr || null,
-      price: offer.price,
-      oldPrice: offer.oldPrice ?? null,
-      currency: offer.currency || 'SAR',
-      image: offer.imageUrl || null,
-      sourceUrl: offer.sourceUrl || null,
-      brochureId: offer.brochureId || null,
-      pageIndex: Number.isInteger(offer.pageIndex) ? offer.pageIndex : null,
-      validTo: offer.validTo || null,
-    });
-    cartBtn.textContent = '✓';
-    cartBtn.classList.add('is-added');
-    setTimeout(() => {
-      if (!cartBtn.isConnected) return;
-      cartBtn.textContent = '🛒';
-      cartBtn.classList.remove('is-added');
-    }, 1200);
-  });
-  card.appendChild(cartBtn);
-
+  card.appendChild(cardTop(offer, [cartButton(displayName, flyerCartEntry(offer))]));
   card.appendChild(cardImage(offer.imageUrl, displayName));
-
-  const body = el('div', 'card-body');
-  if (badge) body.appendChild(matchChip(badge));
-  const until = offer.validTo ? t('market.flyerUntil', { date: fmtDateShort(offer.validTo) }) : t('market.flyerTag');
-  body.appendChild(storeBadge(storeLabel(offer.store), storeColor(offer.store), until));
-  const name = el('div', 'card-name', displayName);
-  name.dir = 'auto';
-  body.appendChild(name);
-  if (offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'))) body.appendChild(el('div', 'card-size', offerSizeLabel(offer)));
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', up, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true));
-  card.appendChild(body);
+  card.appendChild(flyerCardBody(offer, displayName, { brand: listing.brand, up }));
 
   card.addEventListener('click', () => openFlyerOffer(offer));
   card.addEventListener('keydown', (e) => {
+    if (e.target !== card) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       openFlyerOffer(offer);
@@ -870,7 +1094,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       const grid = el('div', 'results-grid');
       for (const { e, badge } of entries) {
       const up = upSuppressed.has(e) ? null : entryUnit(e);
-      const card = e.kind === 'online' ? onlineCard(e.store, e.it, badge, up) : flyerCard(e.listing, badge, up);
+      const card = e.kind === 'online' ? onlineCard(e.store, e.it, up) : flyerCard(e.listing, up);
       // Featured LEARNING (featured.js): every real engagement with a card —
       // open, add-to-cart, watch — strengthens this query's relationship with
       // the chosen product's signals/brand. Capture-phase so inner buttons

@@ -1,4 +1,3 @@
-import { offerSizeLabel } from './salePresentation.js';
 import { BRAND_ASSETS } from './identityAssets.js';
 // browsePage.js — the Browse pillar's UI (BROWSE-DESIGN.md §8): "walk this
 // week's market". Three views under one hash namespace, all thin compositions
@@ -19,19 +18,17 @@ import { BRAND_ASSETS } from './identityAssets.js';
 // empty state and never breaks the rest of the app. Flyer prices are
 // machine-extracted — every card opens the flyer itself (openFlyerOffer).
 
-import { loadBrowseSummary, browseOffers, storeLabel, storeColor, cleanOfferName, ENGINE_STORES } from './brochure.js';
+import { loadBrowseSummary, browseOffers, cleanOfferName, ENGINE_STORES } from './brochure.js';
 import { createMemory, adaptiveSearch } from './core.js';
 import {
-  el, cardImage, priceRow, storeBadge, openFlyerOffer, fmtDateShort, createMarketplace,
+  el, cardTop, cardImage, flyerCardBody, cartButton, flyerCartEntry, openFlyerOffer, createMarketplace,
 } from './marketplace.js?v=20260924.2';
 import {
   ONLINE_STORES, BEST_EFFORT_ONLINE_STORES, rankOnlineResults,
 } from './onlineStores.js';
-import { addToCart } from './cart.js';
 import { openWatchDialog } from './alertsPage.v2.js';
 import { historyQuery } from './viewer/insights.js';
 import { t, getLang } from './i18n.js';
-import { discountDot } from './discountStatus.js';
 
 const RAILS = ['drops', 'lowest-ever'];
 const SORTS = ['discount', 'price'];
@@ -108,7 +105,9 @@ function emptyBlock(text) {
   return el('p', 'browse-empty', text);
 }
 
-// The Browse offer card: marketplace primitives + honest Browse badges.
+// The Browse offer card: the marketplace's compact card, plus Browse's
+// history-backed notes (lowest ever, rare, multi-buy) behind the name's ▸ —
+// the dot's percentage is the price drop and "+N days" says when it ends.
 function browseCard(offer) {
   const lang = getLang();
   const name =
@@ -119,44 +118,9 @@ function browseCard(offer) {
   // Add-to-Cart/Watch <button>s and buttons cannot nest (same contract as the
   // marketplace's flyerCard). Same keyboard behaviour.
   const card = el('div', 'card card-flyer browse-card');
-  const discountIndicator = discountDot(offer);
-  if (discountIndicator) card.appendChild(discountIndicator);
   card.setAttribute('role', 'button');
   card.tabIndex = 0;
   card.title = t('market.flyerCardTitle', { name });
-
-  // Add to Cart — the same one-tap gesture search cards have (consistent
-  // regardless of source). Same id as the viewer sheet's add (offer.id), so
-  // quantities merge whichever path added the product.
-  const cartBtn = el('button', 'card-watch card-cart', '🛒');
-  cartBtn.type = 'button';
-  cartBtn.title = t('market.addCart');
-  cartBtn.setAttribute('aria-label', t('market.addCartAria', { name }));
-  cartBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    addToCart({
-      id: offer.id,
-      store: offer.store,
-      name: offer.name || null,
-      nameAr: offer.nameAr || null,
-      price: offer.price,
-      oldPrice: offer.oldPrice ?? null,
-      currency: offer.currency || 'SAR',
-      image: offer.imageUrl || null,
-      sourceUrl: offer.sourceUrl || null,
-      brochureId: offer.brochureId || null,
-      pageIndex: Number.isInteger(offer.pageIndex) ? offer.pageIndex : null,
-      validTo: offer.validTo || null,
-    });
-    cartBtn.textContent = '✓';
-    cartBtn.classList.add('is-added');
-    setTimeout(() => {
-      if (!cartBtn.isConnected) return;
-      cartBtn.textContent = '🛒';
-      cartBtn.classList.remove('is-added');
-    }, 1200);
-  });
-  card.appendChild(cartBtn);
 
   // Watch bell — the cross-store grocery watch, exactly the search idiom:
   // keep the product identity (query + name + size) and let the engine
@@ -190,44 +154,29 @@ function browseCard(offer) {
       },
     });
   });
-  card.appendChild(bell);
 
+  // Add to Cart — the same one-tap gesture search cards have.
+  card.appendChild(cardTop(offer, [bell, cartButton(name, flyerCartEntry(offer))]));
   card.appendChild(cardImage(offer.imageUrl, name));
 
-  // Badge chips (top of the body, most trustworthy first, max two): the
-  // history-backed claim beats the advertised one, urgency comes last.
-  const chips = [];
+  // Browse's notes, most trustworthy first: the history-backed claim beats
+  // the advertised one.
+  const notes = [];
   const b = offer.badges || {};
-  if (b.lowestEver) chips.push(el('span', 'bb bb-low', t('browse.badge.lowestEver', { weeks: b.lowestEver.weeks })));
-  if (b.drop) chips.push(el('span', 'bb bb-drop', `−${b.drop}%`));
-  if (b.rare && chips.length < 2) chips.push(el('span', 'bb bb-rare', t('browse.badge.rare')));
-  if (b.multibuy && chips.length < 2) chips.push(el('span', 'bb bb-multi', t('browse.badge.multibuy')));
-  if (b.endsInDays != null && chips.length < 2) {
-    chips.push(el('span', 'bb bb-ends', b.endsInDays === 0 ? t('browse.badge.endsToday') : t('browse.badge.endsTomorrow')));
-  }
-
-  const body = el('div', 'card-body');
-  if (chips.length) {
-    const row = el('div', 'browse-badges');
-    for (const c of chips.slice(0, 2)) row.appendChild(c);
-    body.appendChild(row);
-  }
-  const until = offer.validTo ? t('market.flyerUntil', { date: fmtDateShort(offer.validTo) }) : t('market.flyerTag');
-  body.appendChild(storeBadge(storeLabel(offer.store), storeColor(offer.store), until));
-  const nameEl = el('div', 'card-name', name);
-  nameEl.dir = 'auto';
-  body.appendChild(nameEl);
-  if (offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'))) body.appendChild(el('div', 'card-size', offerSizeLabel(offer)));
+  if (b.lowestEver) notes.push(t('browse.badge.lowestEver', { weeks: b.lowestEver.weeks }));
+  if (b.rare) notes.push(t('browse.badge.rare'));
+  if (b.multibuy) notes.push(t('browse.badge.multibuy'));
+  const brand = (lang === 'ar' ? offer.brandNameAr || offer.brandNameEn : offer.brandNameEn || offer.brandNameAr) || '';
   // No unit price on a Browse card — that is unchanged, and deliberate: the
   // /browse projection omits `search_text` for cost, which would make its unit
   // price disagree with Search on 1,488 offers (browse/api.js cardDoc). The
   // PER-ITEM price is unaffected by that omission on all 74,173 live offers, so
   // it is safe to show and it is the one a browsing shopper can act on.
-  body.appendChild(priceRow(offer.price, offer.oldPrice, offer.currency, '', null, offer.eachPrice || null, offer.saleQuantity || null, offer.quantityReviewRequired === true));
-  card.appendChild(body);
+  card.appendChild(flyerCardBody(offer, name, { brand, up: null, more: notes }));
 
   card.addEventListener('click', () => openFlyerOffer(offer));
   card.addEventListener('keydown', (e) => {
+    if (e.target !== card) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       openFlyerOffer(offer);

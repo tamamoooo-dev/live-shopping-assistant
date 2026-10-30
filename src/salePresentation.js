@@ -27,6 +27,15 @@ export function salePresentation(sale, price, lang = getLang()) {
   return [`Offer: ${count} ${u[5]}${size ? ` · ${size} per ${u[4]}` : ''}`, `${price} per ${u[4]} within the offer`];
 }
 
+// The card's last line: the multi-buy count ("3 حبات") and its per-item price
+// ("4.99 SAR للحبة"); the full terms stay in salePresentation.
+export function saleCompact(sale, price, lang = getLang()) {
+  if (!(sale?.count > 1)) return [];
+  const count = sale.count, u = units[sale.unitKind] || units.item;
+  if (lang === 'ar') return [count === 2 ? u[1] : `${count} ${count <= 10 ? u[2] : u[0]}`, `${price} ${u[3]}`];
+  return [`${count} ${u[5]}`, `${price} per ${u[4]}`];
+}
+
 export function offerSizeLabel(offer,lang=getLang()) {
   if (!offer?.sizeReading && !offer?.sizeDisplayAr && !offer?.sizeDisplayEn && offer?.priceBasis && ['kg','l'].includes(offer.priceBasis.unit)
     && !/[\d٠-٩۰-۹]/u.test(offer.size || '')) return lang==='ar'
