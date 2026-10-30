@@ -14,23 +14,12 @@ import { createMemory, adaptiveSearch } from './core.js';
 import { storeIcon } from './storeIdentity.js';
 import { initKnowledgeSearch } from './knowledgeUI.js';
 import { rememberSearch } from './searchPreferences.js';
-import {
-  loadBrochures,
-  brochureForStore,
-  isExternalBrochure,
-  isActiveBrochure,
-  pricesForQuery,
-  searchOffers,
-  storeLabel,
-} from './brochure.js';
-import { openBrochureViewer } from './viewer.js?v=20260924.2';
+import { loadBrochures, searchOffers, storeLabel } from './brochure.js';
 import { initBrochuresPage } from './brochures.js?v=20260924.2';
 import { initBrowsePage } from './browsePage.js?v=20260924.2';
-import { sizeLabel } from './match.js';
-import { computeComparison, flyerListing } from './compare.js';
-import { summaryElement } from './summary.js';
-import { createMarketplace, openFlyerOffer } from './marketplace.js?v=20260924.2';
-import { initAlertsPage, refreshAlertsBadge, openWatchDialog } from './alertsPage.v2.js?v=20260825.7';
+import { flyerListing } from './compare.js';
+import { createMarketplace } from './marketplace.js?v=20260924.2';
+import { initAlertsPage, refreshAlertsBadge } from './alertsPage.v2.js?v=20260825.7';
 import { initCartPage } from './cartPage.js?v=20260924.2';
 import { cartCount, CART_EVENT } from './cart.js';
 import { t, tn, applyI18n, initLangSwitch } from './i18n.js';
@@ -306,18 +295,11 @@ async function runSearch(query) {
   rememberSearch(q);
   saveRecent(q);
 
-  // The shopping summary sits ABOVE the results and is filled once every store
-  // has answered (it needs all offers to compare). Show a placeholder now so its
-  // slot is reserved at the top.
-  const summarySlot = document.createElement('div');
-  summarySlot.className = 'summary-slot';
-  summarySlot.appendChild(summarySkeleton());
-  results.appendChild(summarySlot);
-
-  // ONE unified marketplace below the summary: every result is an offer —
-  // live online results and this week's flyer offers in a single ranked grid,
-  // the source shown as a lightweight badge. Per-store status (and the weekly
-  // flyer chips) live in the compact sources strip above the grid. The ranking
+  // ONE unified marketplace: every result is an offer — live online results
+  // and this week's flyer offers in a single ranked grid, the source shown as
+  // a lightweight badge. Per-store counts live in the one-line sources strip
+  // above the grid (logo + number). The shopping summary that used to sit
+  // above it is hidden; store flyers stay on the Brochures tab. The ranking
   // perspective (lowest price vs best value) is a remembered daily-use preference.
   // 'discount' was replaced by 'featured' (Search Intelligence milestone) —
   // a remembered Most-discounted preference migrates to the tab that took its
@@ -328,14 +310,10 @@ async function runSearch(query) {
     onSort: (mode) => memory.set('rank', mode),
     includeFlyers: brochures,
   });
-  if (brochures) {
-    for (const s of stores) fillFlyer(market.flyerSlot(s.id), s.id, token); // best-effort
-  }
 
   // Physical-store flyer offers (the Brochure Engine's structured offers) join
   // the same grid as soon as the engine answers — including stores that have
-  // no live search at all. The SAME relevance pipeline the comparison uses
-  // (flyerListing) decides what qualifies, so grid and summary always agree.
+  // no live search at all. flyerListing (compare.js) decides what qualifies.
   const brochureSearch = brochures
     ? searchOffers(q, OFFERS_FETCH_LIMIT)
     .then((data) => {
@@ -355,7 +333,6 @@ async function runSearch(query) {
     })
     : Promise.resolve(0);
 
-  const tagged = []; // { store, it } across all stores — feeds the comparison
   let total = 0;
   await Promise.all(
     stores.map(async (s) => {
@@ -363,10 +340,9 @@ async function runSearch(query) {
         const { results: found } = await adaptiveSearch(s.provider, q, memory);
         if (inFlight !== token) return;
         // Smart ranking + irrelevance filtering per store; only genuinely
-        // matching results enter the marketplace and the comparison.
+        // matching results enter the marketplace.
         const { primary, related, hidden } = rankOnlineResults(found, q);
         total += primary.length;
-        for (const it of primary) tagged.push({ store: s, it });
         market.addOnline(s, primary, hidden, related);
       } catch (err) {
         if (inFlight !== token) return;
@@ -385,134 +361,6 @@ async function runSearch(query) {
     sources: tn('search.sourcesInline', selected.length),
     q,
   });
-  fillSummary(summarySlot, q, tagged, token, brochures);
-}
-
-// Build and render the shopping summary once all stores have answered. The
-// comparison engine (compare.js) weighs BOTH worlds — the live online results
-// AND this week's flyer offers — so the recommendation is source-agnostic.
-// Best-effort: flyer offers and Price History are each optional inputs; if
-// there's nothing to compare at all the slot is removed.
-async function fillSummary(slot, query, tagged, token, includeBrochures) {
-  // Price History is catalog-wide and query-driven: ask the engine for ANY
-  // query (session-cached, best-effort — null when nothing is recorded yet).
-  const [prices, offersData] = await Promise.all([
-    includeBrochures ? pricesForQuery(query).catch(() => null) : null,
-    // The same session-cached call the flyer panel makes — no extra request.
-    includeBrochures ? searchOffers(query, OFFERS_FETCH_LIMIT).catch(() => null) : null,
-  ]);
-  if (inFlight !== token) return;
-  const comparison = computeComparison(query, tagged, (offersData && offersData.offers) || [], prices, storeLabel);
-  if (!comparison) {
-    slot.remove();
-    return;
-  }
-  slot.replaceChildren(
-    summaryElement(comparison, storeLabel, {
-      onOpenListing: (listing) => {
-        if (listing.source === 'flyer' && listing.offer) openFlyerOffer(listing.offer);
-      },
-      onWatch: (model) => {
-        const h = model.headline.listing;
-        openWatchDialog({
-          kind: 'grocery',
-          provider: h.store?.id || h.store || null,
-          productId: h.source === 'online' ? h.it?.id : h.offer?.id,
-          registryProductId: h.productId || null,
-          query,
-          label: `${query}${sizeLabel(h.size) ? ` · ${sizeLabel(h.size)}` : ''}`,
-          sizeText: h.name, // the reference size for the engine's size gate
-          suggestedPrice: h.price,
-          currentPrice: h.price,
-          link: h.source === 'online' ? h.link : null,
-          image: h.image || null,
-          brand: h.brand || null,
-          listing: h.source === 'online'
-            ? {
-                ...h.it,
-                provider: h.store?.id || h.store || null,
-                registryProductId: h.productId || null,
-              }
-            : {
-                id: h.offer?.id,
-                provider: h.store?.id || h.store || h.offer?.store || null,
-                name: h.offer?.name || h.name,
-                nameAr: h.offer?.nameAr || null,
-                image: h.offer?.imageUrl || h.image || null,
-                link: h.offer?.sourceUrl || null,
-                registryProductId: h.productId || null,
-              },
-        });
-      },
-    }),
-  );
-}
-
-// --- rendering -----------------------------------------------------------
-// Result cards, the unified grid, and the sources strip live in
-// marketplace.js; this file keeps only the summary skeleton and the
-// weekly-flyer chip that decorates the strip.
-
-function summarySkeleton() {
-  const c = document.createElement('div');
-  c.className = 'summary skeleton-summary';
-  c.innerHTML =
-    '<div class="sk-line sk" style="width:40%"></div>' +
-    '<div class="sk-line sk" style="width:65%;height:22px"></div>' +
-    '<div class="sk-line sk" style="width:55%"></div>';
-  return c;
-}
-
-function fmtDateShort(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-}
-
-// --- Brochure Engine + Price History integration -------------------------
-// These decorate the search results with two read-only capabilities from the
-// Brochure Engine: price intelligence for tracked products, and each store's
-// weekly flyer. All fetches are best-effort and token-guarded — if the engine
-// is unreachable, or a newer search has started, they add nothing.
-
-// A "flyer" chip for one search store, appended to `slot` if that store has a
-// brochure. The chip carries the flyer's validity date, and is visibly marked
-// stale when the newest flyer the engine holds has already expired (the
-// "invisible staleness" gap, HANDOFF §14.D.c). A viewable page set opens
-// INSIDE the app (shared viewer); an external link brochure (the store's
-// official offers page) opens in a new tab.
-async function fillFlyer(slot, storeId, token) {
-  if (!slot) return;
-  const b = await brochureForStore(storeId);
-  if (inFlight !== token || !b) return;
-  const label = (STORE_BY_ID[storeId] || {}).label || storeLabel(b.store);
-  const active = isActiveBrochure(b);
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'store-flyer';
-  const text = document.createElement('span');
-  text.textContent = t('flyer.chip');
-  btn.appendChild(text);
-  const date = document.createElement('span');
-  date.className = 'flyer-date';
-  if (active) {
-    date.textContent = b.validTo ? t('flyer.until', { date: fmtDateShort(b.validTo) }) : t('flyer.thisWeek');
-  } else {
-    btn.classList.add('is-stale');
-    date.textContent = b.validTo ? t('flyer.expired', { date: fmtDateShort(b.validTo) }) : t('flyer.mayBeOutdated');
-  }
-  btn.appendChild(date);
-  if (isExternalBrochure(b)) {
-    btn.title = t('flyer.officialTitle');
-    btn.addEventListener('click', () =>
-      window.open(b.sourceUrl, '_blank', 'noopener,noreferrer'),
-    );
-  } else {
-    btn.title = b.title ? t('flyer.viewTitled', { title: b.title }) : t('flyer.view');
-    btn.addEventListener('click', () => openBrochureViewer(b, label));
-  }
-  slot.replaceChildren(btn);
 }
 
 // --- boot ---------------------------------------------------------------------
@@ -524,5 +372,5 @@ renderChips();
 renderHomeChips();
 route();
 if (!pageSearch.hidden) input.focus();
-loadBrochures(); // warm the weekly-flyer cache so chips appear instantly
+loadBrochures(); // warm the weekly-flyer cache (flyer cards open their brochure from it)
 refreshAlertsBadge(); // unseen price alerts -> badge on the Alerts tab

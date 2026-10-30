@@ -9,9 +9,9 @@ import { storeIcon } from './storeIdentity.js';
 // not feel like separate systems).
 //
 // Two pieces, one factory:
-//   • the SOURCES STRIP — a compact per-store status row (searching → count /
-//     unavailable / no matches) with each store's weekly-flyer chip, so
-//     store-level state stays honest without per-store result sections;
+//   • the SOURCES STRIP — one line of per-store chips (store logo + count;
+//     "no matches" / unavailable detail in the tooltip), so store-level state
+//     stays honest without per-store result sections;
 //   • the OFFERS GRID — all relevant offers from every source, ranked by
 //     Search-Roadmap stage, then relevance band, then price, top N with
 //     "Show all".
@@ -657,22 +657,25 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
   const includeFlyers = opts.includeFlyers !== false;
   let sort = opts.sort === 'value' || opts.sort === 'featured' ? opts.sort : 'price';
   const onSort = typeof opts.onSort === 'function' ? opts.onSort : () => {};
-  // Sources strip: one status chip per selected store (+ its flyer chip slot),
-  // plus one chip for this week's flyer offers.
+  // Sources strip: ONE line of chips — each store's logo and its count, plus
+  // one chip for this week's flyer offers. The store name and any detail (no
+  // matches, unavailable, related/hidden counts) live in the tooltip and the
+  // accessible name, so the visible chip stays logo + number.
   const strip = el('div', 'sources-strip');
   const chips = new Map();
+  const setChipState = (c, text, detail = text, notes = []) => {
+    c.state.textContent = text;
+    const label = [c.label, detail, ...notes].filter(Boolean).join(' · ');
+    c.chip.title = label;
+    c.chip.setAttribute('aria-label', label);
+  };
   for (const s of stores) {
     const chip = el('span', 'src-chip is-loading');
-    const dot = storeIcon(s.id);
-    chip.appendChild(dot);
-    chip.appendChild(el('span', 'src-name', s.label));
-    const state = el('span', 'src-state', '…');
+    chip.appendChild(storeIcon(s.id));
+    const state = el('span', 'src-state');
     chip.appendChild(state);
-    const flyerSlot = el('span', 'store-flyer-slot');
-    chip.appendChild(flyerSlot);
     // Interactive retailer filter: the chip toggles this store as the sole
-    // view. Reachable by keyboard; the flyer chip inside it stops propagation
-    // so opening a flyer never also flips the filter.
+    // view. Reachable by keyboard.
     chip.setAttribute('role', 'button');
     chip.tabIndex = 0;
     chip.setAttribute('aria-pressed', 'false');
@@ -683,18 +686,20 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
         toggleStoreFilter(s.id);
       }
     });
-    flyerSlot.addEventListener('click', (ev) => ev.stopPropagation());
     strip.appendChild(chip);
-    chips.set(s.id, { chip, state, flyerSlot });
+    const c = { chip, state, label: s.label };
+    setChipState(c, '…', '');
+    chips.set(s.id, c);
   }
   let flyerChip = null;
-  let flyerState = null;
+  let flyers = null;
   if (includeFlyers) {
     flyerChip = el('span', 'src-chip src-chip-flyers is-loading');
-    flyerChip.appendChild(el('span', null, '📄'));
-    flyerChip.appendChild(el('span', 'src-name', t('market.weeklyFlyers')));
-    flyerState = el('span', 'src-state', '…');
+    flyerChip.appendChild(storeIcon('brochures'));
+    const flyerState = el('span', 'src-state');
     flyerChip.appendChild(flyerState);
+    flyers = { chip: flyerChip, state: flyerState, label: t('market.weeklyFlyers') };
+    setChipState(flyers, '…', '');
     // Interactive filter, consistent with the store chips: toggles the view to
     // this week's flyer offers only. Reachable by keyboard.
     flyerChip.setAttribute('role', 'button');
@@ -913,12 +918,11 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       const c = chips.get(store.id);
       if (c) {
         c.chip.classList.remove('is-loading');
-        c.state.textContent = items.length ? String(items.length) : t('market.state.noMatches');
         if (!items.length) c.chip.classList.add('is-empty');
         const notes = [];
         if (related.length) notes.push(t('market.relatedSource', { count: related.length }));
         if (hidden > 0) notes.push(tn('market.hidden', hidden));
-        if (notes.length) c.chip.title = notes.join(' · ');
+        setChipState(c, String(items.length), items.length ? String(items.length) : t('market.state.noMatches'), notes);
       }
       render();
     },
@@ -927,7 +931,7 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       if (c) {
         c.chip.classList.remove('is-loading');
         c.chip.classList.add('is-failed');
-        c.state.textContent = bestEffort ? t('market.state.tempUnavailable') : t('market.state.unreachable');
+        setChipState(c, '–', bestEffort ? t('market.state.tempUnavailable') : t('market.state.unreachable'));
       }
       render();
     },
@@ -945,9 +949,13 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
         pool.push(entry);
       }
       flyerChip.classList.remove('is-loading');
-      flyerState.textContent = primaryCount ? t('market.state.offers', { count: primaryCount }) : t('market.state.noMatches');
-      if (unique.length > primaryCount) flyerChip.title = t('market.relatedSource', { count: unique.length - primaryCount });
       if (!primaryCount) flyerChip.classList.add('is-empty');
+      setChipState(
+        flyers,
+        String(primaryCount),
+        primaryCount ? t('market.state.offers', { count: primaryCount }) : t('market.state.noMatches'),
+        unique.length > primaryCount ? [t('market.relatedSource', { count: unique.length - primaryCount })] : [],
+      );
       render();
       return primaryCount;
     },
@@ -955,13 +963,9 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       if (!includeFlyers) return 0;
       flyerChip.classList.remove('is-loading');
       flyerChip.classList.add('is-empty');
-      flyerState.textContent = t('market.state.unavailable');
+      setChipState(flyers, '–', t('market.state.unavailable'));
       render();
       return 0;
-    },
-    flyerSlot(storeId) {
-      const c = chips.get(storeId);
-      return c ? c.flyerSlot : null;
     },
     finish() {
       finished = true;

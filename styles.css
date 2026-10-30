@@ -593,29 +593,6 @@ button { font-family: inherit; }
   padding: 6px 2px 2px;
 }
 
-/* Flyer chip in a store header — now carries the validity date, and a stale
-   marker when the newest flyer the engine holds has already expired. */
-.store-flyer-slot { margin-left: auto; }
-.store-flyer {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border: 1px solid transparent;
-  border-radius: var(--pill);
-  padding: 5px 12px;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.store-flyer:hover { background: var(--brand); color: #fff; }
-.store-flyer .flyer-date { font-weight: 600; opacity: 0.75; }
-.store-flyer.is-stale { color: var(--warn); background: var(--warn-soft); }
-.store-flyer.is-stale:hover { background: var(--warn); color: #fff; }
 .store-meta { margin: 2px 2px 12px; }
 
 /* --- intelligent shopping summary (before results) ------------------------ */
@@ -1065,31 +1042,51 @@ button { font-family: inherit; }
 
 
 /* ---- the unified marketplace (one grid, every source; source = metadata) ---- */
+/* Sources strip: ONE line of equal chips, each a store logo + its count (the
+   name is in the tooltip). Phones stack the count under the logo so every
+   store fits; a screen too narrow even for that scrolls the strip sideways,
+   never the page. */
 .sources-strip {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
   margin: 0 0 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.sources-strip::-webkit-scrollbar { display: none; }
 .src-chip {
+  flex: 1 1 0;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  gap: 6px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--pill);
-  padding: 5px 12px;
-  font-size: 12.5px;
+  padding: 4px 10px 4px 4px;
+  font-size: 13.5px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
   color: var(--text);
 }
-.src-chip .chip-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.src-name { font-weight: 700; }
-.src-state { color: var(--muted); font-variant-numeric: tabular-nums; }
-.src-chip.is-loading .src-state { opacity: 0.6; }
+.src-state { font-variant-numeric: tabular-nums; }
+.src-chip.is-loading .src-state { color: var(--muted); }
 .src-chip.is-failed { border-color: var(--warn-soft); }
-.src-chip.is-failed .src-state { color: var(--warn); font-weight: 600; }
-.src-chip.is-empty .src-state { opacity: 0.7; }
-.src-chip .store-flyer { padding: 2px 8px; font-size: 11px; }
+.src-chip.is-failed .src-state { color: var(--warn); }
+.src-chip.is-empty .src-state { color: var(--muted); font-weight: 600; }
+.src-chip.is-empty .store-logo,
+.src-chip.is-failed .store-logo { opacity: 0.45; }
+@media (max-width: 560px) {
+  .sources-strip { gap: 5px; }
+  .src-chip {
+    flex-direction: column;
+    gap: 3px;
+    padding: 5px 2px 4px;
+    border-radius: 12px;
+    font-size: 12.5px;
+  }
+}
 /* Interactive retailer filter (Feature 1): filterable chips read as buttons;
    the active one is highlighted like the store-scope chips. Counts stay put. */
 .src-chip.is-filterable { cursor: pointer; }
