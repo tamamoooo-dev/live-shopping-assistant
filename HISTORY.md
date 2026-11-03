@@ -6708,3 +6708,11 @@ say the watched one is in it. The rule:
   and 0 same-barcode twin pairs.
 
 Tests: watchValue 104, watchIndex 89, full engine suite green at deploy.
+
+**First scheduled round (07:00 Riyadh, 04:00–04:06 UTC), checked:**
+- All 6 watches ran.
+- Each judged at most one new listing (1 product × 2 votes); there are no repeated judgements.
+- The Tamimi assortment row became "Not decided yet" (`assortment`), and so did two other assortment flyer rows (full-fat milk, skimmed milk).
+- No alert fired again: each deal still points at the same deal key it alerted on.
+- **Amazon failed once.** It answered HTTP 502 on the first pass for skimmed milk and Nova, and both have a verified Amazon listing. The round therefore recorded `provider-error` and re-asked only Amazon a few minutes later, instead of judging those deals on partial coverage. That retry's `counts.seen` (57–70) covers only the retry; every other store's rows still carry this round's `last_seen_at`.
+- Lulu answers 502 to the Worker in every pass, as before.
