@@ -1172,12 +1172,16 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       }
       render();
     },
-    failStore(store, bestEffort) {
+    // `blocked`: the store refuses automated checks (Lulu) — said calmly,
+    // since it is not an outage and retrying will not change it.
+    failStore(store, bestEffort, blocked = false) {
       const c = chips.get(store.id);
       if (c) {
         c.chip.classList.remove('is-loading');
-        c.chip.classList.add('is-failed');
-        setChipState(c, '–', bestEffort ? t('market.state.tempUnavailable') : t('market.state.unreachable'));
+        c.chip.classList.add(blocked ? 'is-blocked' : 'is-failed');
+        setChipState(c, '–', blocked
+          ? t('market.state.blocked')
+          : bestEffort ? t('market.state.tempUnavailable') : t('market.state.unreachable'));
       }
       render();
     },

@@ -346,7 +346,7 @@ async function runSearch(query) {
         market.addOnline(s, primary, hidden, related);
       } catch (err) {
         if (inFlight !== token) return;
-        market.failStore(s, BEST_EFFORT_ONLINE_STORES.has(s.id));
+        market.failStore(s, BEST_EFFORT_ONLINE_STORES.has(s.id), Boolean(err && err.blocked));
         console.warn(`${s.label} search failed:`, (err && err.details) || err);
       }
     }),

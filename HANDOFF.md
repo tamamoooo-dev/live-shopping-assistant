@@ -34,10 +34,16 @@ reading-check helper, verification, and snapshot refresh procedure.
 >
 > **Last updated:** 2026-11-03. **State at a glance:**
 > - **Production:** the engine runs the commit named in its deployment
->   message (`8d70fa8`, version `9705ea59` on 2026-11-03; rollback
->   `d08f7b31` = `eb13d23`, the last pre-Value-Watch engine). `wrangler deployments list` names it, because
->   deploys go only through `node deploy.mjs` (§9). Connector `5e4deb8b`
->   (rollback `1b076c53`). Frontend: `main` on Pages.
+>   message (`4a79987`, version `8cdf6f12` on 2026-11-03; rollback
+>   `9705ea59` = `8d70fa8`, or `d08f7b31` = `eb13d23`, the last
+>   pre-Value-Watch engine). `wrangler deployments list` names it, because
+>   deploys go only through `node deploy.mjs` (§9). Connector `08f33966`
+>   (rollback `5e4deb8b`). Frontend: `main` on Pages.
+> - **Lulu online is BLOCKED by Lulu (2026-11-03):** its Cloudflare firewall
+>   answers every request from a Worker with 403, and the API refuses
+>   cross-origin browser calls too. It is reported as `blocked`, never
+>   retried within a round, and never worked around. Lulu's prices come
+>   only through its flyers (HISTORY §66).
 > - **Platform:** Cloudflare **Workers Paid** (R2, Queues, 5-minute CPU in
 >   use, §8). Mistral is the only other spend: ONE model,
 >   `ministral-14b-2512`, for every read, with **5 live keys × 30 requests
@@ -229,7 +235,7 @@ where they conflict with this file, *they* win — they are narrower and newer):
 | `panda` | Public JSON `api.panda.sa` (`products-v3` → `suggestions-v3`) | Emit the **VARIETY id** for result `id` + link — catalogue `product.id` 412s on the product page |
 | `tamimi` | ZopSmart JSON (`shop.tamimimarkets.com/api/layout/search`) | Stable, EN/AR |
 | `danube` | Spree JSON (`danube.sa/api/products.json`) | 3 tries on transient failures; multi-word **Arabic** queries 422 → provider falls back to the longest single token |
-| `lulu` | Akinon list JSON (`gcc.luluhypermarket.com/{en-sa\|ar-sa}/list?…&format=json`) | SAR via pz-locale/pz-currency cookies |
+| `lulu` | Akinon list JSON (`gcc.luluhypermarket.com/{en-sa\|ar-sa}/list?…&format=json`) — ⚠️ **blocked**: Lulu's firewall 403s every Worker request since at least 2026-11-03; the connector answers 403 `blocked` | SAR via pz-locale/pz-currency cookies |
 | `amazon` | `pa-api` strategy first (skips while unconfigured) → `search-html` parse of `amazon.sa/s` | **Best-effort.** 5× retry w/ rotating UA (~80%); frontend retries once more (~99% effective). Parser splits the brand `<h2>` from the title `<h2>` (brand-led display name) — `amazon.test.mjs` locks it. Durable fix = PA-API secrets (§9) |
 | `noon` | Noon **Minutes** SSR-payload parse (`minutes.noon.com`) | Best-effort; main noon.com blocks datacenter IPs. Minutes left Next.js for **TanStack Start** (2026-08-01): the payload is now a seroval **object literal** (unquoted keys, `$R[n]=` back-refs) inside `<script id="$tsr-stream-barrier">`, never JSON — the old RSC-flight parse silently returned 0 results. `noon.test.mjs` locks it |
 | `ninja` | `public.ananinja.com/fahras/search/products` after bootstrapping a guest `DeviceToken` (~90-day JWT) from any storefront 404 | `storeId=1` = Riyadh; prices in **cents** (÷100); token cached in-isolate, refetched on 401 |

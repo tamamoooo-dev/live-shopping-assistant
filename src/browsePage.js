@@ -656,7 +656,7 @@ async function renderOnlineBrand(host, query, token) {
         market.addOnline(store, primary, hidden, related);
       } catch (err) {
         if (renderToken !== token) return;
-        market.failStore(store, BEST_EFFORT_ONLINE_STORES.has(store.id));
+        market.failStore(store, BEST_EFFORT_ONLINE_STORES.has(store.id), Boolean(err && err.blocked));
         console.warn(`${store.label} Browse search failed:`, (err && err.details) || err);
       }
     }),

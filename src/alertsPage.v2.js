@@ -498,7 +498,9 @@ function itemText(item) {
 // The engine decides every listing once (rules, then its checker); a wrong
 // decision is corrected here and the engine never overrides the correction.
 async function openListings(w, cta, onUpdate) {
-  const existing = cta.nextElementSibling;
+  // The panel opens below the row of buttons, not between them.
+  const host = cta.closest('.watch-actions') || cta;
+  const existing = host.nextElementSibling;
   if (existing?.classList.contains('watch-listings')) {
     existing.remove();
     cta.textContent = t('alerts.listingsCta');
@@ -507,7 +509,7 @@ async function openListings(w, cta, onUpdate) {
   cta.disabled = true;
   const panel = el('div', 'watch-listings');
   panel.appendChild(el('div', 'watch-candidates-empty', t('alerts.loading')));
-  cta.after(panel);
+  host.after(panel);
   const view = await watchListings(w.id);
   cta.disabled = false;
   cta.textContent = t('alerts.listingsHide');
@@ -614,70 +616,112 @@ function sizeChooser(w, choices, onUpdate) {
   return box;
 }
 
-// A Value Watch row: the best price PER ITEM across every store and flyer.
+// Which watch cards are open. Kept across the page's own repaints (a saved
+// setting or an answered listing redraws the list), forgotten on reload.
+const openWatches = new Set();
+
+// A Value Watch card. Closed it is two lines: the product, then the best price
+// per item, where, and the target — plus "N to confirm" when listings wait for
+// the owner, because those are how a deal gets missed. Everything else opens
+// with the arrow.
 function valueWatchRow(w, onDelete, onUpdate) {
   const v = w.value || {};
   const target = v.targetValue ?? w.targetUnitPrice ?? w.targetPrice;
   const best = v.best || null;
   const indexing = !w.checkedAt && ['pending', 'indexing'].includes(w.indexState);
+  const retrying = w.run?.status === 'retrying' || w.run?.status === 'running';
   const hasDeal = Boolean(w.isBelow) || (w.lastPrice != null && w.lastPrice <= target + 1e-9);
   const isClose = !hasDeal && Boolean(w.isClose);
-  const row = el('div', `watch-row ${hasDeal ? 'is-deal' : isClose ? 'is-close' : 'is-watching'}`);
+  const row = el('div', `watch-row is-compact ${hasDeal ? 'is-deal' : isClose ? 'is-close' : 'is-watching'}`);
   row.appendChild(watchThumb(w));
   const main = el('div', 'watch-main');
   main.appendChild(watchName(w));
 
-  const retrying = w.run?.status === 'retrying' || w.run?.status === 'running';
-  main.appendChild(el(
-    'div',
-    'watch-status',
-    indexing
-      ? t('alerts.indexing')
-      : retrying
-        ? t('alerts.retrying', { attempt: w.run?.attempts || 1 })
-        : hasDeal ? t('alerts.dealFound') : isClose ? t('alerts.closePrice') : t('alerts.stillWatching'),
-  ));
-
-  // The comparison basis, in words: what "the same product" means here.
-  const basis = el('div', 'watch-reason', v.itemLabel
-    ? t('alerts.valueBasis', { item: v.itemLabel })
-    : t('alerts.valueBasisUnknown'));
-  basis.dir = 'auto';
-  main.appendChild(basis);
-  if (!v.item && Array.isArray(v.sizeChoices) && v.sizeChoices.length > 1) {
-    main.appendChild(sizeChooser(w, v.sizeChoices, onUpdate));
-  }
-
-  // Best value now: per item, then what you pay for the pack, then where.
-  const price = el('div', 'watch-price');
+  const line = el('div', 'watch-line');
+  line.dir = 'auto';
+  const price = el('span', 'watch-price');
   if (best && best.value != null) {
     const store = storeLabel(best.store) || best.store || '';
-    price.textContent = perItem(best.value)
-      + ((best.pack || 1) > 1 ? ` — ${t('alerts.forPack', { price: money(best.purchasePrice), count: best.pack })}` : '')
-      + (store ? ` ${t('alerts.atStore', { store })}` : '')
+    price.textContent = (hasDeal ? '✓ ' : '')
+      + perItem(best.value)
+      + (store ? ` · ${store}` : '')
       + (best.source === 'flyer' ? t('alerts.flyerSuffix') : '');
     if (hasDeal) price.classList.add('is-deal');
   } else {
     price.textContent = indexing ? t('alerts.indexingShort') : retrying ? t('alerts.retryingShort') : t('alerts.checkingDaily');
     price.classList.add('is-pending');
   }
-  main.appendChild(price);
+  line.appendChild(price);
+  if (target != null) line.appendChild(el('span', 'watch-target', t('alerts.target', { price: money(target) })));
+  if (v.pending) line.appendChild(el('span', 'watch-badge', t('alerts.toConfirm', { count: v.pending })));
+  main.appendChild(line);
+  row.appendChild(main);
 
+  const toggle = el('button', 'watch-toggle');
+  toggle.type = 'button';
+  toggle.appendChild(el('span', 'watch-toggle-icon'));
+  row.appendChild(toggle);
+  row.appendChild(watchDelete(w, row, onDelete));
+
+  // The details are built the first time the card opens.
+  const more = el('div', 'watch-more');
+  more.id = `watch-more-${w.id}`;
+  toggle.setAttribute('aria-controls', more.id);
+  const setOpen = (open) => {
+    if (open && !more.childElementCount) {
+      watchDetails(more, w, { target, best, hasDeal, isClose, indexing, retrying, row, onUpdate });
+    }
+    more.hidden = !open;
+    row.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    const label = t(open ? 'alerts.hideDetails' : 'alerts.showDetails');
+    toggle.title = label;
+    toggle.setAttribute('aria-label', label);
+    if (open) openWatches.add(w.id);
+    else openWatches.delete(w.id);
+  };
+  toggle.addEventListener('click', () => setOpen(more.hidden));
+  row.appendChild(more);
+  // A size question cannot wait behind the arrow: the watch needs the answer.
+  const needsAnswer = !v.item && Array.isArray(v.sizeChoices) && v.sizeChoices.length > 1;
+  setOpen(openWatches.has(w.id) || needsAnswer);
+  return row;
+}
+
+// The opened card: what "the same product" means, what the index holds, who
+// did not answer, the settings and the actions.
+function watchDetails(more, w, { target, best, hasDeal, isClose, indexing, retrying, row, onUpdate }) {
+  const v = w.value || {};
+  const add = (cls, text) => {
+    const node = el('div', cls, text);
+    node.dir = 'auto';
+    more.appendChild(node);
+    return node;
+  };
+  add('watch-status', indexing
+    ? t('alerts.indexing')
+    : retrying
+      ? t('alerts.retrying', { attempt: w.run?.attempts || 1 })
+      : hasDeal ? t('alerts.dealFound') : isClose ? t('alerts.closePrice') : t('alerts.stillWatching'));
+  add('watch-reason', v.itemLabel ? t('alerts.valueBasis', { item: v.itemLabel }) : t('alerts.valueBasisUnknown'));
+  if (!v.item && Array.isArray(v.sizeChoices) && v.sizeChoices.length > 1) {
+    more.appendChild(sizeChooser(w, v.sizeChoices, onUpdate));
+  }
+  // The pack behind the best price per item: what you actually pay.
+  if (best && best.value != null && (best.pack || 1) > 1) {
+    add('watch-reason', t('alerts.forPack', { price: money(best.purchasePrice), count: best.pack }));
+  }
   // What the index holds, and who did not answer (never a silent gap).
   if (v.matched != null) {
     const parts = [t('alerts.tracking', { count: v.matched, stores: (v.storesAnswered || []).length })];
     if (v.pending) parts.push(t('alerts.trackingPending', { count: v.pending }));
-    if ((v.storesFailed || []).length) {
-      parts.push(t('alerts.storesDown', { stores: v.storesFailed.map((s) => storeLabel(s) || s).join(', ') }));
-    }
-    const tracking = el('div', 'watch-reason', parts.join(' · '));
-    tracking.dir = 'auto';
-    main.appendChild(tracking);
+    add('watch-reason', parts.join(' · '));
   }
+  const names = (stores) => stores.map((s) => storeLabel(s) || s).join(', ');
+  if ((v.storesFailed || []).length) add('watch-reason', t('alerts.storesDown', { stores: names(v.storesFailed) }));
+  if ((v.storesBlocked || []).length) add('watch-reason', t('alerts.storesBlocked', { stores: names(v.storesBlocked) }));
   if (w.monitoringHealth && !['ok', 'unchecked'].includes(w.monitoringHealth) && w.monitoringHealthReason) {
-    const health = el('div', 'watch-reason', w.monitoringHealthReason);
-    health.dir = 'auto';
-    main.appendChild(health);
+    add('watch-reason', w.monitoringHealthReason);
   }
 
   const targetText = (v.pack || 1) > 1 && v.targetPackPrice != null
@@ -686,9 +730,7 @@ function valueWatchRow(w, onDelete, onUpdate) {
   const bits = [t('alerts.scopeValue'), targetText];
   if (w.closeThreshold != null) bits.push(t('alerts.closeWithin', { percent: w.closeThreshold }));
   bits.push(w.checkedAt ? t('alerts.checkedAt', { date: fmtDate(w.checkedAt) }) : t('alerts.firstCheck'));
-  const meta = el('div', 'watch-meta', bits.join(' · '));
-  meta.dir = 'auto';
-  main.appendChild(meta);
+  add('watch-meta', bits.join(' · '));
 
   const actions = el('div', 'watch-actions');
   const listings = el('button', 'watch-diagnose', t('alerts.listingsCta'));
@@ -702,12 +744,8 @@ function valueWatchRow(w, onDelete, onUpdate) {
     recheck.textContent = res.error || t('alerts.recheckQueued');
   });
   actions.append(listings, recheck);
-  main.appendChild(actions);
-  main.appendChild(watchSettings(w, row, onUpdate));
-
-  row.appendChild(main);
-  row.appendChild(watchDelete(w, row, onDelete));
-  return row;
+  more.appendChild(actions);
+  more.appendChild(watchSettings(w, row, onUpdate));
 }
 
 function watchRow(w, onDelete, onUpdate) {

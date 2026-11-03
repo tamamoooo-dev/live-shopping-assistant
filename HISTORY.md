@@ -6716,3 +6716,57 @@ Tests: watchValue 104, watchIndex 89, full engine suite green at deploy.
 - No alert fired again: each deal still points at the same deal key it alerted on.
 - **Amazon failed once.** It answered HTTP 502 on the first pass for skimmed milk and Nova, and both have a verified Amazon listing. The round therefore recorded `provider-error` and re-asked only Amazon a few minutes later, instead of judging those deals on partial coverage. That retry's `counts.seen` (57–70) covers only the retry; every other store's rows still carry this round's `last_seen_at`.
 - Lulu answers 502 to the Worker in every pass, as before.
+
+## 66. Lulu blocked, not down + compact watch card (2026-11-03)
+
+**Asked:** "find out what is wrong with lulu then fix it .. the product card
+full of useless info .. make it as compact as possible extra info should only
+appear if i hit the arrow".
+
+**Lulu, diagnosed.** From the user's PC, Lulu's Akinon list JSON answers 200.
+From a Cloudflare Worker it answers 403. A temporary edge probe (`wrangler dev
+--remote`, deleted afterwards) read the body: Cloudflare's "Attention
+Required" block page. That page came back for every path tried (`robots.txt`,
+`/en-sa/`, the API), with or without our headers, while `example.com` loaded
+from the same Worker. The API also answers 403 to cross-origin browser calls,
+so the app cannot call it directly. Lulu's firewall turns away automated
+traffic from Workers. That is the store's bot protection, and we do not work
+around it (no proxies, no residential relays).
+
+**What changed:**
+- **Connector:** a provider refused by every strategy answers 403 with
+  `blocked: true` instead of 502.
+- **Engine:**
+  - A blocked store is recorded as `blocked`. It is asked with one query, is
+    not retried within the round, and never holds a round back.
+  - It is asked again next round, so it returns by itself.
+  - The watch list carries `storesBlocked`.
+- **Search and Browse:** Lulu's chip reads "blocks online checks" in muted
+  grey, not an error, and the app does not ask Lulu again for 6 hours.
+- **Found in the 07:00 round:** a retry pass's counts had replaced the whole
+  index's ("Tracking 1 verified listing" for 23). The counts now cover the
+  whole index.
+
+**The compact watch card.**
+- **Closed, it is two lines:**
+  - the product name, up to 2 lines (a one-line ellipsis had cut "185 جم");
+  - the best price per item, the store, the target, and "N to confirm" when
+    listings wait for the owner.
+- **The arrow opens everything else:**
+  - the status and what "the same product" means;
+  - the pack price and what is tracked;
+  - stores that failed or block us, and the settings line;
+  - the "What is tracked?" and "Check all stores now" buttons, and Advanced.
+- **Behaviour:** a card that needs a size answer opens by itself, and open
+  cards stay open while the page repaints. The listings panel now opens below
+  the buttons, not between them.
+- **Measured:** on a 375 px phone the card is 92 px closed, down from 229 px,
+  with no sideways scroll.
+
+**Shipped:**
+- connector `4a79987` (version `08f33966`, rollback `5e4deb8b`);
+- engine `4a79987` (`8cdf6f12`, rollback `9705ea59`);
+- frontend on Pages.
+
+**Tests:** watchIndex 98, full engine suite 105 files, all frontend unit tests
+green.

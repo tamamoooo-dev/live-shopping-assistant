@@ -68,6 +68,7 @@ export async function adaptiveSearch(provider, query, memory) {
 
   const failures = [];
   let answered = null;
+  let blocked = 0;
   for (const strategy of ordered) {
     try {
       const results = await strategy.run(q);
@@ -78,6 +79,7 @@ export async function adaptiveSearch(provider, query, memory) {
       answered = answered || strategy.name;
       failures.push(`${strategy.name}: no results`);
     } catch (err) {
+      if (err && err.blocked) blocked += 1;
       failures.push(`${strategy.name}: ${err.message}`);
     }
   }
@@ -93,5 +95,7 @@ export async function adaptiveSearch(provider, query, memory) {
 
   const error = new Error('No working search method returned results.');
   error.details = failures;
+  // The store itself refuses us (every method said so): not an outage.
+  error.blocked = blocked > 0 && blocked === ordered.length;
   throw error;
 }
