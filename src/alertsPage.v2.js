@@ -2,11 +2,12 @@
 // alerts they produced, plus the shared "watch a price" dialog that the search
 // page (summary + result cards) opens.
 //
-// A watch = "tell me when I can buy this at ≤ my target price". Two kinds:
-//   • product — a specific identifiable product (e.g. an Amazon ASIN): the
-//     engine re-finds THAT ASIN at 07:00/19:00 Riyadh and reads its price.
-//   • grocery — a staple query: the engine sweeps every online store AND the
-//     current sources at 07:00/19:00 Riyadh and takes the best trustworthy price.
+// A watch = "tell me when I can buy this at ≤ my target price". Since v4 every
+// new watch is a VALUE WATCH: this exact product (brand, variant, size per
+// item) in any pack, at any store or flyer, compared PER ITEM — 12 cans for 50
+// beats one can for 5. The engine indexes every store in the background, keeps
+// a verdict per listing (the owner can overrule it here), and checks at
+// 07:00/19:00 Riyadh. Older watches (v3 tracks) still render as before.
 //
 // All engine knowledge stays in brochure.js (project rule 2); this module only
 // renders and calls its thin clients. Everything is best-effort: engine down →
@@ -27,6 +28,8 @@ import {
   diagnoseWatch,
   repairWatch,
   refreshWatch,
+  watchListings,
+  answerWatchListing,
 } from './brochure.js';
 import { t } from './i18n.js';
 import { notificationTarget } from './notificationNavigation.js?v=20260825.7';
@@ -84,9 +87,6 @@ export function openWatchDialog(opts) {
   document.querySelector('.watch-dialog')?.remove();
   const dlg = document.createElement('dialog');
   dlg.className = 'watch-dialog';
-  const exactAmazon = opts.kind === 'product' &&
-    String(opts.provider || '').toLowerCase() === 'amazon' &&
-    /^B[A-Z0-9]{9}$/i.test(String(opts.productId || ''));
 
   const form = el('form', 'wd-form');
   form.method = 'dialog';
@@ -96,15 +96,7 @@ export function openWatchDialog(opts) {
   what.dir = 'auto';
   what.textContent = opts.label || opts.query;
   form.appendChild(what);
-  form.appendChild(
-    el(
-      'p',
-      'wd-hint',
-      exactAmazon
-        ? t('watch.hintProduct', { store: storeLabel(opts.provider) || opts.provider })
-        : t('watch.hintGrocery'),
-    ),
-  );
+  form.appendChild(el('p', 'wd-hint', t('watch.hintValue')));
 
   const row = el('label', 'wd-row');
   row.appendChild(el('span', 'wd-label', t('watch.rowLabel')));
@@ -124,19 +116,16 @@ export function openWatchDialog(opts) {
   const advanced = el('details', 'wd-advanced');
   advanced.appendChild(el('summary', 'wd-advanced-title', t('watch.advanced')));
   const advancedBody = el('div', 'wd-advanced-body');
-  let searchInput = null;
-  if (!exactAmazon) {
-    const searchRow = el('label', 'wd-row');
-    searchRow.appendChild(el('span', 'wd-label', t('watch.searchQuery')));
-    searchInput = document.createElement('input');
-    searchInput.type = 'search';
-    searchInput.maxLength = 120;
-    searchInput.className = 'wd-input';
-    searchInput.placeholder = opts.query || t('watch.searchPlaceholder');
-    searchRow.appendChild(searchInput);
-    advancedBody.appendChild(searchRow);
-    advancedBody.appendChild(el('p', 'wd-advanced-hint', t('watch.searchHint')));
-  }
+  const searchRow = el('label', 'wd-row');
+  searchRow.appendChild(el('span', 'wd-label', t('watch.searchQuery')));
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.maxLength = 120;
+  searchInput.className = 'wd-input';
+  searchInput.placeholder = opts.query || t('watch.searchPlaceholder');
+  searchRow.appendChild(searchInput);
+  advancedBody.appendChild(searchRow);
+  advancedBody.appendChild(el('p', 'wd-advanced-hint', t('watch.searchHintValue')));
   const closeRow = el('label', 'wd-row');
   closeRow.appendChild(el('span', 'wd-label', t('watch.closeThreshold')));
   const closeInput = document.createElement('input');
@@ -197,9 +186,9 @@ export function openWatchDialog(opts) {
         link: opts.link || null,
         image: opts.image || null,
       },
-      // Blank means the engine-generated brand + general product query. The
-      // advanced value overrides retrieval wording, never product identity.
-      customSearchQuery: searchInput?.value.trim() || null,
+      // Blank means the engine-generated wording. An entered phrase is one
+      // more store search; it never changes which product is watched.
+      customSearchQuery: searchInput.value.trim() || null,
       closeThreshold: closeInput.value === '' ? null : Number(closeInput.value),
     });
     if (res.error) {
@@ -374,7 +363,7 @@ function anchorState(w) {
         w.lastResolution === 'needs-confirmation' ? 'confirmation_required' :
           w.lastResolution === 'unresolvable' ? 'unresolvable' : 'resolving'
   );
-  if (['anchored_registry', 'anchored_source', 'anchored_spec'].includes(state)) return null;
+  if (['anchored_registry', 'anchored_source', 'anchored_spec', 'anchored_value'].includes(state)) return null;
   if (state === 'confirmation_required') {
     return { kind: 'needs-confirmation', label: t('alerts.needsConfirmation'), actionable: true };
   }
@@ -384,7 +373,345 @@ function anchorState(w) {
   return { kind: 'resolving', label: t('alerts.resolving'), actionable: false };
 }
 
+// Thumbnail — the product at a glance. Falls back to a neutral tile when
+// there's no image or it fails to load (a watch must never show a broken img).
+function watchThumb(w) {
+  const thumb = el('div', 'watch-thumb');
+  if (w.image) {
+    const img = document.createElement('img');
+    img.src = w.image;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.addEventListener('error', () => {
+      img.remove();
+      thumb.classList.add('is-empty');
+    });
+    thumb.appendChild(img);
+  } else {
+    thumb.classList.add('is-empty');
+  }
+  return thumb;
+}
+
+// The product name, linked to where the current best price is.
+function watchName(w) {
+  const name = el('a', 'watch-name');
+  name.dir = 'auto';
+  name.textContent = w.label || w.query;
+  const navTarget = notificationTarget(w, {
+    store: w.lastStore || w.provider,
+    source: w.lastSource,
+    name: w.lastName,
+    link: w.lastLink || w.link,
+  });
+  name.href = navTarget.href;
+  if (navTarget.kind === 'external') {
+    name.target = '_blank';
+    name.rel = 'noopener';
+  }
+  return name;
+}
+
+function watchDelete(w, row, onDelete) {
+  const del = el('button', 'watch-delete', '✕');
+  del.type = 'button';
+  del.title = t('alerts.stopWatching');
+  del.setAttribute('aria-label', t('alerts.stopWatchingItem', { label: w.label || w.query }));
+  del.addEventListener('click', () => onDelete(w, row));
+  return del;
+}
+
+// The per-watch settings: the extra search phrase and the close band.
+function watchSettings(w, row, onUpdate) {
+  const advanced = el('details', 'watch-advanced');
+  advanced.appendChild(el('summary', 'watch-advanced-title', t('watch.advanced')));
+  const body = el('div', 'watch-advanced-body');
+  const exactAmazon = w.watchTrack === 'amazon_exact';
+  const valueWatch = w.watchTrack === 'indexed_value';
+  let searchInput = null;
+  if (!exactAmazon) {
+    const search = el('label', 'watch-close-control');
+    search.appendChild(el('span', null, t('watch.searchQuery')));
+    searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.maxLength = 120;
+    searchInput.value = w.customSearchQuery || '';
+    searchInput.placeholder = w.systemSearchQuery || w.query || t('watch.searchPlaceholder');
+    search.appendChild(searchInput);
+    body.appendChild(search);
+    body.appendChild(el('p', 'watch-advanced-hint', t(valueWatch ? 'watch.searchHintValue' : 'watch.searchHint')));
+  }
+  const close = el('label', 'watch-close-control');
+  close.appendChild(el('span', null, t('watch.closeThreshold')));
+  const closeInput = document.createElement('input');
+  closeInput.type = 'number';
+  closeInput.min = '0.1';
+  closeInput.max = '100';
+  closeInput.step = '0.1';
+  closeInput.value = w.closeThreshold ?? '';
+  closeInput.placeholder = t('watch.closePlaceholder');
+  close.appendChild(closeInput);
+  body.appendChild(close);
+  const save = el('button', 'watch-settings-save', t('watch.saveSettings'));
+  save.type = 'button';
+  const saveError = el('p', 'wd-error');
+  saveError.hidden = true;
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    save.textContent = t('watch.saving');
+    const res = await updateWatch(w.id, {
+      ...(!exactAmazon ? { customSearchQuery: searchInput.value.trim() || null } : {}),
+      closeThreshold: closeInput.value === '' ? null : Number(closeInput.value),
+    });
+    if (res.error) {
+      saveError.textContent = res.error;
+      saveError.hidden = false;
+      save.disabled = false;
+      save.textContent = t('watch.saveSettings');
+      return;
+    }
+    onUpdate(res.watch, row);
+  });
+  body.append(save, saveError);
+  advanced.appendChild(body);
+  return advanced;
+}
+
+const perItem = (v, c) => `${money(v, c)} ${t('alerts.perItem')}`;
+
+// "6 × 185 g" / "185 g" for a listing in the index.
+function packText(pack, item) {
+  const size = item ? itemText(item) : null;
+  if (pack > 1) return size ? `${pack} × ${size}` : t('alerts.packOf', { count: pack });
+  return size || '';
+}
+
+function itemText(item) {
+  if (!item) return '';
+  if (item.unit === 'ml') return item.value >= 1000 ? `${+(item.value / 1000).toFixed(3)} L` : `${item.value} ml`;
+  if (item.unit === 'g') return item.value >= 1000 ? `${+(item.value / 1000).toFixed(3)} kg` : `${item.value} g`;
+  if (item.unit === 'pcs') return t('alerts.pieces', { count: item.value });
+  return `${item.value} ${item.unit}`;
+}
+
+// What a Value Watch is tracking, store by store, with the owner's answers.
+// The engine decides every listing once (rules, then its checker); a wrong
+// decision is corrected here and the engine never overrides the correction.
+async function openListings(w, cta, onUpdate) {
+  const existing = cta.nextElementSibling;
+  if (existing?.classList.contains('watch-listings')) {
+    existing.remove();
+    cta.textContent = t('alerts.listingsCta');
+    return;
+  }
+  cta.disabled = true;
+  const panel = el('div', 'watch-listings');
+  panel.appendChild(el('div', 'watch-candidates-empty', t('alerts.loading')));
+  cta.after(panel);
+  const view = await watchListings(w.id);
+  cta.disabled = false;
+  cta.textContent = t('alerts.listingsHide');
+  if (!view) {
+    panel.replaceChildren(el('div', 'watch-candidates-empty', t('alerts.diagnoseFailed')));
+    return;
+  }
+  renderListings(w, panel, view, onUpdate);
+}
+
+function renderListings(w, panel, view, onUpdate, note = null) {
+  panel.replaceChildren();
+  if (note) panel.appendChild(el('div', 'watch-listings-note', note));
+  const groups = [
+    ['match', t('alerts.listingsMatched'), true],
+    ['pending', t('alerts.listingsPending'), true],
+    ['reject', t('alerts.listingsRejected'), false],
+  ];
+  for (const [verdict, title, open] of groups) {
+    const rows = view.listings.filter((l) => l.verdict === verdict);
+    if (!rows.length) continue;
+    const group = el('details', `watch-listings-group is-${verdict}`);
+    group.open = open;
+    group.appendChild(el('summary', 'watch-candidates-title', `${title} (${rows.length})`));
+    for (const l of rows.slice(0, 30)) group.appendChild(listingRow(w, l, panel, onUpdate));
+    panel.appendChild(group);
+  }
+  if (!view.listings.length) {
+    panel.appendChild(el('div', 'watch-candidates-empty', t('alerts.listingsNone')));
+  }
+}
+
+function listingRow(w, l, panel, onUpdate) {
+  const row = el('div', `watch-listing is-${l.verdict}`);
+  const copy = el('div', 'watch-listing-copy');
+  const name = l.link ? el('a', 'watch-listing-name') : el('span', 'watch-listing-name');
+  name.dir = 'auto';
+  name.textContent = l.name || l.listingId;
+  if (l.link) {
+    name.href = l.link;
+    name.target = '_blank';
+    name.rel = 'noopener';
+  }
+  copy.appendChild(name);
+  const bits = [storeLabel(l.store) || l.store];
+  if (l.source === 'flyer') bits.push(t('alerts.source.flyer'));
+  const size = packText(l.pack, l.item);
+  if (size) bits.push(size);
+  if (l.price != null) bits.push(money(l.price));
+  if (l.value != null && (l.pack || 1) > 1) bits.push(perItem(l.value));
+  // Out of stock: still tracked, never the deal.
+  if (l.inStock === false) bits.push(t('alerts.listingOutOfStock'));
+  const facts = el('div', 'watch-listing-facts', bits.join(' · '));
+  facts.dir = 'auto';
+  copy.appendChild(facts);
+  const why = l.verdictBy === 'user'
+    ? t('alerts.listingByYou')
+    : l.reason || null;
+  if (why) {
+    const reason = el('div', 'watch-listing-reason', why);
+    reason.dir = 'auto';
+    copy.appendChild(reason);
+  }
+  row.appendChild(copy);
+  const answer = l.verdict === 'match'
+    ? { verdict: 'reject', label: t('alerts.listingNotThis') }
+    : { verdict: 'match', label: t('alerts.listingIsThis') };
+  const btn = el('button', 'watch-listing-answer', answer.label);
+  btn.type = 'button';
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const res = await answerWatchListing(w.id, { store: l.store, listingId: l.listingId, verdict: answer.verdict });
+    if (res.error) {
+      btn.disabled = false;
+      btn.textContent = res.error;
+      return;
+    }
+    renderListings(w, panel, res, onUpdate, t('alerts.listingsRecheck'));
+  });
+  row.appendChild(btn);
+  return row;
+}
+
+// The size-per-item question, asked only when the picked listing did not say
+// and the stores list the product in several sizes.
+function sizeChooser(w, choices, onUpdate) {
+  const box = el('div', 'watch-size-choice');
+  box.appendChild(el('div', 'watch-candidates-title', t('alerts.whichSize')));
+  for (const item of choices) {
+    const btn = el('button', 'watch-candidate', itemText(item));
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const res = await answerWatchListing(w.id, { item });
+      if (res.error) {
+        btn.disabled = false;
+        btn.textContent = res.error;
+        return;
+      }
+      if (onUpdate) onUpdate();
+    });
+    box.appendChild(btn);
+  }
+  return box;
+}
+
+// A Value Watch row: the best price PER ITEM across every store and flyer.
+function valueWatchRow(w, onDelete, onUpdate) {
+  const v = w.value || {};
+  const target = v.targetValue ?? w.targetUnitPrice ?? w.targetPrice;
+  const best = v.best || null;
+  const indexing = !w.checkedAt && ['pending', 'indexing'].includes(w.indexState);
+  const hasDeal = Boolean(w.isBelow) || (w.lastPrice != null && w.lastPrice <= target + 1e-9);
+  const isClose = !hasDeal && Boolean(w.isClose);
+  const row = el('div', `watch-row ${hasDeal ? 'is-deal' : isClose ? 'is-close' : 'is-watching'}`);
+  row.appendChild(watchThumb(w));
+  const main = el('div', 'watch-main');
+  main.appendChild(watchName(w));
+
+  const retrying = w.run?.status === 'retrying' || w.run?.status === 'running';
+  main.appendChild(el(
+    'div',
+    'watch-status',
+    indexing
+      ? t('alerts.indexing')
+      : retrying
+        ? t('alerts.retrying', { attempt: w.run?.attempts || 1 })
+        : hasDeal ? t('alerts.dealFound') : isClose ? t('alerts.closePrice') : t('alerts.stillWatching'),
+  ));
+
+  // The comparison basis, in words: what "the same product" means here.
+  const basis = el('div', 'watch-reason', v.itemLabel
+    ? t('alerts.valueBasis', { item: v.itemLabel })
+    : t('alerts.valueBasisUnknown'));
+  basis.dir = 'auto';
+  main.appendChild(basis);
+  if (!v.item && Array.isArray(v.sizeChoices) && v.sizeChoices.length > 1) {
+    main.appendChild(sizeChooser(w, v.sizeChoices, onUpdate));
+  }
+
+  // Best value now: per item, then what you pay for the pack, then where.
+  const price = el('div', 'watch-price');
+  if (best && best.value != null) {
+    const store = storeLabel(best.store) || best.store || '';
+    price.textContent = perItem(best.value)
+      + ((best.pack || 1) > 1 ? ` — ${t('alerts.forPack', { price: money(best.purchasePrice), count: best.pack })}` : '')
+      + (store ? ` ${t('alerts.atStore', { store })}` : '')
+      + (best.source === 'flyer' ? t('alerts.flyerSuffix') : '');
+    if (hasDeal) price.classList.add('is-deal');
+  } else {
+    price.textContent = indexing ? t('alerts.indexingShort') : retrying ? t('alerts.retryingShort') : t('alerts.checkingDaily');
+    price.classList.add('is-pending');
+  }
+  main.appendChild(price);
+
+  // What the index holds, and who did not answer (never a silent gap).
+  if (v.matched != null) {
+    const parts = [t('alerts.tracking', { count: v.matched, stores: (v.storesAnswered || []).length })];
+    if (v.pending) parts.push(t('alerts.trackingPending', { count: v.pending }));
+    if ((v.storesFailed || []).length) {
+      parts.push(t('alerts.storesDown', { stores: v.storesFailed.map((s) => storeLabel(s) || s).join(', ') }));
+    }
+    const tracking = el('div', 'watch-reason', parts.join(' · '));
+    tracking.dir = 'auto';
+    main.appendChild(tracking);
+  }
+  if (w.monitoringHealth && !['ok', 'unchecked'].includes(w.monitoringHealth) && w.monitoringHealthReason) {
+    const health = el('div', 'watch-reason', w.monitoringHealthReason);
+    health.dir = 'auto';
+    main.appendChild(health);
+  }
+
+  const targetText = (v.pack || 1) > 1 && v.targetPackPrice != null
+    ? t('alerts.valueTarget', { price: money(v.targetPackPrice), count: v.pack, each: money(target) })
+    : t('alerts.target', { price: money(target) });
+  const bits = [t('alerts.scopeValue'), targetText];
+  if (w.closeThreshold != null) bits.push(t('alerts.closeWithin', { percent: w.closeThreshold }));
+  bits.push(w.checkedAt ? t('alerts.checkedAt', { date: fmtDate(w.checkedAt) }) : t('alerts.firstCheck'));
+  const meta = el('div', 'watch-meta', bits.join(' · '));
+  meta.dir = 'auto';
+  main.appendChild(meta);
+
+  const actions = el('div', 'watch-actions');
+  const listings = el('button', 'watch-diagnose', t('alerts.listingsCta'));
+  listings.type = 'button';
+  listings.addEventListener('click', () => openListings(w, listings, onUpdate));
+  const recheck = el('button', 'watch-refresh', t('alerts.recheckAll'));
+  recheck.type = 'button';
+  recheck.addEventListener('click', async () => {
+    recheck.disabled = true;
+    const res = await refreshWatch(w.id);
+    recheck.textContent = res.error || t('alerts.recheckQueued');
+  });
+  actions.append(listings, recheck);
+  main.appendChild(actions);
+  main.appendChild(watchSettings(w, row, onUpdate));
+
+  row.appendChild(main);
+  row.appendChild(watchDelete(w, row, onDelete));
+  return row;
+}
+
 function watchRow(w, onDelete, onUpdate) {
+  if (w.watchTrack === 'indexed_value') return valueWatchRow(w, onDelete, onUpdate);
   // The comparison basis is DERIVED from the anchor, exactly as the engine
   // derives it: a Flexible Watch that leaves size free compares per unit.
   const spec = parseWatchSpec(w);
@@ -402,43 +729,13 @@ function watchRow(w, onDelete, onUpdate) {
     : hasDeal ? 'is-deal' : isClose ? 'is-close' : 'is-watching';
   const row = el('div', `watch-row ${state}`);
 
-  // Thumbnail — the product at a glance. Falls back to a neutral tile when
-  // there's no image or it fails to load (a watch must never show a broken img).
-  const thumb = el('div', 'watch-thumb');
-  if (w.image) {
-    const img = document.createElement('img');
-    img.src = w.image;
-    img.alt = '';
-    img.loading = 'lazy';
-    img.addEventListener('error', () => {
-      img.remove();
-      thumb.classList.add('is-empty');
-    });
-    thumb.appendChild(img);
-  } else {
-    thumb.classList.add('is-empty');
-  }
-  row.appendChild(thumb);
+  row.appendChild(watchThumb(w));
 
   const main = el('div', 'watch-main');
 
   // Primary — the product name, the thing the eye should land on; its colour
   // carries the state (green = deal, red = watching).
-  const name = el('a', 'watch-name');
-  name.dir = 'auto';
-  name.textContent = w.label || w.query;
-  const navTarget = notificationTarget(w, {
-    store: w.lastStore || w.provider,
-    source: w.lastSource,
-    name: w.lastName,
-    link: w.lastLink || w.link,
-  });
-  name.href = navTarget.href;
-  if (navTarget.kind === 'external') {
-    name.target = '_blank';
-    name.rel = 'noopener';
-  }
-  main.appendChild(name);
+  main.appendChild(watchName(w));
 
   // Secondary — the living status. Friendly and active, never technical. The
   // colour cue lives on the title above; this line stays neutral.
@@ -583,68 +880,10 @@ function watchRow(w, onDelete, onUpdate) {
   meta.dir = 'auto';
   main.appendChild(meta);
 
-  {
-    const advanced = el('details', 'watch-advanced');
-    advanced.appendChild(el('summary', 'watch-advanced-title', t('watch.advanced')));
-    const body = el('div', 'watch-advanced-body');
-    const exactAmazon = w.watchTrack === 'amazon_exact';
-    let searchInput = null;
-    if (!exactAmazon) {
-      const search = el('label', 'watch-close-control');
-      search.appendChild(el('span', null, t('watch.searchQuery')));
-      searchInput = document.createElement('input');
-      searchInput.type = 'search';
-      searchInput.maxLength = 120;
-      searchInput.value = w.customSearchQuery || '';
-      searchInput.placeholder = w.systemSearchQuery || w.query || t('watch.searchPlaceholder');
-      search.appendChild(searchInput);
-      body.appendChild(search);
-      body.appendChild(el('p', 'watch-advanced-hint', t('watch.searchHint')));
-    }
-    const close = el('label', 'watch-close-control');
-    close.appendChild(el('span', null, t('watch.closeThreshold')));
-    const closeInput = document.createElement('input');
-    closeInput.type = 'number';
-    closeInput.min = '0.1';
-    closeInput.max = '100';
-    closeInput.step = '0.1';
-    closeInput.value = w.closeThreshold ?? '';
-    closeInput.placeholder = t('watch.closePlaceholder');
-    close.appendChild(closeInput);
-    body.appendChild(close);
-    const save = el('button', 'watch-settings-save', t('watch.saveSettings'));
-    save.type = 'button';
-    const saveError = el('p', 'wd-error');
-    saveError.hidden = true;
-    save.addEventListener('click', async () => {
-      save.disabled = true;
-      save.textContent = t('watch.saving');
-      const res = await updateWatch(w.id, {
-        ...(!exactAmazon ? { customSearchQuery: searchInput.value.trim() || null } : {}),
-        closeThreshold: closeInput.value === '' ? null : Number(closeInput.value),
-      });
-      if (res.error) {
-        saveError.textContent = res.error;
-        saveError.hidden = false;
-        save.disabled = false;
-        save.textContent = t('watch.saveSettings');
-        return;
-      }
-      onUpdate(res.watch, row);
-    });
-    body.append(save, saveError);
-    advanced.appendChild(body);
-    main.appendChild(advanced);
-  }
+  main.appendChild(watchSettings(w, row, onUpdate));
 
   row.appendChild(main);
-
-  const del = el('button', 'watch-delete', '✕');
-  del.type = 'button';
-  del.title = t('alerts.stopWatching');
-  del.setAttribute('aria-label', t('alerts.stopWatchingItem', { label: w.label || w.query }));
-  del.addEventListener('click', () => onDelete(w, row));
-  row.appendChild(del);
+  row.appendChild(watchDelete(w, row, onDelete));
 
   return row;
 }
@@ -654,27 +893,32 @@ function alertRow(a, watchById, onDelete) {
   if (!a.seen) row.classList.add('is-unseen');
   if (a.alertType === 'close') row.classList.add('is-close');
   const w = watchById.get(a.watchId);
+  // A Value Watch alert carries the price PER ITEM ('per-item') and the price
+  // actually paid for the pack.
+  const fmt = (v) => (a.unitLabel === 'per-item'
+    ? perItem(v, a.currency)
+    : a.unitLabel ? `${Number(v).toFixed(2)} ${a.unitLabel}` : money(v, a.currency));
 
   const main = el('div', 'alert-main');
   const title = el('div', 'alert-title');
   title.dir = 'auto';
-  title.textContent = t(a.alertType === 'close' ? 'alerts.closeHit' : 'alerts.hit', {
-    label: w ? w.label || w.query : a.name || t('alerts.watchedProduct'),
-    price: a.unitLabel
-      ? `${Number(a.price).toFixed(2)} ${a.unitLabel}`
-      : money(a.price, a.currency),
-  });
+  title.textContent = t(
+    a.alertType === 'close' ? 'alerts.closeHit' : a.alertType === 'lower' ? 'alerts.lowerHit' : 'alerts.hit',
+    {
+      label: w ? w.label || w.query : a.name || t('alerts.watchedProduct'),
+      price: fmt(a.price),
+    },
+  );
   main.appendChild(title);
   const detail = el('div', 'alert-detail');
   detail.dir = 'auto';
   const bits = [];
   if (a.name) bits.push(a.name);
+  if (a.unitLabel === 'per-item' && a.purchasePrice != null && Math.abs(a.purchasePrice - a.price) > 0.005) {
+    bits.push(t('alerts.paid', { price: money(a.purchasePrice, a.currency) }));
+  }
   bits.push(t('alerts.atStore', { store: storeLabel(a.store) || a.store || '—' }));
-  bits.push(t('alerts.targetWas', {
-    price: a.unitLabel
-      ? `${Number(a.targetPrice).toFixed(2)} ${a.unitLabel}`
-      : money(a.targetPrice, a.currency),
-  }));
+  bits.push(t('alerts.targetWas', { price: fmt(a.targetPrice) }));
   if (a.source) bits.push(sourceLabel(a.source));
   detail.textContent = bits.join(' · ');
   main.appendChild(detail);

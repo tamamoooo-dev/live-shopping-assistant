@@ -625,6 +625,40 @@ export async function refreshWatch(id) {
   }
 }
 
+// Value Watch: the listing index — the value contract, the last pass per
+// store and every listing the stores returned, with its verdict.
+export async function watchListings(id) {
+  try {
+    const r = await fetch(
+      `${ENGINE_BASE}/watches/listings?id=${encodeURIComponent(id)}&profile=${encodeURIComponent(profileId())}`,
+    );
+    const j = await r.json().catch(() => ({}));
+    return r.ok && Array.isArray(j.listings) ? j : null;
+  } catch {
+    return null;
+  }
+}
+
+// The owner's answer about one listing ('match' | 'reject'), or the size per
+// item when the stores list several ({ item: { value, unit } }). The engine
+// keeps the answer over its own checker and re-indexes the watch.
+export async function answerWatchListing(id, answer) {
+  try {
+    const r = await fetch(
+      `${ENGINE_BASE}/watches/listings?id=${encodeURIComponent(id)}&profile=${encodeURIComponent(profileId())}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(answer),
+      },
+    );
+    const j = await r.json().catch(() => ({}));
+    return r.ok ? j : { error: j.error || `HTTP ${r.status}` };
+  } catch {
+    return { error: t('watch.updateError') };
+  }
+}
+
 export async function deleteWatch(id) {
   try {
     const r = await fetch(

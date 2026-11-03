@@ -6593,3 +6593,118 @@ in the shopping-connector repository.
 Replaced colored store indicators with local store logos in search, source cards and brochure headers. Browse now uses a generated local identity index instead of the small hardcoded logo set and product-photo avatars. The registry covers 873 brand entries: 513 sourced logos, 349 reconstructed marks and 11 explicitly created catalogue-name marks, with zero product-image fallbacks. Source URLs, product references, methods and prompts remain in the asset catalogue. DAVA and Pyary use their manufacturer marks; ambiguous catalogue names use neutral wordmarks. The release retains the current three brand ordering tabs.
 
 Validation: all 23 test modules passed. Browser checks loaded all 873 brand images at widths 320, 390 and 1280 without JavaScript errors, broken images or horizontal overflow; all 21 store files were validated. Live Browse contained 869 active brands and none were missing from the identity index at release verification.
+
+## 65. Value Watch — price monitoring v4 (2026-11-03)
+
+**Asked:** "Price watch never works as expected." The user wants the alert on
+time, for the same brand and the specific product, with value as the hunt
+("12 cans at 50 is better than one can at 5"). They suggested that picking a
+watch should start a background task that indexes and verifies, so there is
+no false alert and no missed deal.
+
+**What was wrong (measured on the 6 production watches):**
+- **Size was not identity.** The 80 g and 185 g Tendrina tins matched each
+  other, and the milk watch alerted at 1.25.
+- **Pack count was not value.** A 12 × 1 L listing was compared per pack.
+- **The v3 judge was cut off.** 12 of 22 replies ended at the token cap
+  (236 of 369 answers lost), and the prompt found 41/60 true listings with
+  10–12 false matches.
+- **Retrieval missed whole stores.** Danube spells "مياه" where users type
+  "مياة". Tamimi files the regular Pepsi can as "علبة" (English search only).
+  Tamimi sometimes returns a blank page.
+
+**Built (engine `fd218a4`, connector, frontend):**
+- **Value Watch (`watch_track = 'indexed_value'`, the default).** The picked
+  listing defines brand, line, type, variant and size per item. Any pack at
+  any store or flyer counts, priced per item.
+- **A background index pass.** It runs at creation via the minute tick, then
+  weekly. It keeps a verdict per listing in `watch_listings`. Rounds at
+  07:00/19:00 judge only new listings.
+- **Deterministic rules first:**
+  - size per item;
+  - barcodes settled only by the reference, the anchor or the user;
+  - conflicts: another brand, a two-product bundle, fat / freshness / dairy
+    type / oil-vs-brine / oil, and a flavour on a plain tuna or milk-type
+    reference;
+  - each conflict also applies to same-barcode twins.
+- **The judge (ministral-14b):**
+  - a few-shot prompt;
+  - the reference without its pack count;
+  - one judgement per product;
+  - **two votes per product**, where a match needs both yeses;
+  - an **unsure is kept and never re-asked**.
+  The last rule closes a real hole: a listing answered "unsure" was re-asked
+  every round, and on the second ask it became a false "yes".
+- **Size reading:**
+  - size-first packs and "12×1 ل";
+  - Tamimi's "330-355 مل" ranges;
+  - cut-off replies salvaged.
+- **Connector:** barcodes on listings, Danube's medial alef, Tamimi variants
+  and stock.
+- **Frontend:** the Alerts page lists every indexed listing (Verified / Not
+  decided yet / Not this product). The owner overrules any of them, and an
+  out-of-stock listing says so.
+
+**Measured** (`benchmarks/value-watch-judge-2026-11-03`; 8 references, 2,505
+candidates, 60 hand-labelled true listings, 1,060 same-barcode pairs):
+
+| Method | Found | False matches |
+|---|---|---|
+| Rules only | 25/60 | 0 |
+| v3 prompt, cap fixed | 41/60 | 10–12 |
+| Few-shot, one vote | 59/60 | 1–2 |
+| **Shipped path, 3 runs** | **58/60** | **0** |
+
+The other 2 are kept as unsure, never rejected. Rejected after measurement:
+- a one-sided diet/light marker (52 twin vetoes);
+- holding "fresh" when the other side is silent (58 twin holds);
+- line-word holds (232);
+- the flavour rule on drinks (stores title plain Sprite "بنكهة الليمون");
+- Mistral Medium ("retries exhausted").
+
+**Shipped:**
+- migration applied (additive);
+- connector `5e4deb8b`;
+- engine `120ec77d`;
+- the 6 production watches rebuilt as Value Watches with guarded UPDATEs
+  that keep id, owner, label, query, target and creation date. The 80 g
+  watch dropped its v3 workaround wording "تندرينا 185", which searched for
+  the other tin.
+
+**First production index (2026-11-03, 03:14–03:16 UTC).** All 6 watches
+reached "ready" on the minute tick:
+
+| Watch | Verified | Not decided yet | Not this |
+|---|---|---|---|
+| Almarai full-fat milk 1 L | 18 | 0 | 62 |
+| Tendrina soft 185 g | 4 | 2 | 74 |
+| Tendrina 80 g | 6 | 1 | 73 |
+| Tendrina sunflower 185 g | 3 | 5 | 72 |
+| Nadec skimmed milk 1 L | 8 | 3 | 69 |
+| Nova water 330 ml | 23 | 0 | 57 |
+
+It fired four alerts, one per deal, each on a real per-item price under the
+owner's target:
+- milk at Prime: 49.95 for 12 = 4.1625/L (target 4.1667);
+- Tendrina 80 g at Panda: 3.66 (target 6);
+- skimmed milk at Amazon: 49.99 for 12 = 4.1658/L;
+- Nova at Panda: 14.99 for 40 = 0.3748 (target 0.375).
+
+**The assortment rule (engine `8d70fa8`, version `9705ea59`).** Checking the
+index found one false match the benchmark could not see, because it is a
+flyer offer: Tamimi's "GOODY TUNA, ASSORTED ITEMS, 80 - 95 GRAMS" was judged
+"yes" twice for the 80 g watch. One price for a range of products does not
+say the watched one is in it. The rule:
+- **Triggers on** "assorted", "selected", "all types", "or", "متنوعة",
+  "تشكيلة", "أصناف", "بأنواعها", "أو", or a choice slash such as "skimmed / low
+  fat".
+- **Verdict:** "Not decided yet" (`by: 'assortment'`). It is never a veto and
+  never an alert; the owner confirms it in one tap.
+- **Precedence:** it outranks a kept judge verdict, like the other
+  deterministic rules.
+- **Exception:** a reference that is itself an assortment ("Mixed Nuts",
+  "مكسرات مشكلة") is left alone.
+- **Measured:** it hits 11 online candidates, none of them a true listing,
+  and 0 same-barcode twin pairs.
+
+Tests: watchValue 104, watchIndex 89, full engine suite green at deploy.

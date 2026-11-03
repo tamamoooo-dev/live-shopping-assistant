@@ -760,6 +760,26 @@ function onlineCard(store, item, up) {
     const exact = store.id === 'amazon';
     bell.title = exact ? t('market.watchExact') : t('market.watchCross');
     bell.setAttribute('aria-label', t('market.watchAria', { name: item.name }));
+    // The listing exactly as the store returned it: both names, the full
+    // title, the store's own size and brand. The engine builds the value
+    // contract (brand, variant, size per item, pack) from this.
+    const listing = {
+      id: String(item.id),
+      provider: store.id,
+      name: item.name,
+      nameEn: item.nameEn || null,
+      fullName: item.fullName || null,
+      fullNameEn: item.fullNameEn || null,
+      brand: item.brand || null,
+      brandEn: item.brandEn || null,
+      size: item.size || null,
+      // Barcode keys: the store's other listings of this exact pack are
+      // matched by them without a judgement.
+      barcodes: Array.isArray(item.barcodes) ? item.barcodes.slice(0, 6) : null,
+      price: item.price,
+      link: item.link || null,
+      image: item.image || null,
+    };
     bell.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -776,6 +796,7 @@ function onlineCard(store, item, up) {
               link: item.link,
               image: item.image,
               brand: item.brand,
+              listing,
             }
           : {
               kind: 'grocery',
@@ -791,6 +812,7 @@ function onlineCard(store, item, up) {
               link: item.link,
               image: item.image,
               brand: item.brand,
+              listing,
             },
       );
     });

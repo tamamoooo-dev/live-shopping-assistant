@@ -1706,6 +1706,41 @@ a.watch-name:hover { text-decoration: underline; }
   overflow-wrap: anywhere;
 }
 .watch-diag-row.is-match { color: var(--good); }
+/* Value Watch (v4): the actions row and the listing index panel. */
+.watch-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.watch-actions .watch-diagnose,
+.watch-actions .watch-refresh { margin-block-start: 6px; }
+.watch-row .watch-price { white-space: normal; overflow-wrap: anywhere; }
+.watch-size-choice { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-block-start: 6px; }
+.watch-size-choice .watch-candidates-title { flex-basis: 100%; }
+.watch-listings { display: flex; flex-direction: column; gap: 6px; margin-block-start: 8px; }
+.watch-listings-note { font-size: 12px; color: var(--good); }
+.watch-listings-group > summary { cursor: pointer; padding-block: 4px; }
+.watch-listing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.watch-listing-copy { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 2px; }
+.watch-listing-name { font-size: 13px; color: var(--text); overflow-wrap: anywhere; text-decoration: none; }
+a.watch-listing-name:hover { text-decoration: underline; }
+.watch-listing-facts { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.watch-listing-reason { font-size: 11.5px; color: var(--muted); font-style: italic; }
+.watch-listing.is-match .watch-listing-name { color: var(--good); }
+.watch-listing-answer {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.watch-listing-answer:disabled { opacity: 0.6; cursor: default; }
 /* Tertiary: quiet supporting details. */
 .watch-meta {
   font-size: 11.5px;

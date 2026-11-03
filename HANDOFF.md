@@ -1,5 +1,12 @@
 # Super Search — Project Handoff
 
+2026-11-03 Value Watch (price monitoring v4, HISTORY §65): a watch is now
+THIS exact product in ANY pack at every store + flyers, compared per item,
+over a verified per-listing index (`watch_listings`). Design, measured
+results and the rules that must not be weakened:
+`brochure-engine/PRICE-WATCH.md` Part A; evidence
+`benchmarks/value-watch-judge-2026-11-03/REPORT.md` (58/60 found, 0 false).
+
 2026-10-30 identity refresh: all 873 registered brand entries and 21 stores have local standalone marks; product-photo brand fallbacks are removed. Source/classification and the 11 created name marks are documented in [IDENTITY-ASSETS.md](IDENTITY-ASSETS.md). The three brand ordering tabs are preserved.
 
 2026-10-23 price/size association fix: engine rejects unbound sizes rather than
@@ -25,11 +32,12 @@ reading-check helper, verification, and snapshot refresh procedure.
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-10-09. **State at a glance:**
+> **Last updated:** 2026-11-03. **State at a glance:**
 > - **Production:** the engine runs the commit named in its deployment
->   message (`fba1144`, version `48a50a79` on 2026-10-09). `wrangler
->   deployments list` names it, because deploys go only through
->   `node deploy.mjs` (§9). Frontend: `main` on Pages.
+>   message (`8d70fa8`, version `9705ea59` on 2026-11-03; rollback
+>   `d08f7b31` = `eb13d23`, the last pre-Value-Watch engine). `wrangler deployments list` names it, because
+>   deploys go only through `node deploy.mjs` (§9). Connector `5e4deb8b`
+>   (rollback `1b076c53`). Frontend: `main` on Pages.
 > - **Platform:** Cloudflare **Workers Paid** (R2, Queues, 5-minute CPU in
 >   use, §8). Mistral is the only other spend: ONE model,
 >   `ministral-14b-2512`, for every read, with **5 live keys × 30 requests
@@ -78,8 +86,9 @@ commercial product. You type a product (Arabic or English) and get:
   **tappable products** (ClickFlyer-style): tap a product on a flyer page →
   detail sheet (crop image, price, discount, similar offers) → add to a
   **local cart** (`#/cart`, localStorage, grouped by store with totals).
-- **Price watches** with a target price, checked daily, alerting in-app
-  (`#/alerts`) and optionally via ntfy.sh push.
+- **Price watches** (Value Watch): one exact product in any pack at every
+  store, with a target price per item, checked at 07:00/19:00 Riyadh,
+  alerting in-app (`#/alerts`) and optionally via ntfy.sh push.
 
 Running cost: **Cloudflare Workers Paid** (the engine needs its CPU,
 subrequest and Queue limits) plus pay-per-call **Mistral** for Vision.
@@ -334,7 +343,24 @@ building"** instead of claiming a record. Guarded `POST
 2026-07-04: ~13.6k identities+points from 15.8k offers). Retention:
 identities unseen >365 days are pruned with their points.
 
-**Price monitoring** (`monitor.js`, `brochure-engine/PRICE-WATCH.md`): a watch is
+**Price monitoring — Value Watch** (default track `indexed_value`, 2026-11-03;
+`watchValue.js` pure, `watchIndex.js` runtime, `PRICE-WATCH.md` Part A): the
+picked listing defines ONE product (brand, line, type, variant, size per item);
+any pack at any store or flyer counts, priced per item. A background INDEX pass
+(at creation via the minute tick, then weekly) searches ≤4 queries × 7 stores
+(+ flyers) and keeps a verdict per listing in `watch_listings`
+(match/reject/pending; `verdict_by` anchor|barcode|rules|conflict|ai|ai+rules|
+user). Rounds at 07:00/19:00 judge only new listings. Rules settle first (size
+per item, settled barcodes, conflicts: brand, bundle, fat/freshness/dairy/oil,
+flavour on a plain tuna/milk-type reference); then the 14B judge, asked TWICE
+per product — a match needs both yeses, an "unsure" is kept and never re-asked.
+Only match + size-verified + in stock alerts. The owner overrules any listing
+on the Alerts page (`GET/PATCH /watches/listings`). ⚠️ Never let a re-ask
+become a second chance at a yes, and never ship a conflict rule without 0
+vetoes on the benchmark's true listings and twin pairs.
+
+The explicit `amazon_exact` and `market_general` (product CLASS) tracks keep the
+July design (`monitor.js`, PRICE-WATCH.md Part B): a watch is
 ANCHORED in exactly one of two ways, never to a retailer reference —
 `registry_product_id` (`pr_`, "THIS product, wherever it is sold") or `spec`
 (pinned identity dimensions, "any product of THIS class", e.g.
@@ -376,7 +402,8 @@ round still lands. Manual checks keep random ids.
 non-current AND expired >28 days (row marked `pruned_at`); ≤250 KV deletes +
 ≤12 rows per run; offers rows deleted after ~180 days.
 
-**D1 tables:** `brochures`, `price_points`, `offers`, `watches`, `alerts`
+**D1 tables:** `brochures`, `price_points`, `offers`, `watches`,
+`watch_listings` (Value Watch index, migrate-2026-11-03-value-watch.sql), `alerts`
 (canonical `schema.sql`; past deltas in `migrate-*.sql`, already applied),
 plus the NOT-YET-MIGRATED registry set: `offer_enrichments`
 (migrate-2026-07-enrichments.sql), `products`/`product_tokens`/
@@ -721,7 +748,7 @@ hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open
 | `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). Sheet hero + cart thumbnail are **SELF-HOSTED crops** from the STORED page image via the tapped spot's bbox (`cropFromPage`: canvas + `crossOrigin` on the CORS-open /asset → data-URL); D4D's CDN crop (`offer.imageUrl`) is only a fallback when no geometry is at hand (similar-strip, marketplace). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
 | `cartPage.js` | Cart page: per-store groups + subtotals, qty steppers, View flyer (re-opens viewer on the item's page) |
-| `alertsPage.js` | Alerts page + shared watch dialog + nav badge |
+| `alertsPage.v2.js` | Alerts page + shared watch dialog + nav badge; a Value Watch shows its per-item target, index status and its listings grouped Verified / Not decided yet / Not this product, each with "this is it" / "not this" (the owner's verdict wins) and an out-of-stock note |
 | `profile.js` | Local profile (`lsa.profile.v1`): silent per-browser identity created at boot, owns ALL user `lsa.*` data (adopted in place, no key renames); `profileGet/profileSet` JSON slots (`lsa.profile.data.*`) for future personalization |
 | `server.js` (root) | Zero-dependency local static server → http://localhost:5173 |
 
@@ -1080,6 +1107,19 @@ external product images — verify via `preview_eval` DOM inspection; preview
   neither.
 
 ## 11. Open TODOs (priority order)
+
+- **Value Watch, 2026-11-03 (HISTORY §65):** shipped and indexed. All 6
+  production watches are `indexed_value`. Each has a listing index (275–447
+  listings seen per watch) and four alerts fired on real deals: milk 49.95
+  for 12, Tendrina 80 g 3.66, skimmed milk 49.99 for 12, Nova 14.99 for 40.
+  Open items:
+  - **Owner's pick.** Some true listings wait as "Not decided yet": the
+    Ninja/Tamimi soft 185 g twins, and Ninja's "نادك حليب خالي الدسم 1 لتر".
+    The owner confirms them in one tap.
+  - **Flyers are not in the labelled benchmark.** Re-check the live index
+    after any rule or prompt change, since flyer offers (Vision names) are
+    judged by the same path. The one flyer false match found so far, an
+    assortment, led to the assortment rule.
 
 - **Package arithmetic, 2026-10-18 (HISTORY §64):** six crop-verified Arabic
   ml multipacks now use their full count for unit prices. Summary/sheet prefer
