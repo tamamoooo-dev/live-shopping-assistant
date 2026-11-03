@@ -34,9 +34,9 @@ reading-check helper, verification, and snapshot refresh procedure.
 >
 > **Last updated:** 2026-11-03. **State at a glance:**
 > - **Production:** the engine runs the commit named in its deployment
->   message (`85e9ce8`, version `d72a8cce` on 2026-11-03; rollback
->   `8cdf6f12` = `4a79987`, or `d08f7b31` = `eb13d23`, the last
->   pre-Value-Watch engine). `wrangler deployments list` names it, because
+>   message (`4ebcc21`, version `cd0f1b42` on 2026-11-03; rollback
+>   `40911bd8` = `193628d`, `d72a8cce` = `85e9ce8`, `8cdf6f12` = `4a79987`,
+>   or `d08f7b31` = `eb13d23`, the last pre-Value-Watch engine). `wrangler deployments list` names it, because
 >   deploys go only through `node deploy.mjs` (§9). Connector `08f33966`
 >   (rollback `5e4deb8b`). Frontend: `main` on Pages.
 > - **Lulu online is BLOCKED by Lulu (2026-11-03):** its Cloudflare firewall
@@ -1137,10 +1137,14 @@ external product images — verify via `preview_eval` DOM inspection; preview
     after any rule or prompt change, since flyer offers (Vision names) are
     judged by the same path. The one flyer false match found so far, an
     assortment, led to the assortment rule.
-  - **"N to confirm" counts listings still waiting for the checker**
-    (`verdict_by` null). Uno showed "137 to confirm", but most are a judge
-    backlog: rounds judge only 20 products. They are not owner questions. The
-    count should split owner-decidable unsure listings from waiting ones.
+  - **"N to confirm" — FIXED 2026-11-03 (HISTORY §68).** The badge counts
+    only the owner's questions (`counts.unsure`: the checker's unsure, an
+    assortment). Listings not judged yet (`counts.waiting`, `verdict_by` null)
+    and still returned by the search read "N waiting to be checked" in the
+    details (a listing gone from the results is judged only if it comes
+    back, so it is not counted). A pass that leaves
+    them comes back in 5 minutes (at most 8 in a row, never while the checker
+    fails) instead of a week.
   - **The assortment rule holds cross-category listings.** On 2026-11-03 a
     Ugreen "Uno" power bank, whose English title has a letter/letter slash, sat
     as unsure for the Uno kitchen-towel watch. The judge never got to reject

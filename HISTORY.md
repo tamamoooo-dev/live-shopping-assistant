@@ -6848,3 +6848,65 @@ The run produced no alerts, because no store beat a watch's current best.
 - frontend on Pages.
 
 **Tests:** watchIndex 138 (37 new), full engine suite 105 files.
+
+## 68. "N to confirm" is the owner's questions; the checker backlog drains (2026-11-03)
+
+**Problem:** the Uno kitchen-towel watch read "137 to confirm". Measured in
+D1, 144 of its 157 undecided listings had `verdict_by` null: nobody had judged
+them yet. Only 7 were the checker's unsure and 6 assortments, which are the
+owner's to settle. A broad watch's first index pass meets far more products
+than its judge budget (60), and each round judges only 20 more, so the backlog
+took days to drain while the badge asked the owner about it.
+
+**What changed:**
+- **Engine.** `index_json.counts` now splits `pending` into
+  - `unsure`: verdict pending and `verdict_by` set ('ai' or 'assortment');
+  - `waiting`: verdict pending, `verdict_by` null, and still returned by
+    the search (`missing_rounds` < `MISSING_ROUNDS_GONE`). A listing gone from
+    the results is judged only if it comes back, so it is not waiting.
+
+  `valueWatchSummary` serves both, and `pending` stays for older readers.
+- **The drain.** A sweep can return listings it could not judge within its
+  budget. When that happens and the checker answered with no errors, the next
+  index pass comes after `BACKLOG_RETRY_MS` (5 min) instead of a week. Limits:
+  - at most `BACKLOG_MAX_PASSES` (8) in a row (`index_json.backlogPasses`);
+  - never while the checker fails;
+  - never from a browser check.
+
+  A round that leaves such a backlog brings the index pass forward the same
+  way, but never into a pass that is running.
+- **The app.**
+  - The badge shows `unsure`; an index written before this change falls back
+    to `pending`.
+  - The details read "N to confirm · N waiting to be checked".
+
+**Tests:**
+- watchIndex 151 (13 new): the split, the 5-minute pass, the drain back to
+  weekly, a round bringing the pass forward, the 8-pass cap, no pass while
+  the checker fails, and a listing gone from the search not counted waiting;
+- full engine suite 105 files;
+- frontend 22.
+
+**Shipped:**
+- engine `193628d` (Worker `40911bd8`), then `4ebcc21` (Worker `cd0f1b42`,
+  the gone-listing count; rollback `40911bd8`, or `d72a8cce` before both);
+- frontend `2683e43` on Pages.
+
+**Live (Uno kitchen towels, `w_544b752632`, 2026-11-03):**
+
+| Pass (UTC) | Judged | To confirm | Waiting | Next pass |
+|---|---|---|---|---|
+| before | 60 | 137, later 157, shown (13 real) | 144 | in a week |
+| 13:46 | 60 | 15 | 92 | 13:51 |
+| 13:52 | 60 | 17 | 45 | 13:57 |
+| 13:58 | 37 | 18 | 10 | weekly |
+| 14:05 (gone-listing fix) | 5 | 18 | 0 | weekly |
+
+The 10 left after 13:58 were listings the search had stopped returning (Amazon
+UNO card games, an Arduino board, missing 1-3 sweeps), which led to the
+gone-listing fix. The app was checked in the preview with stand-in watch data
+under its own test profile: "15 to confirm" where 107 had shown, no badge when
+only checker work is left, and the old count for an index from before the
+split. The other watches get the split at their next sweep. Still open
+(HANDOFF §11): 7 of Uno's 18 are assortment holds, among them the Ugreen power
+bank.
