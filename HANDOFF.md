@@ -34,8 +34,8 @@ reading-check helper, verification, and snapshot refresh procedure.
 >
 > **Last updated:** 2026-11-03. **State at a glance:**
 > - **Production:** the engine runs the commit named in its deployment
->   message (`4a79987`, version `8cdf6f12` on 2026-11-03; rollback
->   `9705ea59` = `8d70fa8`, or `d08f7b31` = `eb13d23`, the last
+>   message (`85e9ce8`, version `d72a8cce` on 2026-11-03; rollback
+>   `8cdf6f12` = `4a79987`, or `d08f7b31` = `eb13d23`, the last
 >   pre-Value-Watch engine). `wrangler deployments list` names it, because
 >   deploys go only through `node deploy.mjs` (§9). Connector `08f33966`
 >   (rollback `5e4deb8b`). Frontend: `main` on Pages.
@@ -43,7 +43,15 @@ reading-check helper, verification, and snapshot refresh procedure.
 >   answers every request from a Worker with 403, and the API refuses
 >   cross-origin browser calls too. It is reported as `blocked`, never
 >   retried within a round, and never worked around. Lulu's prices come
->   only through its flyers (HISTORY §66).
+>   through its flyers (HISTORY §66) and, **when the owner asks**, through
+>   a browser check.
+> - **Browser checks, Lulu + Carrefour (2026-11-03, HISTORY §67):**
+>   - Claude in Chrome runs `brochure-engine/browser-check/check.js` in the
+>     owner's own store tab and posts to `POST /watches/observe`. The skill is
+>     `~/.claude/skills/browser-price-check`.
+>   - The listings get the same rules and two-vote judge, and the price
+>     stands 12 hours.
+>   - It runs on request only, never on a timer, and stops at any challenge.
 > - **Platform:** Cloudflare **Workers Paid** (R2, Queues, 5-minute CPU in
 >   use, §8). Mistral is the only other spend: ONE model,
 >   `ministral-14b-2512`, for every read, with **5 live keys × 30 requests
@@ -235,7 +243,7 @@ where they conflict with this file, *they* win — they are narrower and newer):
 | `panda` | Public JSON `api.panda.sa` (`products-v3` → `suggestions-v3`) | Emit the **VARIETY id** for result `id` + link — catalogue `product.id` 412s on the product page |
 | `tamimi` | ZopSmart JSON (`shop.tamimimarkets.com/api/layout/search`) | Stable, EN/AR |
 | `danube` | Spree JSON (`danube.sa/api/products.json`) | 3 tries on transient failures; multi-word **Arabic** queries 422 → provider falls back to the longest single token |
-| `lulu` | Akinon list JSON (`gcc.luluhypermarket.com/{en-sa\|ar-sa}/list?…&format=json`) — ⚠️ **blocked**: Lulu's firewall 403s every Worker request since at least 2026-11-03; the connector answers 403 `blocked` | SAR via pz-locale/pz-currency cookies |
+| `lulu` | Akinon list JSON (`gcc.luluhypermarket.com/{en-sa\|ar-sa}/list?…&format=json`) — ⚠️ **blocked**: Lulu's firewall 403s every Worker request since at least 2026-11-03; the connector answers 403 `blocked`. Value Watch prices come via a browser check on request (§67) | SAR via pz-locale/pz-currency cookies |
 | `amazon` | `pa-api` strategy first (skips while unconfigured) → `search-html` parse of `amazon.sa/s` | **Best-effort.** 5× retry w/ rotating UA (~80%); frontend retries once more (~99% effective). Parser splits the brand `<h2>` from the title `<h2>` (brand-led display name) — `amazon.test.mjs` locks it. Durable fix = PA-API secrets (§9) |
 | `noon` | Noon **Minutes** SSR-payload parse (`minutes.noon.com`) | Best-effort; main noon.com blocks datacenter IPs. Minutes left Next.js for **TanStack Start** (2026-08-01): the payload is now a seroval **object literal** (unquoted keys, `$R[n]=` back-refs) inside `<script id="$tsr-stream-barrier">`, never JSON — the old RSC-flight parse silently returned 0 results. `noon.test.mjs` locks it |
 | `ninja` | `public.ananinja.com/fahras/search/products` after bootstrapping a guest `DeviceToken` (~90-day JWT) from any storefront 404 | `storeId=1` = Riyadh; prices in **cents** (÷100); token cached in-isolate, refetched on 401 |
@@ -361,7 +369,10 @@ per item, settled barcodes, conflicts: brand, bundle, fat/freshness/dairy/oil,
 flavour on a plain tuna/milk-type reference); then the 14B judge, asked TWICE
 per product — a match needs both yeses, an "unsure" is kept and never re-asked.
 Only match + size-verified + in stock alerts. The owner overrules any listing
-on the Alerts page (`GET/PATCH /watches/listings`). ⚠️ Never let a re-ask
+on the Alerts page (`GET/PATCH /watches/listings`). Lulu and Carrefour can be
+added on request by a **browser check** (`watchObserve.js`, `POST
+/watches/observe`, rows `source = 'browser'`, a price standing 12 h;
+PRICE-WATCH.md "Browser checks"). ⚠️ Never let a re-ask
 become a second chance at a yes, and never ship a conflict rule without 0
 vetoes on the benchmark's true listings and twin pairs.
 
@@ -1126,6 +1137,15 @@ external product images — verify via `preview_eval` DOM inspection; preview
     after any rule or prompt change, since flyer offers (Vision names) are
     judged by the same path. The one flyer false match found so far, an
     assortment, led to the assortment rule.
+  - **"N to confirm" counts listings still waiting for the checker**
+    (`verdict_by` null). Uno showed "137 to confirm", but most are a judge
+    backlog: rounds judge only 20 products. They are not owner questions. The
+    count should split owner-decidable unsure listings from waiting ones.
+  - **The assortment rule holds cross-category listings.** On 2026-11-03 a
+    Ugreen "Uno" power bank, whose English title has a letter/letter slash, sat
+    as unsure for the Uno kitchen-towel watch. The judge never got to reject
+    it. Candidate fix: let a judge "no" reject an assortment hold, and re-run
+    `conflicts.mjs` first.
 
 - **Package arithmetic, 2026-10-18 (HISTORY §64):** six crop-verified Arabic
   ml multipacks now use their full count for unit prices. Summary/sheet prefer

@@ -6770,3 +6770,81 @@ around it (no proxies, no residential relays).
 
 **Tests:** watchIndex 98, full engine suite 105 files, all frontend unit tests
 green.
+
+## 67. Browser checks for Lulu and Carrefour (2026-11-03)
+
+**Asked:** after the Lulu diagnosis (§66) and a study of what a
+Claude-controlled browser could reach: "Build it". That meant an on-demand
+"check with my browser" for Lulu and Carrefour.
+
+**What the browser can read (measured in the owner's Chrome):**
+- **Lulu.** The Akinon list JSON (`/ar-sa/list?format=json&page_size=50`)
+  answers 200 in the owner's session. One call gives Arabic and English names,
+  brand, barcodes, size ("185 g"), price, regular price, stock and the link.
+  It takes about 0.2–1.2 s.
+- **Carrefour.** No connector exists. The search page carries 60 product cards
+  in its Next.js payload. Each card has a product id, name, selling and marked
+  price, and stock, but no barcode and no brand field. The Arabic and English
+  pages share product ids. One page takes about 1.2–1.8 s and weighs about 940 KB.
+- **ClicFlyer.** Prices exist only inside images. Not built.
+
+**Design:**
+- **Engine.** `watchObserve.js` reads the posted listings as untrusted input:
+  - the two stores only;
+  - at most 300 listings;
+  - SAR prices between 0 and 100,000;
+  - links on the store's own host;
+  - barcodes re-keyed exactly like the connector's `gtin.js`.
+
+  The sweep then judges them like any store (rules, two votes, the size check).
+  Rows are `source = 'browser'` with their own state key, so the connector's
+  Lulu stays `blocked`. `checkValueWatch` mode `observe` evaluates the round
+  as the last round left it, plus the browser's store: one deal, one alert.
+- **A browser price stands 12 hours.**
+  - After that, a deal it held ends quietly. The same deal found again is not
+    news; a real drop alerts as `lower`.
+  - A complete check that misses a listing works as in a round: one miss
+    leaves the deal unknown, two end it.
+- **Lulu's page policy.** Its `connect-src` and `frame-src` allow only Lulu and
+  its partners, so a Lulu tab cannot post to the engine:
+  - a script-opened window is blocked as a popup;
+  - a window opened by a real click is allowed.
+
+  So the script adds a "Send to Price Watch" button. Its click opens the
+  engine's `/watches/observe/relay` page, which forwards the two observe calls
+  by postMessage. An allowed partner host is never used as a way through.
+- **Runs on request only.** It never runs on a timer. A 403, a 429 or a
+  challenge page stops the check. A server error (5xx) is asked once more, then
+  that phrase counts as unanswered. Carrefour answered one phrase 500 and 200 a
+  minute later.
+
+**Live run (2026-11-03, all 5 Value Watches at both stores):**
+
+| Watch | Lulu | Carrefour | Effect |
+|---|---|---|---|
+| Tenderina sandwich 185 g (main profile) | 9.50 verified | 9.50 verified | best stays Amazon 7.50 |
+| Uno kitchen towels | not sold (1 power bank held unsure) | 16.99 for 8 = 2.12/roll | best stays Panda 1.42 |
+| Nadec long-life milk 1 L | 6.20 | 2 verified | best stays a flyer at 4.16 |
+| Tenderina soft 185 g | 9.50 | 9.50 | Lulu 9.50 is now this watch's best (target 6) |
+| Tenderina 80 g | 5.90 | 6.25 | best stays Panda 3.66 |
+
+The run produced no alerts, because no store beat a watch's current best.
+
+**The app:**
+- A listing reads "checked in your browser".
+- The watch details read "Checked in your browser: Carrefour 03:32 PM, Lulu
+  03:33 PM".
+- While a browser check is fresh, its store is no longer listed as "did not
+  answer" or "blocks".
+
+**Weak spots found** (HANDOFF §11):
+- The "N to confirm" badge counts the judge backlog.
+- The assortment rule holds a cross-category listing (a Ugreen "Uno" power
+  bank).
+
+**Shipped:**
+- engine `85e9ce8` (Worker `d72a8cce`, rollback `8cdf6f12`);
+- the script's retry fix and the docs, in the commit after;
+- frontend on Pages.
+
+**Tests:** watchIndex 138 (37 new), full engine suite 105 files.

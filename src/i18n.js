@@ -227,6 +227,7 @@ const STRINGS = {
     'alerts.view': 'View ↗',
     'alerts.source.online': 'online store',
     'alerts.source.flyer': 'this week’s flyer',
+    'alerts.source.browser': 'checked in your browser',
     // Value Watch (v4)
     'alerts.indexing': 'Checking every store for this exact product…',
     'alerts.indexingShort': 'Indexing stores — about a minute…',
@@ -241,6 +242,7 @@ const STRINGS = {
     'alerts.trackingPending': '{count} waiting to be checked',
     'alerts.storesDown': '{stores} did not answer',
     'alerts.storesBlocked': '{stores} blocks automated price checks online — its flyers are still checked',
+    'alerts.browserChecked': 'Checked in your browser: {stores}',
     'alerts.toConfirm': '{count} to confirm',
     'alerts.showDetails': 'Show details',
     'alerts.hideDetails': 'Hide details',
@@ -706,6 +708,7 @@ const STRINGS = {
     'alerts.view': 'عرض ↗',
     'alerts.source.online': 'متجر إلكتروني',
     'alerts.source.flyer': 'نشرة هذا الأسبوع',
+    'alerts.source.browser': 'فُحص في متصفحك',
     // Value Watch (v4)
     'alerts.indexing': 'نبحث في كل المتاجر عن هذا المنتج نفسه…',
     'alerts.indexingShort': 'جارٍ فهرسة المتاجر — نحو دقيقة…',
@@ -720,6 +723,7 @@ const STRINGS = {
     'alerts.trackingPending': '{count} بانتظار التحقق',
     'alerts.storesDown': 'لم يستجب: {stores}',
     'alerts.storesBlocked': '{stores} يمنع الفحص الآلي لأسعاره على الإنترنت — نشراته ما زالت تُفحص',
+    'alerts.browserChecked': 'فُحص في متصفحك: {stores}',
     'alerts.toConfirm': '{count} بانتظار تأكيدك',
     'alerts.showDetails': 'إظهار التفاصيل',
     'alerts.hideDetails': 'إخفاء التفاصيل',

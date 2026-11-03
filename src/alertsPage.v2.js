@@ -56,7 +56,7 @@ function fmtDate(iso) {
 
 // Alert source label — a translated label for known sources, else the raw
 // source string the engine sent (never a bare i18n key).
-const sourceLabel = (s) => (s === 'online' || s === 'flyer' ? t(`alerts.source.${s}`) : s);
+const sourceLabel = (s) => (['online', 'flyer', 'browser'].includes(s) ? t(`alerts.source.${s}`) : s);
 
 // --- the unseen-alerts badge (topbar + tab bar) --------------------------------
 export function setAlertsBadge(n) {
@@ -555,7 +555,8 @@ function listingRow(w, l, panel, onUpdate) {
   }
   copy.appendChild(name);
   const bits = [storeLabel(l.store) || l.store];
-  if (l.source === 'flyer') bits.push(t('alerts.source.flyer'));
+  // A flyer offer, or a price read in the owner's own browser (Lulu, Carrefour).
+  if (l.source === 'flyer' || l.source === 'browser') bits.push(t(`alerts.source.${l.source}`));
   const size = packText(l.pack, l.item);
   if (size) bits.push(size);
   if (l.price != null) bits.push(money(l.price));
@@ -718,8 +719,19 @@ function watchDetails(more, w, { target, best, hasDeal, isClose, indexing, retry
     add('watch-reason', parts.join(' · '));
   }
   const names = (stores) => stores.map((s) => storeLabel(s) || s).join(', ');
-  if ((v.storesFailed || []).length) add('watch-reason', t('alerts.storesDown', { stores: names(v.storesFailed) }));
-  if ((v.storesBlocked || []).length) add('watch-reason', t('alerts.storesBlocked', { stores: names(v.storesBlocked) }));
+  // Stores checked on request in the owner's browser; each price stands 12
+  // hours, and while it does the store is not reported as down or blocked.
+  const checked = Object.entries(v.browser || {}).filter(([, c]) => c && c.at);
+  const fresh = new Set(checked.filter(([, c]) => Date.now() - Date.parse(c.at) < 12 * 3600 * 1000).map(([s]) => s));
+  const down = (v.storesFailed || []).filter((s) => !fresh.has(s));
+  const blocked = (v.storesBlocked || []).filter((s) => !fresh.has(s));
+  if (down.length) add('watch-reason', t('alerts.storesDown', { stores: names(down) }));
+  if (blocked.length) add('watch-reason', t('alerts.storesBlocked', { stores: names(blocked) }));
+  if (checked.length) {
+    add('watch-reason', t('alerts.browserChecked', {
+      stores: checked.map(([s, c]) => `${storeLabel(s) || s} ${fmtDate(c.at)}`).join(', '),
+    }));
+  }
   if (w.monitoringHealth && !['ok', 'unchecked'].includes(w.monitoringHealth) && w.monitoringHealthReason) {
     add('watch-reason', w.monitoringHealthReason);
   }
