@@ -654,7 +654,11 @@ function valueWatchRow(w, onDelete, onUpdate) {
   }
   line.appendChild(price);
   if (target != null) line.appendChild(el('span', 'watch-target', t('alerts.target', { price: money(target) })));
-  if (v.pending) line.appendChild(el('span', 'watch-badge', t('alerts.toConfirm', { count: v.pending })));
+  // Only the owner's questions (the checker unsure, an assortment); listings
+  // still waiting for the checker are not (an index from before 2026-11-03
+  // has no split: pending, as before).
+  const questions = v.unsure ?? v.pending;
+  if (questions) line.appendChild(el('span', 'watch-badge', t('alerts.toConfirm', { count: questions })));
   main.appendChild(line);
   row.appendChild(main);
 
@@ -715,7 +719,12 @@ function watchDetails(more, w, { target, best, hasDeal, isClose, indexing, retry
   // What the index holds, and who did not answer (never a silent gap).
   if (v.matched != null) {
     const parts = [t('alerts.tracking', { count: v.matched, stores: (v.storesAnswered || []).length })];
-    if (v.pending) parts.push(t('alerts.trackingPending', { count: v.pending }));
+    if (v.unsure != null) {
+      if (v.unsure) parts.push(t('alerts.toConfirm', { count: v.unsure }));
+      if (v.waiting) parts.push(t('alerts.trackingPending', { count: v.waiting }));
+    } else if (v.pending) {
+      parts.push(t('alerts.trackingPending', { count: v.pending }));
+    }
     add('watch-reason', parts.join(' · '));
   }
   const names = (stores) => stores.map((s) => storeLabel(s) || s).join(', ');
