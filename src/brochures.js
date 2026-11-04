@@ -27,14 +27,23 @@ import {
 import { openBrochureViewer, brochureDateLabel } from './viewer.js?v=20260924.2';
 import { t, tn } from './i18n.js';
 import { storeIcon } from './storeIdentity.js';
+import { createMinimartsSection } from './minimartsSection.js';
 
 let initialized = false;
+let minimarts = null;
 
+// Mini marts (minimartsSection.js) lead the page: shops' own story offers,
+// refreshed on every visit; the flyer stores follow, rendered once.
 export function initBrochuresPage() {
-  if (initialized) return;
+  if (initialized) {
+    minimarts?.refreshMinimarts();
+    return;
+  }
   initialized = true;
   const root = document.getElementById('brochure-stores');
   root.innerHTML = '';
+  minimarts = createMinimartsSection();
+  root.appendChild(minimarts);
   for (const store of ENGINE_STORES) {
     const section = storeSection(store);
     root.appendChild(section.el);

@@ -16,6 +16,7 @@ import { initKnowledgeSearch } from './knowledgeUI.js';
 import { rememberSearch } from './searchPreferences.js';
 import { loadBrochures, searchOffers, storeLabel } from './brochure.js';
 import { initBrochuresPage } from './brochures.js?v=20260924.2';
+import { refreshMinimartsBadge } from './minimartsSection.js';
 import { initBrowsePage } from './browsePage.js?v=20260924.2';
 import { flyerListing } from './compare.js';
 import { createMarketplace } from './marketplace.js?v=20260924.2';
@@ -374,3 +375,4 @@ route();
 if (!pageSearch.hidden) input.focus();
 loadBrochures(); // warm the weekly-flyer cache (flyer cards open their brochure from it)
 refreshAlertsBadge(); // unseen price alerts -> badge on the Alerts tab
+refreshMinimartsBadge(); // new mini mart offers -> badge on the Brochures tab

@@ -1212,6 +1212,185 @@ button { font-family: inherit; }
 .bstore-empty a { color: var(--brand); font-weight: 700; text-decoration: none; }
 .bstore-empty a:hover { text-decoration: underline; }
 
+/* --- Mini marts (minimartsSection.js): shops' Snapchat story offers --- */
+.mm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+.mm-shops-btn { border: 0; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 700; }
+.mm-shops-btn[aria-expanded="true"] { background: var(--brand); color: #fff; }
+.mm-lead { margin: -4px 2px 12px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.mm-loading { color: var(--muted); font-size: 13.5px; padding: 8px 2px; }
+
+.mm-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+@media (min-width: 560px) {
+  .mm-cards { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+}
+.mm-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+.mm-pic {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 0;
+  background: var(--surface-2);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+.mm-pic:disabled { cursor: default; }
+.mm-pic img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; display: block; }
+.mm-new, .mm-again {
+  position: absolute;
+  top: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: var(--pill);
+  color: #fff;
+}
+.mm-new { inset-inline-start: 8px; background: var(--accent); }
+.mm-again { inset-inline-end: 8px; background: rgba(15, 14, 30, 0.65); backdrop-filter: blur(4px); }
+.mm-info { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mm-price-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.mm-price { color: var(--good); font-variant-numeric: tabular-nums; }
+.mm-price b { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; }
+.mm-price small { font-size: 11.5px; font-weight: 700; }
+.mm-was { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.mm-deal {
+  align-self: flex-start;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--brand);
+  background: var(--brand-soft);
+  padding: 2px 8px;
+  border-radius: var(--pill);
+}
+.mm-name {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  unicode-bidi: plaintext;
+}
+.mm-meta { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.mm-shop { font-weight: 700; overflow-wrap: anywhere; }
+
+
+.mm-manager[hidden] { display: none; }
+.mm-manager {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mm-shop-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mm-shop-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mm-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+  background: var(--surface-2);
+}
+.mm-avatar-empty { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: var(--muted); }
+.mm-shop-text { flex: 1; min-width: 0; }
+.mm-shop-title { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-shop-status { font-size: 11.5px; color: var(--muted); }
+.mm-shop-status.is-ok { color: var(--good); }
+.mm-shop-status.is-blocked, .mm-shop-status.is-error { color: var(--warn); }
+.mm-shop-status.is-not_public, .mm-shop-status.is-not_found { color: var(--accent); }
+.mm-remove {
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 0;
+  border-radius: var(--pill);
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.mm-remove:hover { color: var(--text); }
+.mm-add { display: flex; gap: 8px; }
+.mm-add-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.mm-add-input:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+.mm-add-btn {
+  flex: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--grad);
+  border: 0;
+  border-radius: var(--pill);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+.mm-add-btn:disabled { opacity: 0.6; cursor: default; }
+.mm-add-note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.mm-add-note.is-error { color: var(--accent); }
+
+.mm-viewer {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  max-width: min(92vw, 520px);
+  max-height: 92vh;
+}
+.mm-viewer::backdrop { background: rgba(10, 10, 20, 0.82); }
+.mm-viewer img { display: block; max-width: 100%; max-height: 92vh; border-radius: var(--radius); }
+.mm-viewer-close {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 0;
+  font-size: 22px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(15, 14, 30, 0.65);
+  cursor: pointer;
+}
+
 /* skeletons for the brochures page */
 .bsk { border-radius: var(--radius); border: 1px solid var(--line); overflow: hidden; background: var(--surface); }
 .bsk .sk-cover { aspect-ratio: 3 / 4; }
