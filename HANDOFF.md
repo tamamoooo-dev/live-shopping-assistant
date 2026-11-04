@@ -1,5 +1,10 @@
 # Super Search — Project Handoff
 
+2026-11-04 Mini marts (HISTORY §69): offers small shops post on their
+PUBLIC Snapchat story, read every 2 h and shown at the top of the Brochures
+page with the picture each price came from. Ads (no printed price) leave
+nothing; a deal posted again on a later day stays one offer.
+
 2026-11-03 Value Watch (price monitoring v4, HISTORY §65): a watch is now
 THIS exact product in ANY pack at every store + flyers, compared per item,
 over a verified per-listing index (`watch_listings`). Design, measured
@@ -32,10 +37,11 @@ reading-check helper, verification, and snapshot refresh procedure.
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-11-03. **State at a glance:**
+> **Last updated:** 2026-11-04. **State at a glance:**
 > - **Production:** the engine runs the commit named in its deployment
->   message (`4ebcc21`, version `cd0f1b42` on 2026-11-03; rollback
->   `40911bd8` = `193628d`, `d72a8cce` = `85e9ce8`, `8cdf6f12` = `4a79987`,
+>   message (`a6e00f9`, version `27f84672` on 2026-11-04; rollback
+>   `201a8b5b` = `0ff1794`, `cd0f1b42` = `4ebcc21` (the last before Mini
+>   marts), `40911bd8` = `193628d`, `d72a8cce` = `85e9ce8`, `8cdf6f12` = `4a79987`,
 >   or `d08f7b31` = `eb13d23`, the last pre-Value-Watch engine). `wrangler deployments list` names it, because
 >   deploys go only through `node deploy.mjs` (§9). Connector `08f33966`
 >   (rollback `5e4deb8b`). Frontend: `main` on Pages.
@@ -52,6 +58,14 @@ reading-check helper, verification, and snapshot refresh procedure.
 >   - The listings get the same rules and two-vote judge, and the price
 >     stands 12 hours.
 >   - It runs on request only, never on a timer, and stops at any challenge.
+> - **Mini marts (2026-11-04, HISTORY §69):**
+>   - What: shops' public Snapchat stories (`snapchat.com/add/<user>`, no
+>     account), read on the `*/2` tick every 2 h.
+>   - Reading: photos twice; videos one frame a second via the `MEDIA`
+>     binding (≤5,000 frames a month). Every price must pass a "printed
+>     here?" check.
+>   - Blocked = wait 6 h, never worked around.
+>   - Shops: `t.sshoco`, `albarakaoffers`, `sweet-st`, `mazaya.t`.
 > - **Platform:** Cloudflare **Workers Paid** (R2, Queues, 5-minute CPU in
 >   use, §8). Mistral is the only other spend: ONE model,
 >   `ministral-14b-2512`, for every read, with **5 live keys × 30 requests
@@ -742,6 +756,8 @@ V1 fallback), `/registry/stats`,
 `/watches?profile=`, `/alerts?profile=[&unseen=1]`;
 open writes `POST /watches` (body carries `profileId`),
 `DELETE /watches?id=&profile=`, `POST /alerts/seen?profile=`;
+Mini marts `GET /minimarts`, `GET /minimarts/image?key=`, open writes
+`POST /minimarts/shops` (`{link}`), `DELETE /minimarts/shops?username=`;
 guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`,
 `/watches/check`, `/prune`, `/enrich`, `/enrich/step` (Background Manual Vision
 hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open
@@ -761,7 +777,8 @@ hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open
 | `featured.js` | The Featured intelligence layer (HISTORY §36, frontend-only — a grid perspective, NOT matching, so nothing to mirror): category-aware curated signal KB (per-category weights; a signal absent from a category contributes nothing), expected-price soft penalty (median of primary matches, free zone 0.5×–2×, capped — never a filter), small deal signal, and bounded localStorage learning (`lsa.featured.learn.v1`, family-keyed so both languages learn together, `b:<brand>` dynamic ids; ranking-only, never touches product data). All boosts bounded by construction. ⚠️ محلى (sweetened) is dropped RAW pre-normalization — the ى→ي fold would read it as محلي 'local' |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (dept tiles + brand pills as EQUAL peers, then Biggest Drops + Lowest Ever rails — V1.1 keeps only these two), listings w/ aisle chips + sorts (discount/price) + store filter + paging; **brand pages** open on an identity hero (deterministic monogram, bilingual name, offers·stores) + engine-fed product-family chips. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
-| `brochures.js` | Brochures page (per-store sections, active/expired cards, covers) |
+| `brochures.js` | Brochures page (Mini marts first, then per-store sections, active/expired cards, covers) |
+| `minimartsSection.js` | Mini marts block: offer cards with the snap picture (tap = full view), "N pieces · X each", "New" (per browser, `lsa.minimarts.seenAt.v1`) and "Posted again" marks, Brochures-tab badge, Shops panel (add by link, remove, status) |
 | `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). Sheet hero + cart thumbnail are **SELF-HOSTED crops** from the STORED page image via the tapped spot's bbox (`cropFromPage`: canvas + `crossOrigin` on the CORS-open /asset → data-URL); D4D's CDN crop (`offer.imageUrl`) is only a fallback when no geometry is at hand (similar-strip, marketplace). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
 | `cartPage.js` | Cart page: per-store groups + subtotals, qty steppers, View flyer (re-opens viewer on the item's page) |
@@ -786,13 +803,14 @@ of the same fire arrived about a minute apart. So every drain takes a D1
 lease before it reads anything:
 `createD1VisionJobStore(db, { id }).ensureRunning()` → `tryLease()`, then
 release it with `update({ lease_until: null })`. Lease ids in use:
-`steady-vision`, `steady-verification`, `daily-digest`, `d1-backup`, plus
+`steady-vision`, `steady-verification`, `daily-digest`, `d1-backup`,
+`minimarts`, plus
 the Background Vision job's own.
 
 | Trigger | What runs |
 |---|---|
 | `0 6 * * MON,TUE,WED,THU` | The brochure/offers pipeline. One SELF child per store runs brochures → offers → price-history harvest, then the coordinator prunes. ⚠️ **Day NAMES only:** Cloudflare counts Sunday = 1, so the old `2,3,5` (meant Tue/Wed/Fri) ran Mon/Tue/Thu. Tuesday-start flyers are not on D4D yet at the Tuesday fire (the 10-06 editions were first seen Thu 10-08), so WED was added (2026-10-09). `cronNext` reads names. |
-| `*/2 * * * *` | Resumes D4D brochure collection for stores still pending. The Ops **Run All** button hands off to this cron too (HISTORY §55). Also the **re-judge sweep** (below). |
+| `*/2 * * * *` | Resumes D4D brochure collection for stores still pending. The Ops **Run All** button hands off to this cron too (HISTORY §55). Also the **re-judge sweep** (below), and **Mini marts** (`runMinimartsTick`, lease `minimarts`): shops due every 2 h, then up to 4 queued snaps in 80 s; a quiet fire costs two D1 reads (HISTORY §69). |
 | `45 5 * * *` | Monday registry maintenance: dormancy, consolidation, healing. Does nothing on other days. |
 | `10,30,50 * * * *` | Vision Stage 1 (`runSteadyStateVision`). See the walkthrough below. |
 | `* * * * *` | Everything else, by clock. See the list below. |
@@ -1124,6 +1142,16 @@ external product images — verify via `preview_eval` DOM inspection; preview
   neither.
 
 ## 11. Open TODOs (priority order)
+
+- **Mini marts, 2026-11-04 (HISTORY §69):** live; t.sshoco's story read 5/5
+  priced posters right and skipped 2 unpriced photos. Open items:
+  - **بشائر العروض:** its username is unknown. The owner can scan its
+    Snapcode in Snapchat or paste its link in the Shops panel.
+  - **Names:** they come from the poster, or from the package when none is
+    printed, and can be off ("مربى" for tomato paste). The card's picture is
+    the check.
+  - **Spotlight is not read:** `sweet-st` posts mostly Spotlight videos,
+    which are not its story.
 
 - **Value Watch, 2026-11-03 (HISTORY §65):** shipped and indexed. All 6
   production watches are `indexed_value`. Each has a listing index (275–447

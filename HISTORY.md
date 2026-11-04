@@ -6910,3 +6910,116 @@ only checker work is left, and the old count for an index from before the
 split. The other watches get the split at their next sweep. Still open
 (HANDOFF §11): 7 of Uno's 18 are assortment holds, among them the Ugreen power
 bank.
+
+## 69. Mini marts: shops' Snapchat story offers on the Brochures page (2026-11-04)
+
+**The request.** The owner follows 4–5 small shops whose best offers appear
+only on their Snapchat story, a few times a month. They asked for a "leech"
+that finds those offers and saves them in a mini mart section, with an
+emulator or a Snapchat account as fallbacks if needed.
+
+**The route chosen (measured 2026-11-04).**
+- A shop's **public profile page** (`snapchat.com/add/<user>`) carries its
+  live story in `__NEXT_DATA__`, one media URL per snap. No account, login,
+  app or emulator is involved. It is the same page anyone's browser gets.
+- A personal account (not a Public Profile) shows no story there and cannot
+  be followed (`not_public`).
+- Snapchat's web search (`/explore`) answered 403 and was left alone.
+- **Rejected:** a followed account, an emulator, or the private API. Each
+  needs a login and breaks Snap's terms outright.
+- **Terms, stated plainly:** automated reading of public pages is also
+  outside Snap's terms (§8). The risk is lower because no account exists to
+  lose. A 403/429 or challenge is recorded as `blocked`, the shop waits 6 h,
+  and it is never worked around (the Lulu rule).
+
+**Reading.** All reads use `ministral-14b-2512` on the shared key pool,
+leaving 2 requests per key per minute for everyone else.
+- **Photo:** read twice at T=0.3; a price both readings show is a candidate.
+- **Video:** one frame per second, cut by Media Transformations (the
+  `MEDIA` binding, 480×854), each frame read once. A price two frames show
+  is a candidate; a price one frame shows is read once more.
+- **Confirmation:** every candidate gets a narrower question ("is <price>
+  printed here as a current price?"). The reply must say yes AND quote
+  printed words that contain the price and are not app text.
+  - Measured on 19 cases, 16 right: all 13 real prices kept.
+  - It refused the mozzarella photo's made-up 6.9 (both reads agreed on it).
+  - The two prices it wrongly accepted ("منذ ٢٣", and words without the
+    price) are caught by the word rules.
+- **No confirmed price = an ad.** It leaves nothing (the owner: "no price no
+  offer just an ad"). An empty first reading costs one call.
+- **Cleanup rules:**
+  - an old price must be higher than the price;
+  - a price that is another offer's old price in the same snap is dropped;
+  - a pack word (كرتون…) with a count of 12+ is pieces (7up: 24 cans in one
+    carton, `a6e00f9`).
+- Frames are capped at 5,000 a month (the free allowance). Past it, or
+  without the binding, a video is read from its cover picture.
+
+**Repeats (the owner: shops post the same offer again, after the 24 h).**
+- The same file (SHA-256) is not read at all; the offers its first posting
+  showed are re-posted.
+- The same shop + price + count + similar name, looked back over 90 days,
+  live or expired, is re-posted instead of added.
+- A re-post moves `last_posted_at` and `expires_at` (7 days from the latest
+  post) on and counts `reposts`. `created_at`, the "new" badge, never
+  changes. The card says "Posted again".
+- The same product (same name words, count and size) at a new price replaces
+  the older offer.
+
+**Shipped.**
+- **Engine:**
+  - files: `src/minimarts.js`, `src/storage/minimartStore.js`;
+  - migration `migrate-2026-11-04-minimarts.sql`, applied before the deploy;
+  - the `*/2` hook `runMinimartsTick` (lease `minimarts`, 80 s deadline,
+    shops due every 2 h, 4 snaps a fire);
+  - routes: `GET /minimarts`, `POST`/`DELETE /minimarts/shops`,
+    `GET /minimarts/image?key=` (R2 `minimarts/<user>/<snap>-<ref>.jpg`).
+  - Commits: `0ff1794` (Worker `201a8b5b`), then `a6e00f9` (Worker
+    `27f84672`, the carton fix). Rollback: `201a8b5b`, or `cd0f1b42` before
+    Mini marts.
+- **App:** `src/minimartsSection.js` at the top of the Brochures page:
+  - offer cards with the picture each price was read from (tap = full view);
+  - price, old price, "N pieces for this price · X each", shop and post age;
+  - "New" (per browser) and "Posted again" marks, and a badge on the
+    Brochures tab;
+  - a Shops panel: add by Snapchat link or username, remove, and status;
+  - Arabic plural forms for 1 / 2 / 3–10 / 11+.
+
+**Tests:**
+- engine: `minimarts.test.mjs` (links, page parsing, frames, readings,
+  confirmation, names, and a full tick over the real schema: ad, made-up
+  price, video, same-file repost after 24 h, re-photographed repost after
+  expiry, new price replacing old, rate limit, 403, gone media) and
+  `minimartsRoutes.test.mjs`;
+- full engine suite 107 files;
+- app 22.
+
+**Live (t.sshoco, وقت التحليهـ, 2026-11-04).** Shops added:
+- `t.sshoco`: 7 photo snaps;
+- `albarakaoffers`, `sweet-st`, `mazaya.t`: public, but no live story at
+  the check.
+
+Of t.sshoco's 7 snaps, all 5 priced posters were read right and the 2
+unpriced photos left nothing:
+
+| Poster | Read |
+|---|---|
+| لبنة أوليانا 3 حبات بـ 11.5 | 11.5 · 3 حبات · 3.83 each |
+| جبنة شيدر 400 جرام 2 كراتين بـ 15 | 15 · 2 كراتين · 7.5 each |
+| جبنة بيضا فيتا 3 حبات بـ 11.5 | 11.5 · 3 حبات · 3.83 each |
+| موفور طماطم 4 كيلو 11.50 | 11.5 · 4 كيلو (named "مربى الطماطم") |
+| 7up الكرتون 24 حبة 20.70 | 20.7 · 24 pieces · 0.86 each (after `a6e00f9`) |
+| 3 Forsana mozzarella bags, no price | refused by the confirmation |
+| 2 mozzarella bags, no price | ad: one reading, nothing kept |
+
+The app was checked in the preview (English and Arabic, phone width) with
+every non-GET call to the engine blocked.
+
+**Open** (HANDOFF §11):
+- بشائر العروض's username is not known yet. Scan its Snapcode in Snapchat
+  or paste its link into the Shops panel.
+- Names come from the poster, or from the package when none is printed, and
+  can be off ("مربى" for a tomato paste). The picture beside each price is
+  the check.
+- `sweet-st` posts mostly Spotlight videos. Those are not its story, so they
+  are not read.
