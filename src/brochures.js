@@ -27,16 +27,19 @@ import {
 import { openBrochureViewer, brochureDateLabel } from './viewer.js?v=20260924.2';
 import { t, tn } from './i18n.js';
 import { storeIcon } from './storeIdentity.js';
-import { createMinimartsSection } from './minimartsSection.js';
+import { createMinimartsSection, minimartShopFromHash, renderMinimartShop } from './minimartsSection.js';
 
 let initialized = false;
 let minimarts = null;
 
-// Mini marts (minimartsSection.js) lead the page: shops' own story offers,
-// refreshed on every visit; the flyer stores follow, rendered once.
+// Mini marts (minimartsSection.js) lead the page as one provider with a card
+// per shop, refreshed on every visit; the flyer stores follow, rendered once.
+// #/brochures/minimarts/<username> shows that shop's offers in place of the list.
 export function initBrochuresPage() {
+  const shop = minimartShopFromHash();
   if (initialized) {
-    minimarts?.refreshMinimarts();
+    if (!shop) minimarts?.refreshMinimarts();
+    showMinimartShop(shop);
     return;
   }
   initialized = true;
@@ -49,6 +52,27 @@ export function initBrochuresPage() {
     root.appendChild(section.el);
     renderStore(store, section); // each store loads independently
   }
+  showMinimartShop(shop);
+}
+
+// A shop's offers replace the page's list (and its heading) while open; the
+// list stays built underneath, so Back shows it at once.
+function showMinimartShop(username) {
+  const page = document.getElementById('page-brochures');
+  const head = page.querySelector('.page-head');
+  const root = document.getElementById('brochure-stores');
+  let view = document.getElementById('minimart-shop');
+  if (!view) {
+    view = document.createElement('div');
+    view.id = 'minimart-shop';
+    view.className = 'mm-shop-view';
+    page.appendChild(view);
+  }
+  root.style.display = username ? 'none' : '';
+  if (head) head.style.display = username ? 'none' : '';
+  view.style.display = username ? '' : 'none';
+  if (username) renderMinimartShop(view, username);
+  else view.replaceChildren();
 }
 
 function storeSection(store) {

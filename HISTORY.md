@@ -7023,3 +7023,27 @@ every non-GET call to the engine blocked.
   the check.
 - `sweet-st` posts mostly Spotlight videos. Those are not its story, so they
   are not read.
+
+**Addendum, 2026-11-05: one provider, a tile per shop.** The owner asked
+for Mini marts to work like a flyer store ("treated as if it was Panda ..
+each shop should have its own flyer .. i hit then i see all offers"), then
+for no flyer look ("the card should be presented as they are .. no flyer
+style no categorization .. nothing"). What shipped:
+- The Mini marts section holds one tile per shop, Browse's brand tile:
+  the shop's Snapchat picture, its live offer count in the corner (accent
+  when some are new to this browser), the name under it. A shop with
+  nothing live stays, dimmed.
+- A tap opens `#/brochures/minimarts/<username>`: a back link, the shop's
+  name, then its offer cards, unchanged.
+- The Shops panel (add, remove) shows only in owner mode, a per-browser
+  switch: open `#/brochures?minimarts=manage` once; the panel's last
+  button turns it off. Other users never see it.
+- "New" is now per shop: opening a shop clears its offers from the
+  Brochures-tab badge.
+
+`bshaaral` (بشائر العروض) was added the same day; its first check queued 48
+photo snaps, all read within the hour. A hand-checked bench of all 55
+current snaps (both shops, 47 printed prices): 42 right, 1 wrong count, 3
+false prices, 4 missed. Two false 20.7 prices come from the example
+"20.70" in the reading prompt (the "printed here?" check is told the number,
+so it agrees); every "1 ريال" price is missed. Open in HANDOFF §11.

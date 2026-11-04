@@ -1,9 +1,10 @@
 # Super Search — Project Handoff
 
 2026-11-04 Mini marts (HISTORY §69): offers small shops post on their
-PUBLIC Snapchat story, read every 2 h and shown at the top of the Brochures
-page with the picture each price came from. Ads (no printed price) leave
-nothing; a deal posted again on a later day stays one offer.
+PUBLIC Snapchat story, read every 2 h. On the Brochures page, Mini marts is
+one provider at the top with a tile per shop; tapping a shop shows its offer
+cards, each with the picture its price came from. Ads (no printed price)
+leave nothing; a deal posted again on a later day stays one offer.
 
 2026-11-03 Value Watch (price monitoring v4, HISTORY §65): a watch is now
 THIS exact product in ANY pack at every store + flyers, compared per item,
@@ -65,7 +66,16 @@ reading-check helper, verification, and snapshot refresh procedure.
 >     binding (≤5,000 frames a month). Every price must pass a "printed
 >     here?" check.
 >   - Blocked = wait 6 h, never worked around.
->   - Shops: `t.sshoco`, `albarakaoffers`, `sweet-st`, `mazaya.t`.
+>   - Shops: `t.sshoco`, `albarakaoffers`, `sweet-st`, `mazaya.t`,
+>     `bshaaral` (بشائر العروض, the busiest: 48 snaps in a day).
+>   - App: a tile per shop (Browse's brand tile: picture, offer count, name).
+>     A tap opens `#/brochures/minimarts/<username>`: the shop's name, then
+>     its offer cards exactly as they are, with no flyer look and no
+>     categories (owner, 2026-11-05).
+>   - The shop list (add, remove) shows only in owner mode. Open
+>     `#/brochures?minimarts=manage` once to turn it on in a browser; the
+>     panel's last button turns it off. The engine's write routes stay open,
+>     like the watch routes.
 > - **Platform:** Cloudflare **Workers Paid** (R2, Queues, 5-minute CPU in
 >   use, §8). Mistral is the only other spend: ONE model,
 >   `ministral-14b-2512`, for every read, with **5 live keys × 30 requests
@@ -777,8 +787,8 @@ hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open
 | `featured.js` | The Featured intelligence layer (HISTORY §36, frontend-only — a grid perspective, NOT matching, so nothing to mirror): category-aware curated signal KB (per-category weights; a signal absent from a category contributes nothing), expected-price soft penalty (median of primary matches, free zone 0.5×–2×, capped — never a filter), small deal signal, and bounded localStorage learning (`lsa.featured.learn.v1`, family-keyed so both languages learn together, `b:<brand>` dynamic ids; ranking-only, never touches product data). All boosts bounded by construction. ⚠️ محلى (sweetened) is dropped RAW pre-normalization — the ى→ي fold would read it as محلي 'local' |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (dept tiles + brand pills as EQUAL peers, then Biggest Drops + Lowest Ever rails — V1.1 keeps only these two), listings w/ aisle chips + sorts (discount/price) + store filter + paging; **brand pages** open on an identity hero (deterministic monogram, bilingual name, offers·stores) + engine-fed product-family chips. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
-| `brochures.js` | Brochures page (Mini marts first, then per-store sections, active/expired cards, covers) |
-| `minimartsSection.js` | Mini marts block: offer cards with the snap picture (tap = full view), "N pieces · X each", "New" (per browser, `lsa.minimarts.seenAt.v1`) and "Posted again" marks, Brochures-tab badge, Shops panel (add by link, remove, status) |
+| `brochures.js` | Brochures page (Mini marts first, then per-store sections, active/expired cards, covers); `#/brochures/minimarts/<username>` swaps the page for that shop's offers |
+| `minimartsSection.js` | Mini marts provider: a tile per shop (Browse's `.browse-brand-pill`; count turns accent when offers are new) → the shop's page `#/brochures/minimarts/<username>` (name, then offer cards with the snap picture, tap = full view, "N pieces · X each", "New" and "Posted again" marks). "New" is per browser and per shop (`lsa.minimarts.seen.v2`), also the Brochures-tab badge. Shops panel (add by link, remove, status) only in owner mode (`lsa.minimarts.owner.v1`, turned on by `#/brochures?minimarts=manage`) |
 | `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). Sheet hero + cart thumbnail are **SELF-HOSTED crops** from the STORED page image via the tapped spot's bbox (`cropFromPage`: canvas + `crossOrigin` on the CORS-open /asset → data-URL); D4D's CDN crop (`offer.imageUrl`) is only a fallback when no geometry is at hand (similar-strip, marketplace). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
 | `cartPage.js` | Cart page: per-store groups + subtotals, qty steppers, View flyer (re-opens viewer on the item's page) |
@@ -1145,8 +1155,13 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 - **Mini marts, 2026-11-04 (HISTORY §69):** live; t.sshoco's story read 5/5
   priced posters right and skipped 2 unpriced photos. Open items:
-  - **بشائر العروض:** its username is unknown. The owner can scan its
-    Snapcode in Snapchat or paste its link in the Shops panel.
+  - **Reading slips (measured 2026-11-05 on 55 snaps, 47 printed prices):**
+    42 right, 1 wrong count, 3 false prices, 4 missed. The two false 20.7
+    prices come from the example "20.70" in `SNAP_READ_PROMPT`, and the
+    "printed here?" check confirms them because it is told the number.
+    Every "1 ريال" price (3 of 3) is missed: the model reads it as 0 or 3.
+    Bench: `brochure-engine/benchmarks/minimart-reading-2026-11-05/`
+    (pictures not committed). Not fixed yet.
   - **Names:** they come from the poster, or from the package when none is
     printed, and can be off ("مربى" for tomato paste). The card's picture is
     the check.

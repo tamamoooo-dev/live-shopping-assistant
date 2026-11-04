@@ -1,28 +1,44 @@
-// minimartsSection.js — the Mini marts block at the top of the Brochures page.
+// minimartsSection.js — Mini marts, one provider on the Brochures page.
 //
 // Small shops post their offers on their public Snapchat story; the engine
 // reads each followed shop's story every 2 hours, keeps only snaps with a
-// printed price (an ad leaves nothing), and serves the offers here with the
-// picture each price was read from (GET /minimarts). A deal a shop posts again
-// on a later day is ONE card ("posted again"), never a second one.
+// printed price (an ad leaves nothing), and serves the offers with the picture
+// each price was read from (GET /minimarts). A deal a shop posts again on a
+// later day is ONE offer ("posted again"), never a second one.
 //
-// The owner manages the shop list here: add by Snapchat link or username,
-// remove. "New" is per browser: offers first seen after this browser last
-// looked at the Brochures page (localStorage), also shown as a badge on the
-// Brochures tab.
+// One provider on the page (owner, 2026-11-04: "treated as if it was Panda"),
+// its shops drawn like Browse's brands (owner, 2026-11-05: "not a flyer
+// style ... similar to the brand offers in browse"): a tile per shop, and
+// tapping one opens that shop's offers under Browse's brand header
+// (#/brochures/minimarts/<username>).
+//
+// The shop list is managed only in OWNER MODE, a per-browser switch turned on
+// by opening #/brochures?minimarts=manage once (and off from the panel):
+// other users never see the Shops panel. "New" is per browser and per shop:
+// offers first seen after this browser last opened that shop, also shown as a
+// badge on the Brochures tab.
 
 import { t } from './i18n.js';
 
 const ENGINE_BASE = 'https://brochure-engine.tamamoooo.workers.dev';
-const SEEN_KEY = 'lsa.minimarts.seenAt.v1';
-const OPEN_KEY = 'lsa.minimarts.shopsOpen.v1';
+const SEEN_KEY = 'lsa.minimarts.seen.v2'; // { since, shops: { <username>: iso } }
+const OWNER_KEY = 'lsa.minimarts.owner.v1';
+const SHOP_ROUTE = /^#\/brochures\/minimarts\/([a-z0-9._-]+)/i;
 
 let cache = null; // { shops, offers, generatedAt }
+let openedFromList = false; // Back returns through history when the list opened the shop
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text != null) node.textContent = text;
+  return node;
+}
+
+// A line of UI text whose direction follows its own words (the app's pattern).
+function line(tag, className, text) {
+  const node = el(tag, className, text);
+  node.dir = 'auto';
   return node;
 }
 
@@ -36,9 +52,10 @@ function readLocal(key) {
 
 function writeLocal(key, value) {
   try {
-    localStorage.setItem(key, value);
+    if (value == null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch {
-    /* private mode: "new" simply stays on */
+    /* private mode: "new" simply stays on, owner mode stays off */
   }
 }
 
@@ -61,17 +78,6 @@ function plural(key, count, params = {}) {
   return t(key, { ...params, count });
 }
 
-// A line of UI text whose direction follows its own words (the app's pattern).
-function line(tag, className, text) {
-  const node = el(tag, className, text);
-  node.dir = 'auto';
-  return node;
-}
-
-function isNew(offer, seenAt) {
-  return Boolean(seenAt) ? offer.createdAt > seenAt : false;
-}
-
 function money(value) {
   if (value == null) return '';
   const n = Number(value);
@@ -86,6 +92,79 @@ function ago(iso) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return plural('minimarts.hoursAgo', hours);
   return plural('minimarts.daysAgo', Math.floor(hours / 24));
+}
+
+const shopName = (shop, username) => shop?.title || username;
+
+// A shop's tile image: its Snapchat profile picture, else a monogram in a hue
+// fixed by the username (the same scheme as Browse's brand monograms).
+function shopMonogram(shop) {
+  let hue = 0;
+  for (const ch of shop.username) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+  const m = el('span', 'browse-brand-monogram', shopName(shop, shop.username).trim().charAt(0));
+  m.style.background = `hsl(${hue} 62% 42%)`;
+  m.setAttribute('aria-hidden', 'true');
+  return m;
+}
+
+function shopIcon(shop) {
+  if (!shop.picture) return shopMonogram(shop);
+  const img = el('img', 'browse-brand-logo mm-shop-logo');
+  img.src = shop.picture;
+  img.alt = '';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', () => img.replaceWith(shopMonogram(shop)), { once: true });
+  return img;
+}
+
+// --- routes + owner mode -------------------------------------------------------------
+export function minimartShopFromHash(hash = location.hash) {
+  const match = SHOP_ROUTE.exec(String(hash || '').split('?')[0]);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function ownerMode() {
+  const [path, query] = String(location.hash || '').split('?');
+  const flag = new URLSearchParams(query || '').get('minimarts');
+  if (flag === 'manage' || flag === 'off') {
+    writeLocal(OWNER_KEY, flag === 'manage' ? '1' : null);
+    // The switch is remembered; the address drops it (no hashchange fires).
+    history.replaceState(null, '', path || '#/brochures');
+  }
+  return readLocal(OWNER_KEY) === '1';
+}
+
+// --- "new": per browser, per shop ------------------------------------------------------
+function readSeen() {
+  try {
+    const seen = JSON.parse(readLocal(SEEN_KEY) || 'null');
+    if (seen && seen.since) return { since: seen.since, shops: seen.shops || {} };
+  } catch {
+    /* unreadable: start over below */
+  }
+  return null;
+}
+
+// A first-ever visit counts nothing as new (no badge flood).
+function ensureSeen(nowIso) {
+  const seen = readSeen();
+  if (seen) return seen;
+  const fresh = { since: nowIso, shops: {} };
+  writeLocal(SEEN_KEY, JSON.stringify(fresh));
+  return fresh;
+}
+
+function isNew(offer, seen) {
+  const at = seen ? seen.shops[offer.username] || seen.since : null;
+  return at ? offer.createdAt > at : false;
+}
+
+function markShopSeen(username, iso) {
+  const seen = ensureSeen(iso);
+  seen.shops[username] = iso;
+  writeLocal(SEEN_KEY, JSON.stringify(seen));
 }
 
 // --- the badge on the Brochures tab ------------------------------------------------
@@ -104,23 +183,35 @@ function setBadge(n) {
   }
 }
 
-// Once at boot, so new mini mart offers show without opening the page. A
-// first-ever visit counts nothing as new (no badge flood).
+function paintBadge(data) {
+  const seen = ensureSeen(data.generatedAt);
+  setBadge(data.offers.filter((o) => isNew(o, seen)).length);
+}
+
+// Once at boot, so new mini mart offers show without opening the page.
 export async function refreshMinimartsBadge() {
   try {
-    const data = await loadMinimarts();
-    const seenAt = readLocal(SEEN_KEY);
-    if (!seenAt) {
-      writeLocal(SEEN_KEY, data.generatedAt);
-      return;
-    }
-    setBadge(data.offers.filter((o) => isNew(o, seenAt)).length);
+    paintBadge(await loadMinimarts());
   } catch {
     /* the badge is a nicety; the page shows its own error */
   }
 }
 
-// --- the section ---------------------------------------------------------------------
+// --- the provider section: one brand tile per shop -------------------------------------
+function skeletonTiles() {
+  return [1, 2, 3].map(() => el('div', 'mm-pill-sk sk'));
+}
+
+// Shops with offers first (newest posting first), then the quiet ones.
+function orderShops(data) {
+  const byShop = new Map(data.shops.map((s) => [s.username, []]));
+  for (const offer of data.offers) byShop.get(offer.username)?.push(offer);
+  const newest = (offers, shop) => offers.map((o) => o.lastPostedAt || o.postedAt).sort().pop() || shop.lastPostAt || '';
+  return data.shops
+    .map((shop) => ({ shop, offers: byShop.get(shop.username) || [] }))
+    .sort((a, b) => (b.offers.length > 0) - (a.offers.length > 0) || newest(b.offers, b.shop).localeCompare(newest(a.offers, a.shop)));
+}
+
 export function createMinimartsSection() {
   const section = el('section', 'bstore mm');
   section.setAttribute('aria-label', t('minimarts.title'));
@@ -131,37 +222,49 @@ export function createMinimartsSection() {
   icon.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 4.5 4h15L21 9.5"/><path d="M3 9.5h18v1a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/><path d="M10 20v-4h4v4"/></svg>';
   const name = el('span', 'bstore-name', t('minimarts.title'));
   const tag = line('span', 'bstore-tag');
-  const shopsBtn = el('button', 'bstore-search mm-shops-btn', t('minimarts.shops'));
-  shopsBtn.type = 'button';
-  shopsBtn.setAttribute('aria-expanded', 'false');
-  head.append(icon, name, tag, shopsBtn);
+  head.append(icon, name, tag);
 
-  const lead = line('p', 'mm-lead', t('minimarts.lead'));
   const manager = el('div', 'mm-manager');
   manager.hidden = true;
-  const body = el('div', 'mm-body');
-  body.append(el('div', 'mm-loading', t('minimarts.loading')));
-  section.append(head, lead, manager, body);
+  const body = el('div', 'browse-brand-row');
+  body.append(...skeletonTiles());
+  section.append(head, manager, body);
 
+  let shopsBtn = null;
   const setOpen = (open) => {
     manager.hidden = !open;
-    shopsBtn.setAttribute('aria-expanded', String(open));
-    writeLocal(OPEN_KEY, open ? '1' : '0');
+    shopsBtn?.setAttribute('aria-expanded', String(open));
   };
-  shopsBtn.addEventListener('click', () => setOpen(manager.hidden));
 
   const render = (data) => {
-    const seenAt = readLocal(SEEN_KEY);
-    tag.textContent = data.offers.length ? plural('minimarts.offerCount', data.offers.length) : t('minimarts.noOffersTag');
-    tag.className = `bstore-tag ${data.offers.length ? 'is-live' : 'is-off'}`;
-    renderManager(manager, data, refresh);
-    renderOffers(body, data, seenAt);
-    // Looked at: the badge clears; the cards keep their "new" mark until the
-    // next visit.
-    writeLocal(SEEN_KEY, data.generatedAt);
-    setBadge(0);
-    if (!data.shops.length) setOpen(true);
-    else if (readLocal(OPEN_KEY) === '1') setOpen(true);
+    const owner = ownerMode();
+    // Nothing to show anyone but the owner: the provider stays off the page.
+    section.hidden = !owner && !data.shops.length;
+    const live = data.offers.length;
+    tag.textContent = live ? plural('minimarts.offerCount', live) : t('minimarts.noOffersTag');
+    tag.className = `bstore-tag ${live ? 'is-live' : 'is-off'}`;
+
+    if (owner && !shopsBtn) {
+      shopsBtn = el('button', 'bstore-search mm-shops-btn', t('minimarts.shops'));
+      shopsBtn.type = 'button';
+      shopsBtn.setAttribute('aria-expanded', 'false');
+      shopsBtn.addEventListener('click', () => setOpen(manager.hidden));
+      head.append(shopsBtn);
+    } else if (!owner && shopsBtn) {
+      shopsBtn.remove();
+      shopsBtn = null;
+      setOpen(false);
+    }
+    if (owner) renderManager(manager, data, refresh);
+    if (owner && !data.shops.length) setOpen(true);
+
+    if (!data.shops.length) {
+      body.replaceChildren(line('div', 'bstore-empty', t('minimarts.noShops')));
+      return;
+    }
+    const seen = ensureSeen(data.generatedAt);
+    body.replaceChildren(...orderShops(data).map(({ shop, offers }) => shopTile(shop, offers, seen)));
+    paintBadge(data);
   };
 
   const refresh = async () => {
@@ -178,18 +281,89 @@ export function createMinimartsSection() {
   return section;
 }
 
-function renderOffers(body, data, seenAt) {
-  if (!data.offers.length) {
-    body.replaceChildren(line('div', 'bstore-empty', data.shops.length ? t('minimarts.empty') : t('minimarts.noShops')));
-    return;
+// A shop's tile, Browse's brand tile as is: the shop's picture with its offer
+// count in the corner (accent when some are new to this browser), the name
+// under it. A shop with nothing live stays, dimmed and without a count.
+function shopTile(shop, offers, seen) {
+  const name = shopName(shop, shop.username);
+  const tile = el('a', 'browse-brand-pill mm-shop-pill');
+  tile.href = `#/brochures/minimarts/${encodeURIComponent(shop.username)}`;
+  tile.title = name;
+  tile.addEventListener('click', () => {
+    openedFromList = true;
+  });
+  const icon = el('span', 'browse-brand-icon');
+  icon.append(shopIcon(shop));
+  if (offers.length) {
+    const fresh = offers.filter((o) => isNew(o, seen)).length;
+    const count = el('span', `browse-brand-count${fresh ? ' is-new' : ''}`, `📄 ${offers.length}`);
+    count.title = fresh ? t('minimarts.newCount', { count: fresh }) : plural('minimarts.offerCount', offers.length);
+    count.setAttribute('aria-label', count.title);
+    icon.append(count);
+  } else {
+    tile.classList.add('is-quiet');
+    tile.title = `${name} · ${t('minimarts.noOffersTag')}`;
   }
-  const shops = new Map(data.shops.map((s) => [s.username, s]));
-  const grid = el('div', 'mm-cards');
-  for (const offer of data.offers) grid.append(offerCard(offer, shops.get(offer.username), isNew(offer, seenAt)));
-  body.replaceChildren(grid);
+  tile.append(icon, line('span', 'browse-brand-name', name));
+  return tile;
 }
 
-function offerCard(offer, shop, fresh) {
+// --- a shop's page: Browse's brand header, then all its current offers ----------------
+export async function renderMinimartShop(container, username) {
+  const head = el('div', 'browse-list-head');
+  const back = el('a', 'browse-back', `‹ ${t('minimarts.back')}`);
+  back.href = '#/brochures';
+  back.addEventListener('click', (e) => {
+    if (openedFromList) {
+      e.preventDefault();
+      openedFromList = false;
+      history.back();
+    }
+  });
+  head.append(back);
+  const view = el('div', 'mm-shop-body');
+  container.replaceChildren(head, view);
+  if (!cache) view.append(el('div', 'mm-loading', t('minimarts.loading')));
+
+  let data = cache;
+  try {
+    data = await loadMinimarts();
+  } catch {
+    if (!data) {
+      view.replaceChildren(line('div', 'bstore-empty', t('minimarts.error')));
+      return;
+    }
+  }
+  if (minimartShopFromHash() !== username) return; // the owner moved on meanwhile
+  const shop = data.shops.find((s) => s.username === username);
+  if (!shop) {
+    view.replaceChildren(line('div', 'bstore-empty', t('minimarts.shopGone')));
+    return;
+  }
+  const offers = data.offers.filter((o) => o.username === username);
+  const seen = ensureSeen(data.generatedAt);
+
+  // The shop's name over its cards (owner, 2026-11-05: "the card should be
+  // presented as they are .. no flyer style no categorization .. nothing").
+  const hero = el('div', 'browse-brand-hero');
+  const meta = el('div', 'browse-brand-meta');
+  meta.append(line('h1', null, shopName(shop, username)));
+  const facts = [offers.length ? plural('minimarts.offerCount', offers.length) : t('minimarts.noOffersTag')];
+  if (shop.address) facts.push(shop.address);
+  meta.append(line('p', 'browse-brand-stats', facts.join(' · ')));
+  hero.append(shopIcon(shop), meta);
+
+  const grid = el('div', 'mm-cards');
+  for (const offer of offers) grid.append(offerCard(offer, isNew(offer, seen)));
+  view.replaceChildren(hero, offers.length ? grid : line('div', 'bstore-empty', t('minimarts.shopEmpty')));
+
+  // Opened: this shop's offers are no longer new (the cards keep their mark
+  // until the next visit), and the tab badge drops them.
+  markShopSeen(username, data.generatedAt);
+  paintBadge(data);
+}
+
+function offerCard(offer, fresh) {
   const card = el('article', 'mm-card');
   const pic = el('button', 'mm-pic');
   pic.type = 'button';
@@ -219,17 +393,13 @@ function offerCard(offer, shop, fresh) {
     // "3 حبات" is the shop's own words: isolated, so an English line around
     // it keeps its order.
     const deal = line('div', 'mm-deal');
-    const [before, after] = t('minimarts.deal', { qty: ' ', each: money(offer.perUnit) }).split(' ');
+    const [before, after] = t('minimarts.deal', { qty: '\u0000', each: money(offer.perUnit) }).split('\u0000');
     deal.append(before || '', el('bdi', null, `${offer.count} ${offer.unit || plural('minimarts.piece', offer.count)}`), after || '');
     info.append(deal);
   }
-  const title = el('div', 'mm-name', [offer.name, offer.size].filter(Boolean).join(' · ') || t('minimarts.unnamed'));
-  info.append(title);
-  const meta = line('div', 'mm-meta');
-  meta.append(el('bdi', 'mm-shop', shop?.title || offer.username));
+  info.append(el('div', 'mm-name', [offer.name, offer.size].filter(Boolean).join(' · ') || t('minimarts.unnamed')));
   const when = ago(offer.lastPostedAt || offer.postedAt);
-  if (when) meta.append(' · ', el('span', 'mm-when', when));
-  info.append(meta);
+  if (when) info.append(line('div', 'mm-meta', when));
   card.append(pic, info);
   return card;
 }
@@ -253,7 +423,7 @@ function openPicture(src, alt) {
   dialog.showModal();
 }
 
-// --- the shop list ------------------------------------------------------------------------
+// --- the shop list (owner mode only) ---------------------------------------------------
 const STATUS_KEYS = new Set(['ok', 'blocked', 'not_public', 'not_found', 'error']);
 
 function renderManager(manager, data, refresh) {
@@ -269,11 +439,11 @@ function renderManager(manager, data, refresh) {
       avatar.referrerPolicy = 'no-referrer';
       row.append(avatar);
     } else {
-      row.append(el('span', 'mm-avatar mm-avatar-empty', (shop.title || shop.username).slice(0, 1)));
+      row.append(el('span', 'mm-avatar mm-avatar-empty', shopName(shop, shop.username).slice(0, 1)));
     }
     const text = el('div', 'mm-shop-text');
     const title = el('div', 'mm-shop-title');
-    title.append(el('bdi', null, shop.title || shop.username));
+    title.append(el('bdi', null, shopName(shop, shop.username)));
     text.append(title);
     const status = STATUS_KEYS.has(shop.status) ? shop.status : 'pending';
     const parts = [t(`minimarts.status.${status}`)];
@@ -281,7 +451,7 @@ function renderManager(manager, data, refresh) {
     text.append(line('div', `mm-shop-status is-${status}`, parts.join(' · ')));
     const remove = el('button', 'mm-remove', t('minimarts.remove'));
     remove.type = 'button';
-    remove.setAttribute('aria-label', t('minimarts.removeShop', { shop: shop.title || shop.username }));
+    remove.setAttribute('aria-label', t('minimarts.removeShop', { shop: shopName(shop, shop.username) }));
     remove.addEventListener('click', async () => {
       remove.disabled = true;
       try {
@@ -336,9 +506,10 @@ function renderManager(manager, data, refresh) {
       // refresh() rebuilt this panel; say what happened in the new one.
       const fresh = document.querySelector('.mm-add-note');
       if (fresh) {
+        const shop = out.shop?.title || out.shop?.username || link;
         fresh.textContent = out.status === 'blocked'
-          ? t('minimarts.addedBlocked', { shop: out.shop?.title || out.shop?.username || link })
-          : plural('minimarts.added', out.queued || 0, { shop: out.shop?.title || out.shop?.username || link });
+          ? t('minimarts.addedBlocked', { shop })
+          : plural('minimarts.added', out.queued || 0, { shop });
       }
     } catch {
       note.className = 'mm-add-note is-error';
@@ -347,5 +518,12 @@ function renderManager(manager, data, refresh) {
       add.disabled = false;
     }
   });
-  manager.append(form, note);
+
+  const off = el('button', 'mm-owner-off', t('minimarts.ownerOff'));
+  off.type = 'button';
+  off.addEventListener('click', () => {
+    writeLocal(OWNER_KEY, null);
+    if (cache) refresh();
+  });
+  manager.append(form, note, off);
 }
