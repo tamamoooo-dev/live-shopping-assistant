@@ -7065,3 +7065,38 @@ The engine does instead:
 - `GET /minimarts` gives each shop `logo` (its picture when it is a logo,
   else null). The tile then writes the first two words of the shop's name,
   emoji left out, on a colour fixed by the username.
+
+**Addendum 3, 2026-11-05: reading v4, and the live rows repaired.** The
+owner: "Yes, fix them" (the false and missed prices of the bench above).
+What was wrong, measured on the 55-snap bench and the live rows:
+- The reading prompt ended with "copy the digits exactly as printed (6.90,
+  11.5, 20.70)". The reader put 20.7 on a LOYD tea poster that prints only
+  "3 كرتون ب 10" (three false offers), and the check, told the number,
+  agreed.
+- A weight became an offer: "استربس المراعي وزن 2,5 كجم ب 37,5" gave a
+  second offer at 2.5.
+- "فقط ب 1 ريال" was read as 0 or 3, so those posters left nothing.
+- Two readings named after the shop's slogan ("عروض للحلويات والمواد
+  الغذائية") made the next poster at 11.5 ×3 a "repeat" of a Pillsbury one.
+What v4 changed (engine `f07d02f` = Worker `c519921c`):
+- The price list is gone from the prompt, and a one-digit price is named.
+  Everything else in the prompt is the 2026-11-04 text: two rewrites (v2,
+  v3) that also reworded the count and size rules made pack counts worse
+  (v2 25/6/2/16, v3 41/4/1/2 right/count/false/missed).
+- The check is blind: `PRICES_PROMPT` lists the selling prices it sees,
+  with no number in the prompt, and a reading's price stands only when the
+  check lists it (not as app text, not only as a weight). It often answers
+  "15 ريال" or "6,90" as text; those are read.
+- A price equal to another offer's printed weight is dropped. A weight or
+  money word given as the unit makes the count a size.
+- Name matching leaves out the shop's own name and slogan words, and names
+  with no product word left are never "the same deal".
+- Bench, two runs: 43/1/0/3 and 43/2/1/2 (was 42/1/3/4).
+The live rows were repaired the same night: the three 20.7 offers and the
+2.5 one retired, LOYD set to 3 cartons, the chicken strips and Pillsbury
+renamed, Pillsbury's false repost undone. Six snaps were read again by v4:
+Cadbury 1 and Ruffles 6.90 came back right, the "TUC" poster became its own
+offer, and three slips were corrected by hand (Takis read 1.5 for "1",
+Hunter's "الحبه ب 5" read as 5 items, and the reader's name for the TUC
+poster, whose caption actually says "علكة تريدا الأصلية"). The Cheetos "1
+ريال" poster is still missed. Still open in HANDOFF §11.

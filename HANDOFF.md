@@ -1159,13 +1159,19 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 - **Mini marts, 2026-11-04 (HISTORY §69):** live; t.sshoco's story read 5/5
   priced posters right and skipped 2 unpriced photos. Open items:
-  - **Reading slips (measured 2026-11-05 on 55 snaps, 47 printed prices):**
-    42 right, 1 wrong count, 3 false prices, 4 missed. The two false 20.7
-    prices come from the example "20.70" in `SNAP_READ_PROMPT`, and the
-    "printed here?" check confirms them because it is told the number.
-    Every "1 ريال" price (3 of 3) is missed: the model reads it as 0 or 3.
-    Bench: `brochure-engine/benchmarks/minimart-reading-2026-11-05/`
-    (pictures not committed). Not fixed yet.
+  - **Reading v4 (engine `f07d02f` = Worker `c519921c`, 2026-11-05):** the
+    reading prompt has no list of example prices (its "20.70" was copied
+    onto a tea poster), the check is BLIND (`PRICES_PROMPT` lists the prices
+    it sees and is never told the reader's number), a weight is never a
+    price, and name matching skips the shop's own name and slogan. Bench,
+    55 snaps / 47 printed prices, two runs: 43/1/0/3 and 43/2/1/2
+    right/count/false/missed (was 42/1/3/4). Left: "1 ريال" on a busy photo
+    is still missed or read 1.5 (Takis, Cheetos), the rotated LOYD caption
+    "3 كرتون ب 10" reads as 10 cartons, and "الحبه ب 5" under 5 products
+    reads as 5 items. Live rows were repaired by hand the same night
+    (HISTORY §69 addendum 3); the Cheetos poster is still missing. Bench: `brochure-engine/benchmarks/
+    minimart-reading-2026-11-05/` (pictures not committed). Don't rewrite
+    the count/size rules: v2 and v3 did, and pack counts got worse.
   - **Names:** they come from the poster, or from the package when none is
     printed, and can be off ("مربى" for tomato paste). The card's picture is
     the check.
