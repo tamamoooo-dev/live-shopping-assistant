@@ -96,26 +96,30 @@ function ago(iso) {
 
 const shopName = (shop, username) => shop?.title || username;
 
-// A shop's tile image: its Snapchat profile picture, else a monogram in a hue
-// fixed by the username (the same scheme as Browse's brand monograms).
-function shopMonogram(shop) {
+// The tile's name mark: the first two words of the shop's name, emoji left
+// out, on a hue fixed by the username (the scheme of Browse's monograms).
+function shopNameMark(shop) {
   let hue = 0;
   for (const ch of shop.username) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
-  const m = el('span', 'browse-brand-monogram', shopName(shop, shop.username).trim().charAt(0));
+  const words = shopName(shop, shop.username).replace(/[^\p{L}\p{N}\s]/gu, ' ').trim().split(/\s+/);
+  const m = line('span', 'browse-brand-monogram mm-name-mark', words.slice(0, 2).join(' ') || shop.username);
   m.style.background = `hsl(${hue} 62% 42%)`;
   m.setAttribute('aria-hidden', 'true');
   return m;
 }
 
+// The shop's picture only when the engine found it to be the shop's own logo;
+// otherwise its name (owner, 2026-11-05: "if you dont have a logo write the
+// name of the shop dont show the snapchat logo").
 function shopIcon(shop) {
-  if (!shop.picture) return shopMonogram(shop);
+  if (!shop.logo) return shopNameMark(shop);
   const img = el('img', 'browse-brand-logo mm-shop-logo');
-  img.src = shop.picture;
+  img.src = shop.logo;
   img.alt = '';
   img.loading = 'lazy';
   img.decoding = 'async';
   img.referrerPolicy = 'no-referrer';
-  img.addEventListener('error', () => img.replaceWith(shopMonogram(shop)), { once: true });
+  img.addEventListener('error', () => img.replaceWith(shopNameMark(shop)), { once: true });
   return img;
 }
 

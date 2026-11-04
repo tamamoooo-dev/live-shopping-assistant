@@ -68,10 +68,14 @@ reading-check helper, verification, and snapshot refresh procedure.
 >   - Blocked = wait 6 h, never worked around.
 >   - Shops: `t.sshoco`, `albarakaoffers`, `sweet-st`, `mazaya.t`,
 >     `bshaaral` (بشائر العروض, the busiest: 48 snaps in a day).
->   - App: a tile per shop (Browse's brand tile: picture, offer count, name).
+>   - App: a tile per shop (Browse's brand tile: logo, offer count, name).
 >     A tap opens `#/brochures/minimarts/<username>`: the shop's name, then
 >     its offer cards exactly as they are, with no flyer look and no
 >     categories (owner, 2026-11-05).
+>   - The tile shows the shop's picture only when it is the shop's own logo.
+>     Otherwise (a Snapcode, Snapchat's default silhouette, a photo) it shows
+>     the shop's name. The engine decides once per picture (`picture_kind`,
+>     `PICTURE_PROMPT` at 400 px: 15/15 on the 5 shops) and serves `logo`.
 >   - The shop list (add, remove) shows only in owner mode. Open
 >     `#/brochures?minimarts=manage` once to turn it on in a browser; the
 >     panel's last button turns it off. The engine's write routes stay open,
@@ -788,7 +792,7 @@ hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
 | `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (dept tiles + brand pills as EQUAL peers, then Biggest Drops + Lowest Ever rails — V1.1 keeps only these two), listings w/ aisle chips + sorts (discount/price) + store filter + paging; **brand pages** open on an identity hero (deterministic monogram, bilingual name, offers·stores) + engine-fed product-family chips. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
 | `brochures.js` | Brochures page (Mini marts first, then per-store sections, active/expired cards, covers); `#/brochures/minimarts/<username>` swaps the page for that shop's offers |
-| `minimartsSection.js` | Mini marts provider: a tile per shop (Browse's `.browse-brand-pill`; count turns accent when offers are new) → the shop's page `#/brochures/minimarts/<username>` (name, then offer cards with the snap picture, tap = full view, "N pieces · X each", "New" and "Posted again" marks). "New" is per browser and per shop (`lsa.minimarts.seen.v2`), also the Brochures-tab badge. Shops panel (add by link, remove, status) only in owner mode (`lsa.minimarts.owner.v1`, turned on by `#/brochures?minimarts=manage`) |
+| `minimartsSection.js` | Mini marts provider: a tile per shop (Browse's `.browse-brand-pill`; the engine's `logo`, else the shop's name written in the tile; count turns accent when offers are new) → the shop's page `#/brochures/minimarts/<username>` (name, then offer cards with the snap picture, tap = full view, "N pieces · X each", "New" and "Posted again" marks). "New" is per browser and per shop (`lsa.minimarts.seen.v2`), also the Brochures-tab badge. Shops panel (add by link, remove, status) only in owner mode (`lsa.minimarts.owner.v1`, turned on by `#/brochures?minimarts=manage`) |
 | `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). Sheet hero + cart thumbnail are **SELF-HOSTED crops** from the STORED page image via the tapped spot's bbox (`cropFromPage`: canvas + `crossOrigin` on the CORS-open /asset → data-URL); D4D's CDN crop (`offer.imageUrl`) is only a fallback when no geometry is at hand (similar-strip, marketplace). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
 | `cart.js` | localStorage cart (`lsa.cart.v1`), qty/remove/clear, `CART_EVENT` |
 | `cartPage.js` | Cart page: per-store groups + subtotals, qty steppers, View flyer (re-opens viewer on the item's page) |

@@ -1217,6 +1217,15 @@ button { font-family: inherit; }
    tile opens the shop's offers under Browse's brand header
    (#/brochures/minimarts/<username>). */
 .mm-shop-logo { padding: 0; object-fit: cover; }
+/* No logo: the shop's name written in the tile (more specific than Browse's
+   22px tile monogram, which comes later in this file). Words wrap whole. */
+.mm-shop-pill .browse-brand-icon .mm-name-mark,
+.browse-brand-hero .mm-name-mark {
+  box-sizing: border-box; padding: 5px; text-align: center;
+  font-size: 12px; font-weight: 800; line-height: 1.3;
+  overflow: hidden; overflow-wrap: normal; word-break: normal;
+}
+.browse-brand-hero .mm-name-mark { font-size: 9.5px; padding: 4px; }
 .mm-shop-pill.is-quiet { opacity: 0.55; }
 .browse-brand-count.is-new { background: var(--accent); }
 .mm-pill-sk { width: 100%; max-width: 64px; aspect-ratio: 1; border-radius: 16px; justify-self: center; }

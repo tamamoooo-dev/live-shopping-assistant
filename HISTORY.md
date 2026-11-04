@@ -7047,3 +7047,21 @@ current snaps (both shops, 47 printed prices): 42 right, 1 wrong count, 3
 false prices, 4 missed. Two false 20.7 prices come from the example
 "20.70" in the reading prompt (the "printed here?" check is told the number,
 so it agrees); every "1 ريال" price is missed. Open in HANDOFF §11.
+
+**Addendum 2, 2026-11-05: a logo, or the shop's name.** The owner: "if you
+dont have a logo write the name of the shop dont show the snapchat logo".
+Of the 5 shops' Snapchat pictures, only وقت التحليه's is a logo; عروض البركة
+uses its Snapcode, سعر التخفيض Snapchat's default silhouette, and the other
+two photos (shelves, a storefront). Snapchat's data has no flag for this,
+and the pictures carry no CORS header, so the app cannot look at them.
+The engine does instead:
+- It looks at each shop's picture once, and again only when the picture
+  changes: `logo | photo | snapchat` (`PICTURE_PROMPT`, engine `9c2edd6`
+  = Worker `6da8a76f`, migration `migrate-2026-11-05-minimart-logo.sql`).
+- Measured, 3 runs each: at Snapchat's 90 px it was wrong on 2 of 5 (it
+  called the logo "snapchat" for its small Snap icon, and the storefront
+  photo a "logo"). At 400 px (`_RS0,400_`) with a sharper prompt it was
+  15/15 right.
+- `GET /minimarts` gives each shop `logo` (its picture when it is a logo,
+  else null). The tile then writes the first two words of the shop's name,
+  emoji left out, on a colour fixed by the username.
