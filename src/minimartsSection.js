@@ -401,7 +401,10 @@ function offerCard(offer, fresh) {
     deal.append(before || '', el('bdi', null, `${offer.count} ${offer.unit || plural('minimarts.piece', offer.count)}`), after || '');
     info.append(deal);
   }
-  info.append(el('div', 'mm-name', [offer.name, offer.size].filter(Boolean).join(' · ') || t('minimarts.unnamed')));
+  // The engine sends only a name printed in the picture (owner, 2026-11-05:
+  // "if the system is not sure it must not guess"); otherwise "Offer", and the
+  // picture says what it is.
+  info.append(el('div', 'mm-name', [offer.name || t('minimarts.unnamed'), offer.size].filter(Boolean).join(' · ')));
   const when = ago(offer.lastPostedAt || offer.postedAt);
   if (when) info.append(line('div', 'mm-meta', when));
   card.append(pic, info);
