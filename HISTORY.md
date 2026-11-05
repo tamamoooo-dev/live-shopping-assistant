@@ -7133,3 +7133,65 @@ LOYD, Hunter's, Pillsbury) were kept whole, and one slip was fixed by hand:
 "كابري" for Cadbury, where both copies print "Cadbury Selections". Left: a
 shown name can be a fragment ("الطماطم") or keep the reader's spelling
 ("ماجون"), and a caption the model cannot copy leaves "عرض".
+
+**Addendum 5, 2026-11-05: add to cart, and Claude Haiku 5.5 as the reader
+(a study).** The owner: "add ( add to basket ) .. investigate using Claude
+haiku 5.5 as an alternative vision reader for only mini mart .. measure the
+accuracy and the cost .. study how it charge and make it as cheaper as
+possible", then "No Anthropic API .. use sdk instead" and "why dont you try
+batch pics one call".
+- Add to cart (app `acdd7b4`): every offer card has "🛒 أضف إلى السلة". The
+  cart groups it under the shop's name, and the item is the card's name,
+  size and deal ("عرض · 3 كرتون", 11.50 × 3) with the snap picture.
+- Haiku ran through the Claude Agent SDK on the owner's Claude login, with no
+  API key. Runner: `brochure-engine/benchmarks/minimart-reading-2026-11-05/run-haiku.mjs`
+  (the SDK is installed with `--no-save`, not a dependency). Claude Code's own
+  prompt, tools, MCP servers (8 tools, ~3.4K tokens a call) and prompt
+  caching (a 1-hour cache write costs 2× input, never read back) are turned
+  off. Thinking can't be turned off through the SDK: ~300 thinking tokens a
+  picture come back at effort "low", about 60% of the output.
+- How Haiku 5.5 charges: $0.10 per million input tokens and $0.50 per
+  million output while a prompt is ≤100K tokens, 5× both above that. Thinking
+  is output. A picture is about (width/28)×(height/28) tokens: a snap as
+  saved ~2,700, at 1092 px on the long edge ~970. The Batch API halves the
+  price (answers within 24 h). The prompt cache saves nothing here: the
+  prompt is ~900 tokens and the pictures change every call. Through the SDK
+  no money is charged: the calls count against the plan's limits, and the
+  SDK's `total_cost_usd` is the list-price equivalent.
+- Bench, the same 55 snaps / 47 printed prices, right/count/false/missed,
+  cost a picture at list price:
+  - Mistral (production pipeline, ~5 calls): 43/2/0/2, names 40 shown 5
+    hidden, ~$0.0021 (actually $0: the Mistral keys are on the free tier).
+  - Haiku in the engine's pipeline unchanged (4.4 calls): 47/0/0/0, names
+    44/3, $0.0029.
+  - Haiku, one call a picture that copies the printed lines and lists the
+    offers: 47/0/2/0, $0.00099.
+  - Several pictures in one call ("Picture 1", "Picture 2", …): 5 a call
+    47/0/3/0 $0.00066; 11 a call 47/0/0/0 $0.00058; 11 a call at 1568 px
+    47/0/1/0 $0.00048; 11 a call at 1092 px 47/0/0/0 $0.00039; 28 a call at
+    1092 px, three runs, 47/0/0/0, 47/0/0/0, 47/0/1/0, $0.00035–0.00037.
+    No offer or text moved between pictures.
+  - The pick, 28 a call at 1092 px read TWICE, the second copy in reverse
+    order: an offer stands when both copies list it (one to one), a name or
+    size shows only when its words are printed in both copies of the text.
+    47/0/1/0, 48 names shown, 0 hidden, $0.00063–0.00073 a picture.
+  - Every "false" above is a second flavour at the one printed price
+    (Loacker Cremkakao and Napolitaner "الحبة بـ 2.5", Bony Fruit Summer
+    and Berry "الكيس بـ 5.75", Hunter's flavours "الحبه ب 5"): the price is
+    right, but the answer key counts one card per printed price. Haiku read
+    every "1 ريال", the LOYD "3 كرتون ب 10" and Hunter's "الحبه ب 5", which
+    Mistral gets wrong. Names checked by eye are printed as shown ("Tagliatelle
+    Verdi 91b", "ليز كاتشب الحجم العائلي"; Pillsbury's packs really print
+    "Oranon"/"Oraon", so only "Cake Mix" is kept).
+- Volume: 2026-11-05 had 132 snaps (84 photos, 48 videos cut to 356
+  frames), about 440 pictures and 909 Mistral calls. The pick would be ~32
+  calls a day, about $0.31 a day ($9 a month) at list price; Mistral's
+  calls that day were about $0.42 at list price.
+- Not shipped. The Agent SDK starts the Claude Code program, so it cannot
+  run inside the Worker: a Haiku reader on the owner's login has to run on
+  the PC and send its readings to the engine. The SDK docs also say: "Unless
+  previously approved, Anthropic does not allow third party developers to
+  offer claude.ai login or rate limits for their products". With an API key
+  the Worker could call Haiku itself (thinking off and the Batch API would
+  cut the price further). Not measured: video frames (the bench is photos)
+  and thinking turned off. Open in HANDOFF §11.

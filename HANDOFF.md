@@ -73,7 +73,8 @@ reading-check helper, verification, and snapshot refresh procedure.
 >   - App: a tile per shop (Browse's brand tile: logo, offer count, name).
 >     A tap opens `#/brochures/minimarts/<username>`: the shop's name, then
 >     its offer cards exactly as they are, with no flyer look and no
->     categories (owner, 2026-11-05).
+>     categories (owner, 2026-11-05). Each card has "🛒 أضف إلى السلة"; the
+>     cart groups it under the shop's name (app `acdd7b4`).
 >   - The tile shows the shop's picture only when it is the shop's own logo.
 >     Otherwise (a Snapcode, Snapchat's default silhouette, a photo) it shows
 >     the shop's name. The engine decides once per picture (`picture_kind`,
@@ -1190,6 +1191,19 @@ external product images — verify via `preview_eval` DOM inspection; preview
     shown name can be a fragment ("الطماطم" for tomato paste) and keeps the
     reader's spelling ("ماجون" for معجون); a caption the model can't copy
     (rotated, tiny) leaves "عرض".
+  - **Claude Haiku 5.5 as the reader: measured, NOT shipped (2026-11-05,
+    HISTORY §69 addendum 5).** Through the Agent SDK on the owner's login
+    (owner: "No Anthropic API .. use sdk instead"). Best setup: 28 pictures
+    in one call at 1092 px, read twice in a different order; an offer stands
+    when both copies list it, a name when its words are in both copies.
+    Bench 47/0/1/0 (the 1 = a second flavour at the one printed price), 48
+    names shown, 0 hidden, ~$0.0007 a picture at list price. Mistral today
+    is 43/2/0/2 and $0 (free tier). ~440 pictures a day ≈ 32 SDK calls,
+    ~$9 a month of plan usage at list price. Blocker: the SDK can't run in
+    the Worker, so it means a reader on the PC posting to the engine (and
+    the SDK docs' claude.ai-login note); with an API key the Worker could
+    call Haiku directly. Owner's decision. Runner:
+    `brochure-engine/benchmarks/minimart-reading-2026-11-05/run-haiku.mjs`.
   - **Spotlight is not read:** `sweet-st` posts mostly Spotlight videos,
     which are not its story.
 
