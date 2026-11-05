@@ -7339,3 +7339,19 @@ and `i18n.js`, no engine change:
   - No name row grew taller, and every piece sits in its own corner.
   - Line 1 wraps on 1 card ("40 PREMIUM MINIATURES", a size with no
     count).
+- Later the same day, the owner: "one line in the product name then an
+  arrow". The name is one line with "…". When it's cut short, the arrow
+  the search cards already use (`.card-more-toggle`, ▸, pointing the way
+  the name reads) follows it. Tapping the arrow opens the whole name, with
+  the size under it in the far corner, and tapping again closes it.
+  - Only cut names get the arrow. One `ResizeObserver` looks at each name
+    when it's attached, when the screen turns, or when the fonts load.
+  - A name looked at before it was attached gets looked at again later; a
+    name whose page has gone is let go.
+  - The browser pane draws no frames while it's hidden, so the observer
+    waited there until a screenshot drew one.
+  - Measured on a phone: 41 of 154 names are cut, and each gets its arrow
+    on the name's line. No name row is taller than one line, and the page
+    is no wider than the screen. Opened, a long name takes 3 lines with the
+    size under it; closed, it's back to 1 line. Desktop (224 px cards):
+    5 arrows on t.sshoco.

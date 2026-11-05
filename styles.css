@@ -1309,21 +1309,27 @@ button { font-family: inherit; }
 .mm-foot { display: flex; align-items: baseline; gap: 8px; }
 .mm-each { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .mm-foot .mm-meta { margin-inline-start: auto; }
+/* One line, then the search cards' ▸ when the name is cut (owner, 2026-11-06). */
+.mm-name-box { flex: 0 1 auto; min-width: 0; display: flex; align-items: flex-start; gap: 2px; }
 .mm-name {
+  min-width: 0;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
   unicode-bidi: plaintext;
 }
+.mm-name-row.is-open .mm-name { white-space: normal; overflow-wrap: anywhere; }
+.mm-name-row.is-open .card-more-toggle::before { transform: rotate(90deg); }
+.mm-name-row.is-open .card-more-toggle:dir(rtl)::before { transform: rotate(-90deg); }
 /* Each line's two pieces start from opposite corners (owner, 2026-11-06).
    A size sits on the name's line only when both fit on one line: one that
    wraps lands on a row of no height and is clipped away. */
 .mm-name-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; column-gap: 6px; overflow: hidden; }
 .mm-size { flex: none; height: 0; font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--muted); white-space: nowrap; }
+.mm-name-row.is-open .mm-size { height: auto; margin-inline-start: auto; }
 .mm-meta { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 .mm-cart {
   margin-top: 4px;

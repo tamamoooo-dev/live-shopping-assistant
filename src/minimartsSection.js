@@ -368,6 +368,23 @@ export async function renderMinimartShop(container, username) {
   paintBadge(data);
 }
 
+// Whether a closed name is cut short. Its box changes size when the card is
+// attached, the screen turns or the fonts land: each is a time to look. A
+// name not attached yet is looked at again once it is; one that was and has
+// left with its page is let go.
+const attachedNames = new WeakSet();
+const nameCut = typeof ResizeObserver === 'function' ? new ResizeObserver((entries) => {
+  for (const { target } of entries) {
+    if (!target.isConnected) {
+      if (attachedNames.has(target)) nameCut.unobserve(target);
+      continue;
+    }
+    attachedNames.add(target);
+    if (target.closest('.mm-name-row').classList.contains('is-open')) continue;
+    target.nextElementSibling.hidden = target.scrollWidth <= target.clientWidth + 1;
+  }
+}) : null;
+
 function offerCard(offer, fresh, shop) {
   const card = el('article', 'mm-card');
   const pic = el('button', 'mm-pic');
@@ -410,9 +427,26 @@ function offerCard(offer, fresh, shop) {
   // "if the system is not sure it must not guess"); otherwise "Offer", and the
   // picture says what it is.
   // The name starts from its own language's corner, the size from the other.
+  // One line; a name cut short gets the search cards' ▸ after it, which
+  // opens the whole name (owner, 2026-11-06).
   const nameRow = line('div', 'mm-name-row');
-  nameRow.append(el('div', 'mm-name', offer.name || t('minimarts.unnamed')));
-  // Shown only if it fits on the name's line, else left out (styles.css).
+  const nameBox = el('div', 'mm-name-box');
+  const name = el('div', 'mm-name', offer.name || t('minimarts.unnamed'));
+  const more = el('button', 'card-more-toggle');
+  more.type = 'button';
+  more.hidden = true;
+  more.setAttribute('aria-expanded', 'false');
+  more.setAttribute('aria-label', t('market.moreDetails'));
+  more.addEventListener('click', () => {
+    const open = !nameRow.classList.contains('is-open');
+    nameRow.classList.toggle('is-open', open);
+    more.setAttribute('aria-expanded', String(open));
+  });
+  nameBox.append(name, more);
+  nameRow.append(nameBox);
+  nameCut?.observe(name);
+  // Shown only if it fits on the name's line, else left out (styles.css);
+  // an opened name shows it under the name.
   if (qty && offer.size) {
     const size = el('span', 'mm-size');
     size.append(el('bdi', null, offer.size));

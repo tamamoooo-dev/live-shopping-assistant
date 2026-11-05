@@ -84,7 +84,12 @@ reading-check helper, verification, and snapshot refresh procedure.
 >     2. The name from its own language's corner. When an offer has both a
 >        count and a size, the size goes in the other corner, but only if
 >        it fits on the name's line; otherwise it's left out (pure CSS: a
->        wrapped size lands on a zero-height row that is clipped).
+>        wrapped size lands on a zero-height row that is clipped). The name
+>        is ONE line; when it's cut short, the search cards' ▸
+>        (`.card-more-toggle`) follows it and opens the whole name, with
+>        the size under it. A `ResizeObserver` decides "cut short", so it
+>        follows screen width and fonts. In a hidden Browser pane it waits
+>        for a frame (a screenshot draws one).
 >     3. The price per piece (only for a deal of several) on the left, how
 >        long ago on the right.
 >   - No currency word on the card; screen readers still read it. With it,
