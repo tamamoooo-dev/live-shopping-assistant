@@ -7195,3 +7195,80 @@ batch pics one call".
   the Worker could call Haiku itself (thinking off and the Batch API would
   cut the price further). Not measured: video frames (the bench is photos)
   and thinking turned off. Open in HANDOFF §11.
+
+**Addendum 6, 2026-11-05: the PC reader (Claude Haiku 5.5) ships, and a
+one-time re-read.** The owner: "Build PC reader", "do not ask for permission
+.. your recommendations is approved already", and then "for one time only re
+read the mini mart offers using haiku because the current reading of mistral
+has tribbles mistakes".
+- Engine `9dd4069` (Worker `71a9ce6e`, after
+  `migrate-2026-11-05-minimart-reader.sql`: `pictures`, `prepared_at`,
+  `reader`, `claimed_at`, `reread` on `minimart_snaps`, table
+  `minimart_reader`), then `60393b6` (Worker `12f47a7f`). Rollback
+  `9634fd6c`.
+- The split: the Agent SDK starts Claude Code, so it can't run in the
+  Worker. The engine keeps everything it already did well (fetching the
+  story, repeats by file hash, cutting a video into frames with the MEDIA
+  binding, saving and showing offers); only the reading moves to the PC.
+  While the reader has asked for work in the last 25 min, the */2 tick
+  PREPARES up to 12 new snaps (status `prepared`, pictures in R2 at
+  `minimarts/<shop>/<snap>-<ref>.jpg`) instead of reading them. The reader
+  (`brochure-engine/pc-reader/reader.mjs`) claims up to 112 pictures
+  (`GET /minimarts/reader/queue`, an atomic claim), shrinks them to 1092 px,
+  reads 28 a call ("Picture n", the engine's `BATCH_READ_PROMPT`), reads
+  everything twice (the second copy in reverse order) and posts both copies
+  (`POST /minimarts/reader/readings`). The engine's `offersFromCopies` keeps
+  an offer only when both copies list it one to one and the copy's lines
+  print its price; a name or size shows only when printed in both copies;
+  a video's frames go through the same frame grouping as before.
+- Mistral stays as the fallback: it reads every new snap while the reader
+  is off (no heartbeat for 25 min), and any prepared snap the reader left
+  claimed for 20 min or that waited an hour. The status moves prepared →
+  saving → read under guards, so a late reader post gets `conflict` and
+  nothing is saved twice. Unused prepared pictures are deleted after the
+  save.
+- On the PC: Task Scheduler `\SuperSearch\MiniMartsReader` every 15 min,
+  logged-on user, no window (`run-hidden.vbs`), overlapping runs skipped,
+  45-min limit; up to 10 rounds a run; a log line per round that read
+  (`pc-reader/logs/reader.log`, rotated at 1 MB). Claude Code's own prompt,
+  tools, MCP servers, settings and prompt cache are off.
+- The bench, now run with the engine's own prompt and rules (`run-haiku.mjs`
+  uses `BATCH_READ_PROMPT` + `offersFromCopies`): 47/0/0/0, 47 of 47 names
+  shown, 4 calls, $0.000625 a picture at list price (plan usage, not
+  billed). Mistral: 43/2/0/2.
+- The one-time re-read: `POST /minimarts/reader/reread {"all":true}` set
+  the 189 read, non-repeat snaps (141 photos, 48 videos) back to `new` with
+  `reread = 1`. Mistral never reads them; preparing skips the repeat check;
+  saving rewrites the snap's own offers IN PLACE (matched by price and
+  count, then by price: same id, first-seen date and postings, so no false
+  "new" badges), adds offers the first reading missed (ids `<snap>:101`+),
+  and retires old offers the reader doesn't confirm. A snap whose file is
+  gone, or that has nothing to read again, keeps its reading (`60393b6`).
+- Results (all 189 snaps, 0 failures; 26 reader rounds, 72 calls, 576
+  pictures, $0.28 at list price, plan usage): live offers 150 → 155. 127
+  corrected in place, 7 unchanged, 16 retired, 21 added. Names shown 136 →
+  154 (hidden 14 → 1); same-price twin cards in one snap 5 → 0; 1-riyal
+  offers 3 → 8. By kind: 112 a name or size only (now the printed words:
+  "موفور معجون الطماطم · 4 كجم" for "الطماطم", "جبنة بيضاء فيتا · 250 جرام"
+  for "بيضا فيتا"), 15 a count, and every price fix as a retire + add pair.
+  Mistral misread the Arabic digit ٥ at albarakaoffers: Tide "٣ عبوات ٥.٧٥"
+  had been 3 × 0.75, Snickers ice cream "الحبتين ٥.٧٥" 0.75, Cho Cho, Cake
+  Art and Cola Zero "٥.٩٠" 9.9, smoked turkey "الكيس ٣٥.٩٠" 2 × 30.9;
+  sweet-st's chicken had its weight (800) as the price, now "10 × 89".
+  Checked by eye: those six, Gardena ("الشريط ب 11,5": one strip of 5 bars
+  for 11.5, not "5 for 11.5"), Hunter's ("الحبه ب 5"), the cereal ("3
+  كراتين بـ 11.5": one product, Mistral had two cards). The Cheetos "1
+  ريال" poster missing since addendum 3 is back.
+- Two fixes found by checking the results by eye, each re-read on its snap:
+  - `d0c356d` (Worker `aea5f9bf`): a Cho Cho video became two 5.90 cards
+    ("شو شو عصار" from the caption, "Chocolate Paste" from the jar). In a
+    video, clusters at one price now merge when the other copy of a frame
+    named that offer with the other cluster's name; two products at one
+    price with their own names stay two.
+  - `01ebae3` (Worker `de89c7c2`): albarakaoffers writes "العبوة بريااال"
+    (the can for one riyal) with no digit, so the price check dropped it
+    (Mistral had read 20). The batch prompt now says a price written as a
+    word counts, and `pricePrinted` takes "بريال" (drawn out, or "ب ريال")
+    for 1 only. Bench unchanged (47/0/0/0, 47/47 names). The 21 read snaps
+    that showed no offer were read again: 3 more one-riyal deals (Shahad
+    sparkling water, 7UP Zero, English cake, "الحبة بريااال"), plus the oats.

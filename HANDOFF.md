@@ -38,9 +38,10 @@ reading-check helper, verification, and snapshot refresh procedure.
 > here *in place* (keep it short), and append the milestone's full story
 > (what/why/how verified) to [HISTORY.md](HISTORY.md). Never append logs here.
 >
-> **Last updated:** 2026-11-04. **State at a glance:**
+> **Last updated:** 2026-11-05. **State at a glance:**
 > - **Production:** the engine runs the commit named in its deployment
->   message (`a6e00f9`, version `27f84672` on 2026-11-04; rollback
+>   message (`01ebae3`, version `de89c7c2` on 2026-11-05; rollback
+>   `9634fd6c` = `9ea6ef5` (the last before the PC reader),
 >   `201a8b5b` = `0ff1794`, `cd0f1b42` = `4ebcc21` (the last before Mini
 >   marts), `40911bd8` = `193628d`, `d72a8cce` = `85e9ce8`, `8cdf6f12` = `4a79987`,
 >   or `d08f7b31` = `eb13d23`, the last pre-Value-Watch engine). `wrangler deployments list` names it, because
@@ -1162,7 +1163,7 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 - **Mini marts, 2026-11-04 (HISTORY §69):** live; t.sshoco's story read 5/5
   priced posters right and skipped 2 unpriced photos. Open items:
-  - **Reading v4 (engine `f07d02f` = Worker `c519921c`, 2026-11-05):** the
+  - **Reading v4 (Mistral, now the fallback; engine `f07d02f` = Worker `c519921c`, 2026-11-05):** the
     reading prompt has no list of example prices (its "20.70" was copied
     onto a tea poster), the check is BLIND (`PRICES_PROMPT` lists the prices
     it sees and is never told the reader's number), a weight is never a
@@ -1191,19 +1192,39 @@ external product images — verify via `preview_eval` DOM inspection; preview
     shown name can be a fragment ("الطماطم" for tomato paste) and keeps the
     reader's spelling ("ماجون" for معجون); a caption the model can't copy
     (rotated, tiny) leaves "عرض".
-  - **Claude Haiku 5.5 as the reader: measured, NOT shipped (2026-11-05,
-    HISTORY §69 addendum 5).** Through the Agent SDK on the owner's login
-    (owner: "No Anthropic API .. use sdk instead"). Best setup: 28 pictures
-    in one call at 1092 px, read twice in a different order; an offer stands
-    when both copies list it, a name when its words are in both copies.
-    Bench 47/0/1/0 (the 1 = a second flavour at the one printed price), 48
-    names shown, 0 hidden, ~$0.0007 a picture at list price. Mistral today
-    is 43/2/0/2 and $0 (free tier). ~440 pictures a day ≈ 32 SDK calls,
-    ~$9 a month of plan usage at list price. Blocker: the SDK can't run in
-    the Worker, so it means a reader on the PC posting to the engine (and
-    the SDK docs' claude.ai-login note); with an API key the Worker could
-    call Haiku directly. Owner's decision. Runner:
-    `brochure-engine/benchmarks/minimart-reading-2026-11-05/run-haiku.mjs`.
+  - **The PC reader: Claude Haiku 5.5 reads, Mistral is the fallback
+    (engine `9dd4069` … `01ebae3` = Worker `de89c7c2`, 2026-11-05, HISTORY
+    §69 addendum 6).** Owner: "Build PC reader". `brochure-engine/pc-reader/`
+    runs on the owner's PC every 15 min (Task Scheduler
+    `\SuperSearch\MiniMartsReader`, no window, logged-on user only; log
+    `pc-reader/logs/reader.log`, only rounds that read). Agent SDK on the
+    owner's Claude login, no API key. Asking for work is the heartbeat:
+    while it asked in the last 25 min, the */2 tick PREPARES new snaps
+    (pictures in R2, videos cut into frames, repeats by hash) and leaves
+    them to the reader; it claims ≤112 pictures, reads 28 a call at 1092 px,
+    twice (second copy reversed), and posts both copies; the engine keeps
+    an offer only when both copies list it one to one and print its price
+    (`offersFromCopies`). Mistral reads whenever the reader is off, and
+    takes a prepared snap left claimed >20 min or waiting >1 h; a late
+    reader post gets `conflict`. Bench with the engine's own rules:
+    47/0/0/0, 47/47 names, $0.000625 a picture at list price (plan usage,
+    not billed). A price written as a word counts: "بريال" (drawn out
+    "بريااال") is 1, never "ريالين" (`01ebae3`). In a video, a product the
+    two copies named differently (caption / package) is one offer
+    (`d0c356d`). Routes `/minimarts/reader/{queue,readings,reread,status}`
+    need X-Ingest-Secret. Reinstall: `npm install` then `install-task.ps1`
+    in `pc-reader/`. Left: when the PC is off for long, Mistral reads
+    everything (as before).
+  - **The one-time re-read (owner: "for one time only re read the mini
+    mart offers using haiku").** `POST /minimarts/reader/reread {"all":true}`
+    queued the 189 read snaps for the reader only; offers are corrected in
+    place (same id, first-seen date, postings) and unmatched old offers
+    retired; a snap with nothing to read again keeps its reading. DONE
+    2026-11-05: 150 → 155 live offers; 127 corrected, 16 retired (wrong
+    prices and Mistral's duplicate cards), 21 added (right prices, missed
+    deals, four "بريال" 1-riyal deals); hidden names 14 → 1, same-price
+    twins 5 → 0. Don't re-run it routinely: it re-cuts every video's
+    frames (the 5,000-a-month cap).
   - **Spotlight is not read:** `sweet-st` posts mostly Spotlight videos,
     which are not its story.
 
