@@ -19,6 +19,7 @@
 // badge on the Brochures tab.
 
 import { t } from './i18n.js';
+import { addToCart } from './cart.js';
 
 const ENGINE_BASE = 'https://brochure-engine.tamamoooo.workers.dev';
 const SEEN_KEY = 'lsa.minimarts.seen.v2'; // { since, shops: { <username>: iso } }
@@ -358,7 +359,7 @@ export async function renderMinimartShop(container, username) {
   hero.append(shopIcon(shop), meta);
 
   const grid = el('div', 'mm-cards');
-  for (const offer of offers) grid.append(offerCard(offer, isNew(offer, seen)));
+  for (const offer of offers) grid.append(offerCard(offer, isNew(offer, seen), shopName(shop, username)));
   view.replaceChildren(hero, offers.length ? grid : line('div', 'bstore-empty', t('minimarts.shopEmpty')));
 
   // Opened: this shop's offers are no longer new (the cards keep their mark
@@ -367,7 +368,7 @@ export async function renderMinimartShop(container, username) {
   paintBadge(data);
 }
 
-function offerCard(offer, fresh) {
+function offerCard(offer, fresh, shop) {
   const card = el('article', 'mm-card');
   const pic = el('button', 'mm-pic');
   pic.type = 'button';
@@ -407,8 +408,42 @@ function offerCard(offer, fresh) {
   info.append(el('div', 'mm-name', [offer.name || t('minimarts.unnamed'), offer.size].filter(Boolean).join(' · ')));
   const when = ago(offer.lastPostedAt || offer.postedAt);
   if (when) info.append(line('div', 'mm-meta', when));
+  info.append(cartButton(offer, shop));
   card.append(pic, info);
   return card;
+}
+
+// Add to the shopping cart (owner, 2026-11-05: "add to basket"). The cart is
+// grouped by shop; the same offer twice is one more of it.
+function cartButton(offer, shop) {
+  const button = el('button', 'mm-cart', t('minimarts.addCart'));
+  button.type = 'button';
+  button.addEventListener('click', () => {
+    const deal = offer.count > 1 ? `${offer.count} ${offer.unit || plural('minimarts.piece', offer.count)}` : null;
+    addToCart({
+      id: `mm:${offer.id}`,
+      store: `mm:${offer.username}`,
+      storeName: shop,
+      name: [offer.name || t('minimarts.unnamed'), offer.size, deal].filter(Boolean).join(' · '),
+      nameAr: null,
+      price: offer.price,
+      oldPrice: offer.wasPrice ?? null,
+      currency: 'SAR',
+      image: offer.image ? `${ENGINE_BASE}${offer.image}` : null,
+      sourceUrl: null,
+      brochureId: null,
+      pageIndex: null,
+      validTo: offer.expiresAt ?? null,
+    });
+    button.textContent = t('minimarts.addedCart');
+    button.classList.add('is-added');
+    setTimeout(() => {
+      if (!button.isConnected) return;
+      button.textContent = t('minimarts.addCart');
+      button.classList.remove('is-added');
+    }, 1300);
+  });
+  return button;
 }
 
 function openPicture(src, alt) {

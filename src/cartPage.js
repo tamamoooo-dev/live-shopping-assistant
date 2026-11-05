@@ -69,7 +69,7 @@ function render(root) {
     sections.push(`
       <section class="cart-store">
         <header class="cart-store-head">
-          <span class="cart-store-chip" style="--chip:${storeColor(store)}">${esc(storeLabel(store))}</span>
+          <span class="cart-store-chip" style="--chip:${storeColor(store)}">${esc(list[0].storeName || storeLabel(store))}</span>
           <span class="cart-store-sub">${fmt(subtotal)} SAR</span>
         </header>
         ${list.map((it) => itemRow(it)).join('')}
