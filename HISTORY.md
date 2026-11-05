@@ -7314,3 +7314,28 @@ and `i18n.js`, no engine change:
   Measured on the phone width (card text 142 px): with "ريال" line 1 wrapped
   on 26 of 155 cards, without it on 3 (long printed sizes: "23 g x 12
   Packs", "24 PACKS", "40 PREMIUM MINIATURES"); desktop 0.
+- Same day, two more owner rules:
+  - "if there is two info pieces and sizes .. the priority is for the
+    pieces .. the size can be transfer to product name line if there is a
+    space if not keep it out". Line 1 now shows the pieces alone, or the
+    size when there are no pieces. The size goes to the name's line only
+    when the name and size fit on one line together. This is CSS only: the
+    name row wraps, and a size that wraps lands on a zero-height row that
+    `overflow: hidden` cuts away. So it follows the screen width and needs
+    no script.
+  - "start from the corner .. dont let the two info come close to each
+    other if it is unnecessary". Each line's two pieces now sit in opposite
+    corners: price on the left, pieces on the right; name in its own
+    language's corner, size in the other; price per piece on the left, time
+    on the right.
+- The app's layout stays left-to-right in Arabic (`html` dir is ltr), so
+  the left/right placement is the same in both languages. Line 3 had come
+  out mirrored in Arabic because `line()` gave it `dir=auto`, and that
+  Arabic text then took it right-to-left. Only the per-piece text keeps
+  `dir=auto`, so "7.5 للحبة" still reads right.
+- Measured on a phone (155 cards):
+  - 59 cards have both a count and a size. On 31 the size fits beside the
+    name; on 28 the name needs the whole line, so the size is left out.
+  - No name row grew taller, and every piece sits in its own corner.
+  - Line 1 wraps on 1 card ("40 PREMIUM MINIATURES", a size with no
+    count).

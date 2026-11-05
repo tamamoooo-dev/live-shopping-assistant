@@ -76,11 +76,19 @@ reading-check helper, verification, and snapshot refresh procedure.
 >     its offer cards exactly as they are, with no flyer look and no
 >     categories (owner, 2026-11-05). Each card has "🛒 أضف إلى السلة"; the
 >     cart groups it under the shop's name (app `acdd7b4`).
->   - Card text, three lines (owner, 2026-11-06): the price, then what it
->     buys in the shop's words ("5.75  3 عبوات · 260 جم", or "each"); the
->     name alone; the price a piece (only for a deal of several) and how
->     long ago. No currency word on the card (screen readers still say it):
->     with it, line one wrapped on 26 of 155 phone cards, without it on 3.
+>   - Card text, three lines (owner, 2026-11-06), each line's two pieces
+>     from opposite corners, in both languages (the app's layout stays
+>     left-to-right in Arabic):
+>     1. Price on the left. What it buys, in the shop's words, on the right
+>        ("3 عبوات"; a size only when there's no count; else "each").
+>     2. The name from its own language's corner. When an offer has both a
+>        count and a size, the size goes in the other corner, but only if
+>        it fits on the name's line; otherwise it's left out (pure CSS: a
+>        wrapped size lands on a zero-height row that is clipped).
+>     3. The price per piece (only for a deal of several) on the left, how
+>        long ago on the right.
+>   - No currency word on the card; screen readers still read it. With it,
+>     line one wrapped on 26 of 155 phone cards; without it, on 3.
 >   - The tile shows the shop's picture only when it is the shop's own logo.
 >     Otherwise (a Snapcode, Snapchat's default silhouette, a photo) it shows
 >     the shop's name. The engine decides once per picture (`picture_kind`,

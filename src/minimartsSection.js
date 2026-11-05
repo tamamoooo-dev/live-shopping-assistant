@@ -398,20 +398,31 @@ function offerCard(offer, fresh, shop) {
   price.setAttribute('aria-label', `${money(offer.price)} ${t('minimarts.sar')}`);
   priceRow.append(price);
   if (offer.wasPrice) priceRow.append(el('s', 'mm-was', money(offer.wasPrice)));
-  // What it buys is the shop's own words ("3 حبات · 260 جم", "الشريط"):
-  // isolated, so an English line around it keeps its order.
+  // What it buys is the shop's own words ("3 حبات", "الشريط", "260 جم"):
+  // isolated, so an English line around it keeps its order. The pieces come
+  // first; a size beside them moves to the name's line (owner, 2026-11-06).
   const qty = offer.count > 1 ? `${offer.count} ${offer.unit || plural('minimarts.piece', offer.count)}` : offer.unit;
   const buys = el('span', 'mm-qty');
-  buys.append(el('bdi', null, [qty, offer.size].filter(Boolean).join(' · ') || t('minimarts.each')));
+  buys.append(el('bdi', null, qty || offer.size || t('minimarts.each')));
   priceRow.append(buys);
   info.append(priceRow);
   // The engine sends only a name printed in the picture (owner, 2026-11-05:
   // "if the system is not sure it must not guess"); otherwise "Offer", and the
   // picture says what it is.
-  info.append(el('div', 'mm-name', offer.name || t('minimarts.unnamed')));
-  // The price a piece only for a deal of several (one piece is the price).
-  const foot = line('div', 'mm-foot');
-  if (offer.count > 1 && offer.perUnit) foot.append(el('span', 'mm-each', t('minimarts.perPiece', { each: money(offer.perUnit) })));
+  // The name starts from its own language's corner, the size from the other.
+  const nameRow = line('div', 'mm-name-row');
+  nameRow.append(el('div', 'mm-name', offer.name || t('minimarts.unnamed')));
+  // Shown only if it fits on the name's line, else left out (styles.css).
+  if (qty && offer.size) {
+    const size = el('span', 'mm-size');
+    size.append(el('bdi', null, offer.size));
+    nameRow.append(size);
+  }
+  info.append(nameRow);
+  // The price a piece only for a deal of several (one piece is the price),
+  // on the left like the price; the time on the right (owner, 2026-11-06).
+  const foot = el('div', 'mm-foot');
+  if (offer.count > 1 && offer.perUnit) foot.append(line('span', 'mm-each', t('minimarts.perPiece', { each: money(offer.perUnit) })));
   const when = ago(offer.lastPostedAt || offer.postedAt);
   if (when) foot.append(el('span', 'mm-meta', when));
   if (foot.childNodes.length) info.append(foot);
