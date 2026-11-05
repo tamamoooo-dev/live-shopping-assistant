@@ -7100,3 +7100,36 @@ offer, and three slips were corrected by hand (Takis read 1.5 for "1",
 Hunter's "الحبه ب 5" read as 5 items, and the reader's name for the TUC
 poster, whose caption actually says "علكة تريدا الأصلية"). The Cheetos "1
 ريال" poster is still missed. Still open in HANDOFF §11.
+
+**Addendum 4, 2026-11-05: a name is shown only as printed words.** The
+owner: "strips المراعي changed to مربى فراوله if the system is not sure it
+must not guess". The live row already said "استربس المراعي" (the repair
+above); the owner had seen an older copy. The cause was general: when a
+caption is hard to read, the reader names the product from the package, or
+guesses. Measured: Almarai chicken strips as strawberry jam, gum as washing
+cubes, onion rings as "candy", a weight ("الحلوى 45 جرام") as a name.
+What changed (engine `9ea6ef5` = Worker `9634fd6c`, app `2530f6a`):
+- `TEXT_PROMPT` copies the text printed in the picture, word for word, at
+  T=0, twice per picture. A name shows only its words that both copies have
+  (each copy plus the words the price check quoted). Under half of its words
+  printed = a guess: `shown_name = ''`, the API sends `name: null`, and the
+  card says عرض / Offer with the picture. The guess stays in `name`, which
+  still tells repeats apart.
+- Why two copies: one copy in five added "مربى الطماطم" under a poster that
+  prints "معجون الطماطم"; real words were in 5 copies of 5.
+- Words match across copying slips (a 4+ letter prefix, a small edit
+  distance) and across scripts by sound (شيتوس = Cheetos, دافيدوف =
+  Davidoff). The shop's own name, bare numbers, and weight and joining
+  words never count.
+- A size shows only when its numbers are printed (`size_printed`).
+- Migration `migrate-2026-11-05-minimart-printed.sql` (applied before the
+  deploy). Readings without the check (`shown_name` NULL) show as before.
+Bench, 55 snaps (no shop names passed, so a little harder than
+production): prices 43/2/0/2; 40 names shown, 5 hidden (the slogan, "شوكولا
+حبة", washing cubes, the rotated LOYD caption, a paste whose copy was
+misspelt). Live: the 49 offers were backfilled with the same two copies,
+and 6 are hidden. The 4 names checked by eye the night before (strips,
+LOYD, Hunter's, Pillsbury) were kept whole, and one slip was fixed by hand:
+"كابري" for Cadbury, where both copies print "Cadbury Selections". Left: a
+shown name can be a fragment ("الطماطم") or keep the reader's spelling
+("ماجون"), and a caption the model cannot copy leaves "عرض".

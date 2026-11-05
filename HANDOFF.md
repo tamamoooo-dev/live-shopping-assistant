@@ -64,7 +64,9 @@ reading-check helper, verification, and snapshot refresh procedure.
 >     account), read on the `*/2` tick every 2 h.
 >   - Reading: photos twice; videos one frame a second via the `MEDIA`
 >     binding (≤5,000 frames a month). Every price must pass a "printed
->     here?" check.
+>     here?" check. A name shows only its words printed in the picture (two
+>     copies of the text agree), else the card says "عرض" (owner,
+>     2026-11-05: "if the system is not sure it must not guess").
 >   - Blocked = wait 6 h, never worked around.
 >   - Shops: `t.sshoco`, `albarakaoffers`, `sweet-st`, `mazaya.t`,
 >     `bshaaral` (بشائر العروض, the busiest: 48 snaps in a day).
@@ -1169,12 +1171,25 @@ external product images — verify via `preview_eval` DOM inspection; preview
     is still missed or read 1.5 (Takis, Cheetos), the rotated LOYD caption
     "3 كرتون ب 10" reads as 10 cartons, and "الحبه ب 5" under 5 products
     reads as 5 items. Live rows were repaired by hand the same night
-    (HISTORY §69 addendum 3); the Cheetos poster is still missing. Bench: `brochure-engine/benchmarks/
-    minimart-reading-2026-11-05/` (pictures not committed). Don't rewrite
+    (HISTORY §69 addendum 3); the Cheetos poster is still missing. Bench:
+    `brochure-engine/benchmarks/minimart-reading-2026-11-05/` (pictures not
+    committed; it passes no shop names, so names score a little harder
+    than production). Don't rewrite
     the count/size rules: v2 and v3 did, and pack counts got worse.
-  - **Names:** they come from the poster, or from the package when none is
-    printed, and can be off ("مربى" for tomato paste). The card's picture is
-    the check.
+  - **Names: printed words only (engine `9ea6ef5` = Worker `9634fd6c`,
+    2026-11-05, HISTORY §69 addendum 4).** Owner: "if the system is not
+    sure it must not guess". Each picture's text is copied twice
+    (`TEXT_PROMPT`); a name shows only its words that BOTH copies have, and
+    under half printed = a guess: `shown_name = ''`, `GET /minimarts` sends
+    `name: null`, and the card says عرض / Offer. A size shows only when its
+    numbers are printed (`size_printed`). The guess stays in `name` for
+    telling repeats apart. Bench: 40 names shown, 5 hidden (slogan, vague,
+    washing cubes for gum, a rotated tea caption, a misspelt paste), and
+    prices 43/2/0/2. Live: 49 offers backfilled, 6 hidden; 4 checked by eye
+    (strips, LOYD, Hunter's, Pillsbury) and Cadbury fixed by hand. Left: a
+    shown name can be a fragment ("الطماطم" for tomato paste) and keeps the
+    reader's spelling ("ماجون" for معجون); a caption the model can't copy
+    (rotated, tiny) leaves "عرض".
   - **Spotlight is not read:** `sweet-st` posts mostly Spotlight videos,
     which are not its story.
 
