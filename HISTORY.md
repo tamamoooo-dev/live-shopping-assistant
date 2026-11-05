@@ -7272,3 +7272,27 @@ has tribbles mistakes".
     for 1 only. Bench unchanged (47/0/0/0, 47/47 names). The 21 read snaps
     that showed no offer were read again: 3 more one-riyal deals (Shahad
     sparkling water, 7UP Zero, English cake, "الحبة بريااال"), plus the oats.
+
+**Addendum 7, 2026-11-06: video frames paced to last the month.** The owner
+asked whether the 5,000 free frames would last at this pace; they would not.
+On 2026-11-05 one shop (albarakaoffers) posted 48 videos in 24 minutes, cut
+into 356 frames (~7.4 a video); with the re-read the month's counter stood at
+789, so ~4,211 were left for 25 days that need ~8,900: the cap would hit
+around Nov 17, and after it a video is read from its cover picture only.
+Cloudflare (Images and Stream pricing pages): 5,000 unique transformations a
+calendar month free, shared by Media and Image Transformations; a still
+frame is one; a repeat of the same input and flags counts once a month; on
+the Free plan new ones then fail with 9422, Images Paid is $0.50 per 1,000.
+The owner picked pacing (free) over paying (~$2.50 a month at this pace).
+- Engine `51970e2` (Worker `dfed53cc`): `pacedFrames` gives a video what is
+  left shared over the videos expected before the month ends: the last
+  week's new (non-repeat) videos a day, counted from the first snap seen
+  when that is later (`videoPace`), × the days left; never more than 15 or
+  than is left, never fewer than 3. Only videos look it up.
+- Why 3: the 35 live video offers record in how many frames their price was
+  agreed: 33 in every frame, one in 90%, the least in 5 of 9. Three spread
+  frames (1/6, 1/2, 5/6 of the video) always put one inside any stretch
+  longer than a third of it, and one frame read the same by both copies
+  stands.
+- Live: 47.3 videos a day, 25.1 days left → 3 frames a video, ~4,355 for the
+  month. Few videos → back up to 15.

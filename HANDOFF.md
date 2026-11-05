@@ -40,8 +40,8 @@ reading-check helper, verification, and snapshot refresh procedure.
 >
 > **Last updated:** 2026-11-05. **State at a glance:**
 > - **Production:** the engine runs the commit named in its deployment
->   message (`01ebae3`, version `de89c7c2` on 2026-11-05; rollback
->   `9634fd6c` = `9ea6ef5` (the last before the PC reader),
+>   message (`51970e2`, version `dfed53cc` on 2026-11-05; rollback
+>   `de89c7c2` = `01ebae3` (before frame pacing), `9634fd6c` = `9ea6ef5` (the last before the PC reader),
 >   `201a8b5b` = `0ff1794`, `cd0f1b42` = `4ebcc21` (the last before Mini
 >   marts), `40911bd8` = `193628d`, `d72a8cce` = `85e9ce8`, `8cdf6f12` = `4a79987`,
 >   or `d08f7b31` = `eb13d23`, the last pre-Value-Watch engine). `wrangler deployments list` names it, because
@@ -1225,6 +1225,18 @@ external product images — verify via `preview_eval` DOM inspection; preview
     deals, four "بريال" 1-riyal deals); hidden names 14 → 1, same-price
     twins 5 → 0. Don't re-run it routinely: it re-cuts every video's
     frames (the 5,000-a-month cap).
+  - **Video frames are PACED to last the month (engine `51970e2` = Worker
+    `dfed53cc`, 2026-11-05, owner's pick over paying).** Cloudflare gives
+    5,000 free frame cuts a calendar month (shared with Image
+    Transformations, which nothing else here uses; past it new cuts fail,
+    and Images Paid is $0.50 per 1,000). A video gets what is left shared
+    over the videos expected before the month ends (last week's videos a
+    day × days left), 3 to 15 frames (`pacedFrames`). Measured: 33 of 35
+    live video prices showed in every frame (least 5 of 9). On 2026-11-05
+    albarakaoffers posted 48 videos (356 frames; the re-read used ~430
+    more): unpaced the cap would hit ~Nov 17; paced it is 3 frames a video,
+    ~4,355 for the month. Our counter counts every cut; Cloudflare counts
+    a frame of the same video once a month.
   - **Spotlight is not read:** `sweet-st` posts mostly Spotlight videos,
     which are not its story.
 
