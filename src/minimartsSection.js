@@ -387,27 +387,34 @@ function offerCard(offer, fresh, shop) {
   if (fresh) pic.append(el('span', 'mm-new', t('minimarts.new')));
   if (offer.reposts > 0) pic.append(el('span', 'mm-again', t('minimarts.postedAgain')));
 
+  // Three lines (owner, 2026-11-06): the price and what it buys, the name
+  // alone, then the price a piece and when it was posted.
   const info = el('div', 'mm-info');
   const priceRow = el('div', 'mm-price-row');
   const price = el('span', 'mm-price');
-  price.append(el('b', null, money(offer.price)), el('small', null, ` ${t('minimarts.sar')}`));
+  // No currency word: it would push what the price buys onto a line of its
+  // own on a phone (26 of 155 cards; 3 without it). Read aloud, it stays.
+  price.append(el('b', null, money(offer.price)));
+  price.setAttribute('aria-label', `${money(offer.price)} ${t('minimarts.sar')}`);
   priceRow.append(price);
   if (offer.wasPrice) priceRow.append(el('s', 'mm-was', money(offer.wasPrice)));
+  // What it buys is the shop's own words ("3 حبات · 260 جم", "الشريط"):
+  // isolated, so an English line around it keeps its order.
+  const qty = offer.count > 1 ? `${offer.count} ${offer.unit || plural('minimarts.piece', offer.count)}` : offer.unit;
+  const buys = el('span', 'mm-qty');
+  buys.append(el('bdi', null, [qty, offer.size].filter(Boolean).join(' · ') || t('minimarts.each')));
+  priceRow.append(buys);
   info.append(priceRow);
-  if (offer.count > 1) {
-    // "3 حبات" is the shop's own words: isolated, so an English line around
-    // it keeps its order.
-    const deal = line('div', 'mm-deal');
-    const [before, after] = t('minimarts.deal', { qty: '\u0000', each: money(offer.perUnit) }).split('\u0000');
-    deal.append(before || '', el('bdi', null, `${offer.count} ${offer.unit || plural('minimarts.piece', offer.count)}`), after || '');
-    info.append(deal);
-  }
   // The engine sends only a name printed in the picture (owner, 2026-11-05:
   // "if the system is not sure it must not guess"); otherwise "Offer", and the
   // picture says what it is.
-  info.append(el('div', 'mm-name', [offer.name || t('minimarts.unnamed'), offer.size].filter(Boolean).join(' · ')));
+  info.append(el('div', 'mm-name', offer.name || t('minimarts.unnamed')));
+  // The price a piece only for a deal of several (one piece is the price).
+  const foot = line('div', 'mm-foot');
+  if (offer.count > 1 && offer.perUnit) foot.append(el('span', 'mm-each', t('minimarts.perPiece', { each: money(offer.perUnit) })));
   const when = ago(offer.lastPostedAt || offer.postedAt);
-  if (when) info.append(line('div', 'mm-meta', when));
+  if (when) foot.append(el('span', 'mm-meta', when));
+  if (foot.childNodes.length) info.append(foot);
   info.append(cartButton(offer, shop));
   card.append(pic, info);
   return card;

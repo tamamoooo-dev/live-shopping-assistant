@@ -7296,3 +7296,21 @@ The owner picked pacing (free) over paying (~$2.50 a month at this pace).
   stands.
 - Live: 47.3 videos a day, 25.1 days left → 3 frames a video, ~4,355 for the
   month. Few videos → back up to 15.
+
+**Addendum 8, 2026-11-06: the offer card's text in three lines.** The owner
+found the card text messy and proposed: the price with what it buys next to
+it ("11.5   4 bags / 256 g / each"), the name alone on line two, then the
+price a piece with the time on the right ("2.44 a bag     1 day"), with
+minimum change. Done in `minimartsSection.js` (`offerCard`), `styles.css`
+and `i18n.js`, no engine change:
+- Line 1: price, then the count, unit and size the engine already sends,
+  as the shop printed them ("3 عبوات · 260 جم", "الشريط"); "each" / "للحبة"
+  when nothing says how much. The size moved here from the name line.
+- Line 2: the name only (or "عرض" when none was printed).
+- Line 3: "X each" / "X للحبة" only for a deal of several (for one piece
+  it is the price again), and the time at the line's end. Start/end are
+  logical, so Arabic mirrors: price on the right, time on the left.
+- The currency word left the card (kept in the price's `aria-label`).
+  Measured on the phone width (card text 142 px): with "ريال" line 1 wrapped
+  on 26 of 155 cards, without it on 3 (long printed sizes: "23 g x 12
+  Packs", "24 PACKS", "40 PREMIUM MINIATURES"); desktop 0.

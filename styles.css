@@ -1304,17 +1304,11 @@ button { font-family: inherit; }
 .mm-price-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .mm-price { color: var(--good); font-variant-numeric: tabular-nums; }
 .mm-price b { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; }
-.mm-price small { font-size: 11.5px; font-weight: 700; }
 .mm-was { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.mm-deal {
-  align-self: flex-start;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--brand);
-  background: var(--brand-soft);
-  padding: 2px 8px;
-  border-radius: var(--pill);
-}
+.mm-qty { font-size: 12px; font-weight: 700; color: var(--brand); line-height: 1.35; }
+.mm-foot { display: flex; align-items: baseline; gap: 8px; }
+.mm-each { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mm-foot .mm-meta { margin-inline-start: auto; }
 .mm-name {
   font-size: 13px;
   font-weight: 700;
