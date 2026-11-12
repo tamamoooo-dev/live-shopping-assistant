@@ -1,5 +1,10 @@
 # Super Search — Project Handoff
 
+2026-11-12 Mini marts after the first week (HISTORY §69 addendum 9): the PC
+reader has two Claude accounts (the backup needs the owner's one-time
+sign-in, `pc-reader/login-backup.cmd`); with both at their limit the snaps
+wait for Haiku up to 2 h, and Mistral reads when the wait is longer.
+
 2026-11-04 Mini marts (HISTORY §69): offers small shops post on their
 PUBLIC Snapchat story, read every 2 h. On the Brochures page, Mini marts is
 one provider at the top with a tile per shop; tapping a shop shows its offer
@@ -846,7 +851,7 @@ the Background Vision job's own.
 | Trigger | What runs |
 |---|---|
 | `0 6 * * MON,TUE,WED,THU` | The brochure/offers pipeline. One SELF child per store runs brochures → offers → price-history harvest, then the coordinator prunes. ⚠️ **Day NAMES only:** Cloudflare counts Sunday = 1, so the old `2,3,5` (meant Tue/Wed/Fri) ran Mon/Tue/Thu. Tuesday-start flyers are not on D4D yet at the Tuesday fire (the 10-06 editions were first seen Thu 10-08), so WED was added (2026-10-09). `cronNext` reads names. |
-| `*/2 * * * *` | Resumes D4D brochure collection for stores still pending. The Ops **Run All** button hands off to this cron too (HISTORY §55). Also the **re-judge sweep** (below), and **Mini marts** (`runMinimartsTick`, lease `minimarts`): shops due every 2 h, then up to 4 queued snaps in 80 s; a quiet fire costs two D1 reads (HISTORY §69). |
+| `*/2 * * * *` | Resumes D4D brochure collection for stores still pending. The Ops **Run All** button hands off to this cron too (HISTORY §55). Also the **re-judge sweep** (below), and **Mini marts** (`runMinimartsTick`, lease `minimarts`): shops due every 2 h (6 h when quiet for 3 days), then up to 4 queued snaps in 80 s; a quiet fire costs two D1 reads (HISTORY §69). |
 | `45 5 * * *` | Monday registry maintenance: dormancy, consolidation, healing. Does nothing on other days. |
 | `10,30,50 * * * *` | Vision Stage 1 (`runSteadyStateVision`). See the walkthrough below. |
 | `* * * * *` | Everything else, by clock. See the list below. |
@@ -1255,6 +1260,42 @@ external product images — verify via `preview_eval` DOM inspection; preview
     more): unpaced the cap would hit ~Nov 17; paced it is 3 frames a video,
     ~4,355 for the month. Our counter counts every cut; Cloudflare counts
     a frame of the same video once a month.
+  - **After the first week: two Claude accounts, a 2 h wait before
+    Mistral, and five smaller fixes (engine `496d312` = Worker `997635f4`,
+    2026-11-12, HISTORY §69 addendum 9; `migrate-2026-11-11-minimart-limits.sql`
+    applied).** Owner: "i have two claude accounts i want it to use the back
+    up account if the waiting period for both accounts + 2 hours it could
+    use mistral instead".
+    - The reader's accounts (rules in `src/readerLimits.js`): the main one
+      is the PC's Claude login; the backup is a second Claude Code sign-in
+      in `%USERPROFILE%\.claude-backup` (`CLAUDE_CONFIG_DIR`), signed in
+      once by the owner with `pc-reader/login-backup.cmd`. Until that is
+      done the reader has the main account only. An account that answers
+      "You've hit your … limit · resets 4:10am (Asia/Riyadh)" is not asked
+      again before that time; the other one reads meanwhile. What each
+      waits for is in `pc-reader/logs/accounts.json`.
+    - Every account at its limit: the reader asks no model and posts
+      `POST /minimarts/reader/limit {until}` on each run (that is also its
+      heartbeat). Reset at most 2 h away (`READER_HOLD_MAX_MS`): the
+      prepared snaps WAIT for the reader, until the reset and 30 min after
+      it. Further away: Mistral reads at once. The PC going quiet (no run
+      for 25 min) still hands everything to Mistral.
+    - A shop with no story snap for 3 days is checked every 6 h, not 2.
+    - A shop whose videos rarely carry a price (under a quarter of 20 or
+      more in a week) gets 3 frames a video.
+    - Every story check is kept 90 days (`minimart_checks`);
+      `GET /minimarts/reader/status` lists the checks that were not "ok" in
+      the last 7 days (`checkProblems`) and the reader's limit.
+    - A picture leaves R2 7 days after the last offer showing it expired
+      (`image_key` becomes NULL; the offer stays as the repeat history). A
+      deal posted again takes the new posting's picture.
+    - Not built, on purpose: skipping re-uploaded photos by how they look.
+      The same poster with a new price looks almost the same, so it could
+      keep a stale price.
+    - ⚠️ The engine was deployed from a fresh clone of pushed main, because
+      the working checkout held another session's uncommitted ops edits
+      (`src/index.js`, `src/ops/*`, `src/registry/lifecycle*`, `dev.mjs`).
+      They are still uncommitted there and are NOT in production.
   - **Spotlight is not read:** `sweet-st` posts mostly Spotlight videos,
     which are not its story.
 

@@ -7355,3 +7355,68 @@ and `i18n.js`, no engine change:
     is no wider than the screen. Opened, a long name takes 3 lines with the
     size under it; closed, it's back to 1 line. Desktop (224 px cards):
     5 arrows on t.sshoco.
+
+**Addendum 9, 2026-11-12: the first week's review, two Claude accounts and
+a 2-hour wait before Mistral.** The owner asked, a week in: "are we doing
+well within the limits .. report and list you recommendations for
+improvement", then: "go with your recommendations since i have two claude
+accounts i want it to use the back up account if the waiting period for
+both accounts + 2 hours it could use mistral instead".
+- The week, measured (2026-11-04 → 11-11):
+  - 1,148 snaps became 467 offers. Frames: 1,427 of the month's 5,000.
+  - The reader hit its session limit once: 2026-11-06 23:19 → 11-07 00:22
+    UTC. 468 calls were refused over 12 rounds, and Mistral read 163 snaps
+    about 2.5 hours late.
+  - sweet-st's videos: 31 of 172 gave a price, for 39% of the frames.
+  - mazaya.t never posted. Expired offers' pictures were never removed.
+    Only each shop's last check was kept.
+- The two-account rule, as built (my reading of the owner's sentence; the
+  owner has not corrected it):
+  - The main account reads. At its limit, the backup account reads.
+  - With both at their limit, the reader tells the engine when the first
+    one resets (`POST /minimarts/reader/limit`). 2 hours or less away: the
+    snaps wait for Haiku. Further away: Mistral reads at once.
+  - Mistral also takes over if the reader has not come back 30 minutes
+    after the reset it promised.
+  - The limit message read: "You've hit your session limit · resets 4:10am
+    (Asia/Riyadh)". `src/readerLimits.js` reads the time from it. A message
+    with no time means "try again in 1 hour"; "Not logged in" means the
+    account is left alone for 6 hours.
+  - The backup account is a second Claude config folder
+    (`%USERPROFILE%\.claude-backup`). It counts only once the owner has
+    signed it in with `pc-reader\login-backup.cmd`. Until then the reader
+    works on the main account alone.
+- The other fixes:
+  - A shop with no post for 3 days is checked every 6 hours, not every 2.
+  - Every shop check is kept for 90 days (`minimart_checks`), and the
+    reader status route lists the checks that went wrong.
+  - A shop whose videos rarely give a price (under 25% of 20 or more) gets
+    the fewest frames per video.
+  - Pictures of offers that ended more than 7 days ago are removed from
+    storage, 50 a tick.
+  - A re-posted offer that had lost its picture takes the new one.
+  - The reader's log line says which account read (`"by":{"main":2}`).
+- Not built: skipping a re-uploaded photo by its look. A same-looking
+  poster with a new price would keep the old price.
+- Shipped: engine `496d312`, Worker `997635f4` (before it: `dfed53cc` =
+  `51970e2`). `migrate-2026-11-11-minimart-limits.sql` was applied first.
+  - Another session had uncommitted ops edits in the engine checkout, so
+    the deploy ran from a fresh clone of pushed main. Those edits are not
+    in this commit and not in production.
+  - Tests: 110 files pass. The hold test was checked by removing the hold
+    from the SQL: it then fails.
+- The 163 snaps Mistral had read were read again by Haiku, once (all 163
+  now "read by haiku"). Their offers: 2 unchanged, 26 corrected, 33
+  retired, 35 added; live offers 59 → 62.
+  - Corrected, for example: Ariel Basic 10 kg 67 → 39.80 (67 is the wash
+    count on the bag), beef kebab 15 → 5.75 (15 is "15 or more" pieces),
+    butter 19 for 4 kg → 189 for 5 kg.
+  - Seven of the new readings were checked against their pictures by eye
+    (butter, Juhayna milk 27 × 200 ml at 12.90, Ariel, kebab, Nabhan tea
+    100 bags, Cerelac 2 cans, Hero Baby 12 jars): price, count and size
+    are right on all seven. The Hero Baby offer has no name, though "Hero
+    Baby" is printed on the jar: a missed name, not a wrong one.
+- Not yet seen in production when this was written (05:56 UTC, the next
+  shop checks were due at 07:06): the 6-hour interval, the first
+  `minimart_checks` rows, the picture clean-up (first due 7 days after an
+  offer ends), and the backup account.
