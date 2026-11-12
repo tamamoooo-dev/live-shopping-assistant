@@ -276,6 +276,13 @@ function setBusy(busy) {
   input.setAttribute('aria-busy', String(busy));
 }
 
+// The owner saved, changed or removed their browser's code: the search on
+// screen is run again, so the store it unlocks answers at once.
+window.addEventListener('lsa:relay-changed', () => {
+  if (!home.hidden || !input.value.trim()) return;
+  runSearch(input.value);
+});
+
 // --- the search (one flow for 1..N stores) ------------------------------------
 async function runSearch(query) {
   const q = (query || '').trim();

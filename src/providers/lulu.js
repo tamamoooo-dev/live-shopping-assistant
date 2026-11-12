@@ -10,6 +10,13 @@
 // connector answers 403 + `blocked`; this provider then stops asking for a
 // few hours and reports `blocked`, so Search shows "blocks online checks"
 // instead of an error on every search. Lulu's flyers still come through.
+//
+// "Use my browser" (2026-11-12, browserRelay.js): with the owner's code, the
+// search carries it and the connector hands a refused search to the owner's
+// own Chrome. Then Lulu is asked every time (never skipped for hours), and a
+// refusal says why that browser did not answer.
+
+import { RELAY_HEADER, noteRelayState, relayKey } from '../browserRelay.js';
 
 const CONNECTOR_BASE = 'https://shopping-connector.tamamoooo.workers.dev';
 const BLOCKED_KEY = 'lsa.lulu.blockedAt';
@@ -42,18 +49,21 @@ function rememberBlocked(blocked) {
 const connectorStrategy = {
   name: 'connector',
   async run(query) {
-    if (recentlyBlocked()) throw blockedError();
+    const key = relayKey();
+    if (!key && recentlyBlocked()) throw blockedError();
     const url = `${CONNECTOR_BASE}/search?provider=lulu&q=${encodeURIComponent(query)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, key ? { headers: { [RELAY_HEADER]: key } } : undefined);
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       if (res.status === 403 && json && json.blocked) {
-        rememberBlocked(true);
+        if (key) noteRelayState('lulu', json.relay || 'error');
+        else rememberBlocked(true);
         throw blockedError(json.error);
       }
       throw new Error((json && json.error) || `Connector HTTP ${res.status}`);
     }
     rememberBlocked(false);
+    noteRelayState('lulu', null);
     if (!json || !Array.isArray(json.results)) {
       throw new Error('Unexpected connector response');
     }

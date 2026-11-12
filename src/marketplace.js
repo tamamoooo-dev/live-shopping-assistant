@@ -30,6 +30,7 @@ import { unitPriceLabel } from './compare.js';
 import { openWatchDialog } from './alertsPage.v2.js';
 import { addToCart } from './cart.js';
 import { t, tn, getLang } from './i18n.js';
+import { RELAY_STORES, openRelayDialog, relayNote } from './browserRelay.js';
 import { discountDot, discountNumber } from './discountStatus.js';
 import { BRAND_ASSETS } from './identityAssets.js';
 
@@ -925,11 +926,17 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
     chip.setAttribute('role', 'button');
     chip.tabIndex = 0;
     chip.setAttribute('aria-pressed', 'false');
-    chip.addEventListener('click', () => toggleStoreFilter(s.id));
+    // A blocked store the owner's own browser can read: the chip opens
+    // "use my browser" instead (there is nothing to filter to).
+    const activate = () => {
+      if (chip.classList.contains('is-blocked') && RELAY_STORES.has(s.id)) openRelayDialog(s.id);
+      else toggleStoreFilter(s.id);
+    };
+    chip.addEventListener('click', activate);
     chip.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
-        toggleStoreFilter(s.id);
+        activate();
       }
     });
     strip.appendChild(chip);
@@ -1179,9 +1186,11 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
       if (c) {
         c.chip.classList.remove('is-loading');
         c.chip.classList.add(blocked ? 'is-blocked' : 'is-failed');
+        const note = blocked ? relayNote(store.id) : null;
+        if (blocked && RELAY_STORES.has(store.id)) c.chip.classList.add('can-relay');
         setChipState(c, '–', blocked
           ? t('market.state.blocked')
-          : bestEffort ? t('market.state.tempUnavailable') : t('market.state.unreachable'));
+          : bestEffort ? t('market.state.tempUnavailable') : t('market.state.unreachable'), note ? [note] : []);
       }
       render();
     },

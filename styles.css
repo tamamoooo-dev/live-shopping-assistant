@@ -1487,6 +1487,12 @@ button { font-family: inherit; }
 .src-chip.is-failed .store-logo { opacity: 0.45; }
 .src-chip.is-blocked .src-state { color: var(--muted); }
 .src-chip.is-blocked .store-logo { opacity: 0.45; }
+/* A blocked store the owner's own browser can read: the chip opens "use my browser". */
+.src-chip.is-blocked.can-relay { border-style: dashed; cursor: pointer; }
+.relay-code { letter-spacing: 1px; text-transform: uppercase; font-family: ui-monospace, Consolas, monospace; }
+.relay-state.is-on { color: #1a9c4b; font-weight: 700; }
+.relay-dialog .wd-actions { flex-wrap: wrap; }
+.relay-remove { margin-inline-end: auto; }
 @media (max-width: 560px) {
   .sources-strip { gap: 5px; }
   .src-chip {
