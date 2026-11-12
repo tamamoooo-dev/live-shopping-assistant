@@ -9,6 +9,7 @@ import { amazonProvider } from './providers/amazon.js';
 import { tamimiProvider } from './providers/tamimi.js';
 import { danubeProvider } from './providers/danube.js';
 import { luluProvider } from './providers/lulu.js';
+import { carrefourProvider } from './providers/carrefour.js';
 import { noonProvider } from './providers/noon.js';
 import { ninjaProvider } from './providers/ninja.js';
 import {
@@ -21,6 +22,7 @@ export const ONLINE_STORES = [
   { id: 'tamimi', kind: 'online', label: 'Tamimi', color: '#0ea5e9', provider: tamimiProvider },
   { id: 'danube', kind: 'online', label: 'Danube', color: '#ef4444', provider: danubeProvider },
   { id: 'lulu', kind: 'online', label: 'Lulu', color: '#6366f1', provider: luluProvider },
+  { id: 'carrefour', kind: 'online', label: 'Carrefour', color: '#0e5aa7', provider: carrefourProvider },
   { id: 'noon', kind: 'online', label: 'Noon', color: '#eab308', provider: noonProvider },
   { id: 'ninja', kind: 'online', label: 'Ninja', color: '#ec4899', provider: ninjaProvider },
 ];

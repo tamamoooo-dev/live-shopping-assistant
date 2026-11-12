@@ -18,7 +18,7 @@ import { profileGet, profileSet } from './profile.js';
 const CONNECTOR_BASE = 'https://shopping-connector.tamamoooo.workers.dev';
 export const RELAY_HEADER = 'X-Relay-Key';
 // Stores the extension can read.
-export const RELAY_STORES = new Set(['lulu']);
+export const RELAY_STORES = new Set(['lulu', 'carrefour']);
 const STATES = new Set(['offline', 'refused', 'stopped', 'paused', 'busy', 'timeout', 'no-price', 'error']);
 
 // The code as people type it: any case, dashes or spaces, 0 for O, 1 for I.
