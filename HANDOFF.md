@@ -1077,6 +1077,17 @@ Local: connector `node dev.mjs` (:8787); engine `node dev.mjs` /
   `C:\Users\majed\Desktop\claude\.ntfy.topic`, outside both repos; never
   commit it.
 - `OPS_TOKEN` (engine) guards `/__ops`.
+- `OPS_READ_TOKEN` (engine, 2026-11-12, HISTORY §70) is a second,
+  READ-ONLY console token for automated checks: a Bearer header on the GET
+  routes of `/__ops/api`, refused everywhere else (no login, no POST).
+  Its value is in `C:\Users\majed\Desktop\claude\ops-read.key`, outside
+  both repos; never commit it. `node ops-read-check.mjs` in that folder
+  prints the live Cron Monitor, Home checks, key states and pipeline.
+  ⚠️ Space console reads out: several heavy reads in a row (Home ~4.5 s,
+  Queue ~5.5 s) trip D1's overload guard and answer 500 for ~10 s.
+- The engine's cron list lives in `src/crons.js`; `crons.test.mjs` fails
+  when it differs from `wrangler.toml`. Retention and the weekly backup
+  write `cron:retention` / `cron:backup` audit rows.
 - **Mistral keys** (`MINISTRAL_14B_API_KEY_1/_2` and the older
   `MISTRAL_*` names) all feed ONE pool through `buildMistralPools`.
   ⚠️ A secret does nothing unless `buildMistralPools` reads it. The Ops

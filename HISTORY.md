@@ -7420,3 +7420,62 @@ both accounts + 2 hours it could use mistral instead".
   shop checks were due at 07:06): the 6-hour interval, the first
   `minimart_checks` rows, the picture clean-up (first due 7 days after an
   offer ends), and the backup account.
+
+## 70. Ops console revision (2026-11-12)
+
+Owner: "revise the engine ops .. find mistakes / error .. fix them .. study
+it and list your recommendations", then "go with your recommendations ..
+skip 5" (5 = tighten sign-in; not done).
+
+- What was wrong. The console reported things that were not so.
+  - Cron Monitor: `watches`, `maintenance` and `visionDrain` mapped to
+    audit actions nothing writes, so they read "no runs" forever.
+  - Status readers shared one "newest N rows" window of `ops_runs`. The
+    price lanes write 3 rows a minute and filled it, so the weekly pipeline,
+    the enrich rate and the latency figures fell out of view.
+  - The Scheduler badge only asked "did any cron write a row lately". It
+    stayed green through the weeks the pipeline fired on the wrong days.
+  - Registry maintenance wrote no audit row while merges were frozen.
+  - The digest and the price queue used the UTC date, not Riyadh's.
+  - A POST body of `null` or a list answered 500 instead of 401 / 428.
+- Fixes.
+  - Every reader asks for its own action (indexed reads). Each schedule
+    reads the rows it really writes; watch rounds come from `watch_runs`.
+  - Scheduler also fails when the pipeline's `cron:fanout` row is missing
+    30 minutes after a scheduled fire. Nothing automated acts on the badge.
+  - Maintenance is always audited, with its origin.
+- Added.
+  - `src/crons.js`: one cron list for `scheduled()`, the console and the
+    dev server. `crons.test.mjs` compares it with `wrangler.toml`.
+  - `cron:retention` and `cron:backup` audit rows (both only logged to
+    the Worker log before). Both are in the Cron Monitor and the digest.
+    The digest also carries the Scheduler verdict.
+  - Watch rounds older than 30 days are pruned daily. A watch keeps its
+    newest round whatever its age.
+  - Mistral key health in a durable record
+    (`ops/mistral-key-health.json`), merged with the audit rows. A retired
+    key now stays retired when no recent row carries usage. Written at most
+    every 10 minutes per key, or at once when a key's standing changes.
+  - `OPS_READ_TOKEN`: GET-only console access for automated checks.
+  - Home shows the newest daily digest.
+  - One store sweep per page load and per heal phase. The Pipeline card no
+    longer rebuilds the whole health grid; heal shares one sweep across
+    three steps (it ran four).
+- Removed from the console page: the hidden Recovery Queue card, its Human
+  review screen, and the one-button model selector (~450 lines). The server
+  routes (`/api/recovery*`, `/api/vision/model`) are unchanged. The
+  "Approve always renders" test now holds that the page carries the whole
+  review screen or none of it.
+- Shipped: engine `6987eaf`, Worker `8ed398b3`. Tests: 113 files pass.
+- Seen live after the deploy, read with the read-only token:
+  - Cron Monitor: pipeline, watches, enrich, verification, visionDrain,
+    brochureResume, priceFallback, minimarts and digest all show real runs.
+  - Home: 100% confidence, 18/18 stores fresh, Scheduler PASS, digest shown.
+  - The read token gets 403 on a POST; no token gets 401.
+- Not yet seen live: a `cron:retention` row (first due 2026-11-13 03:00
+  UTC), a `cron:backup` row (Sunday 2026-11-15), a `registry:maintain`
+  row (Monday 2026-11-16 05:45 UTC), and the key-health record being used
+  (it matters only when no recent audit row carries key usage).
+- Found, not fixed: several console reads in a row trip D1's overload guard
+  ("Too many resources consumed within a 10 second window"). Home takes
+  ~4.5 s and Queue ~5.5 s on their own.
