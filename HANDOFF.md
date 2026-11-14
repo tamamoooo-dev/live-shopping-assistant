@@ -6,6 +6,9 @@ presents one product a video, so only the price shown last counts, and its
 cards show a crop of the product (made by the PC reader), never the person.
 A shop can carry the owner's own name (`nameAr` / `nameEn`, engine `78b4845`
 = Worker `c84bb5c2`); Q shows كيو / Q instead of its Snapchat name.
+2026-11-15: each shop's page groups its offers (All · مجمدات · مواد غذائية ·
+مشروبات · سناكات, + أخرى), sorted once per offer by the PC reader's Haiku
+(engine `dd0837d` = Worker `ff28d996`).
 
 2026-11-12 Mini marts after the first week (HISTORY §69 addendum 9): the PC
 reader has two Claude accounts (the backup needs the owner's one-time
@@ -1348,9 +1351,19 @@ external product images — verify via `preview_eval` DOM inspection; preview
       end, and corn shows 4 (the red "other shops" price) instead of 1.80.
       A fix (presenter shops: a last frame near the end) needs a deploy.
       Q's tiny decimals: goat 499 (499.80), Nutella 19 (19.80).
-    - Deployed from a fresh clone: local `main` held another session's
-      unpushed connector commit (Carrefour through the browser relay, now
-      `48742d5` after a rebase onto `da52e01`). It is still unpushed.
+  - **Offer groups (engine `dd0837d` = Worker `ff28d996`, 2026-11-15, HISTORY
+    §69 addendum 11; `migrate-2026-11-15-minimart-categories.sql`
+    applied).** Owner: "under each mini market add for main categories
+    frozen food .. food ( all food except frozen and snacks ) drinks , and
+    snacks". A shop's page has All · مجمدات · مواد غذائية · مشروبات · سناكات
+    (+ أخرى when it has non-food). `minimart_offers.category`, set once by
+    the PC reader (Haiku, picture + name, 15 a call). Routes (ingest
+    secret): `GET /minimarts/reader/categories?limit=` (live offers with
+    `category IS NULL`, the prompt included), `POST
+    /minimarts/reader/categories {categories: [{offerId, category, name}]}`
+    (`name` = the queue's; a changed name is a conflict). Ops action
+    `reader:minimarts-categories`. With the PC off, new offers are under All
+    only until it is back.
 
 - **Value Watch, 2026-11-03 (HISTORY §65):** shipped and indexed. All 6
   production watches are `indexed_value`. Each has a listing index (275–447

@@ -7518,6 +7518,48 @@ from the photo or find another way".
   to كيو / Q; checked live (English "Q") and in a local preview against
   production (Arabic "كيو").
 
+**Addendum 11, 2026-11-15: each shop's offers in the owner's four groups.**
+The owner: "under each mini market add for main categories frozen food ..
+food ( all food except frozen and snacks ) drinks , and snacks". This
+reverses the 2026-11-05 "no categorization"; the cards stay as they are.
+- **The page.** Over a shop's cards, a row of buttons: الكل (All, chosen
+  when the page opens) · مجمدات · مواد غذائية · مشروبات · سناكات, and أخرى
+  (Other) only when the shop has offers that are not food or drink
+  (Comfort, Fairy, tissues, plates, the iPhone). A group with no offers is
+  dimmed and says so; an offer not sorted yet is under All only; no row
+  until the shop has a sorted offer.
+- **Chosen where the owner's words leave room:** liquid milk, laban, tea and
+  coffee are drinks; powdered milk, cheese and labneh food; ice cream frozen;
+  fresh or chilled meat and chicken (مبرد, طازج, a butcher's tray) food.
+- **Sorting.** `minimart_offers.category` (frozen | food | drinks | snacks
+  | other | unknown), set once per offer by the PC reader after its crop
+  step: Haiku looks at the offer's picture (512 px) and the name it was
+  read as, 15 offers a call, and names the product it sees in each answer
+  (`src/minimartCategory.js`; `GET/POST /minimarts/reader/categories`; a
+  re-read that changes the name sorts it again).
+- **Measured** on the 391 live offers
+  (`brochure-engine/benchmarks/minimart-category-2026-11-15/`):
+  - Word lists first: the Browse classifier
+    (`knowledge/classification.js`) left 90 unplaced, put Ruffles chips in
+    vegetables and frozen nuggets and spring rolls in fresh chicken (their
+    names don't say مجمد); 14 offers have no name at all. Not used.
+  - Haiku v1 (25 a call): chilled chicken, Q's meat trays, smoked slices
+    and mascarpone in frozen. v2 (chilled/fresh named as food) fixed those,
+    but a few answers slid onto the next picture (jalapeño pickles
+    "drinks", a strawberry syrup "snacks"). v3 (the product named in each
+    answer, 15 a call): all 391 answered, every frozen offer a freezer
+    product, 27 calls (150k tokens in).
+- Shipped: engine `dd0837d` = Worker `ff28d996`
+  (`migrate-2026-11-15-minimart-categories.sql` first); app `1a52498`.
+- **Live, 2026-11-14 22:28–22:33 UTC** (the reader's first run after the
+  deploy): all 394 live offers sorted in 27 calls, none unanswered: 58
+  frozen, 161 food, 55 drinks, 114 snacks, 6 other. Against the checked
+  bench, 377 of 391 the same; the 14 others are mostly calls either way
+  (marinated chicken and shawarma frozen or chilled, Kako pies, pizza
+  dough). "صحون" is 10 trays of vegetables for 9.95: food live, which the
+  bench had wrong; boxed caramel popcorn went to food. Nothing was changed
+  by hand.
+
 ## 70. Ops console revision (2026-11-12)
 
 Owner: "revise the engine ops .. find mistakes / error .. fix them .. study
