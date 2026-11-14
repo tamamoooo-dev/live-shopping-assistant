@@ -1,5 +1,10 @@
 # Super Search — Project Handoff
 
+2026-11-14 Mini marts (HISTORY §69 addendum 10): عروض البركة closed and is
+switched off; Q (كيو, `m7.omar1`) replaces it as a `presenter` shop: a person
+presents one product a video, so only the price shown last counts, and its
+cards show a crop of the product (made by the PC reader), never the person.
+
 2026-11-12 Mini marts after the first week (HISTORY §69 addendum 9): the PC
 reader has two Claude accounts (the backup needs the owner's one-time
 sign-in, `pc-reader/login-backup.cmd`); with both at their limit the snaps
@@ -74,8 +79,20 @@ reading-check helper, verification, and snapshot refresh procedure.
 >     copies of the text agree), else the card says "عرض" (owner,
 >     2026-11-05: "if the system is not sure it must not guess").
 >   - Blocked = wait 6 h, never worked around.
->   - Shops: `t.sshoco`, `albarakaoffers`, `sweet-st`, `mazaya.t`,
->     `bshaaral` (بشائر العروض, the busiest: 48 snaps in a day).
+>   - Shops: `t.sshoco`, `sweet-st`, `mazaya.t`, `bshaaral` (بشائر العروض),
+>     `m7.omar1` (Q / كيو, a supermarket, style `presenter`, 2026-11-14).
+>     `albarakaoffers` (عروض البركة) closed and was switched off 2026-11-14.
+>   - A `presenter` shop (`minimart_shops.style`; `POST /minimarts/shops
+>     {link, style: "presenter"}`, `style: null` turns it off): a person
+>     presents one product a video. Only the price the last priced frame
+>     shows is the offer (`lastRevealed`: earlier ones are other shops'
+>     prices or the price still drawing in). The card shows a crop of the
+>     product, made by the PC reader after its reading rounds
+>     (`pc-reader/crop.mjs`, rules `src/minimartCrop.js`): Haiku boxes the
+>     packages, crops are cut around them, and a crop is used only when two
+>     Haiku checks see no part of a face and do see the product. No crop
+>     yet (or none stood): no picture. Never trust Haiku's FACE boxes
+>     (measured wrong 4 of 25); the check on the crop itself is the guard.
 >   - App: a tile per shop (Browse's brand tile: logo, offer count, name).
 >     A tap opens `#/brochures/minimarts/<username>`: the shop's name, then
 >     its offer cards exactly as they are, with no flyer look and no
@@ -798,7 +815,7 @@ V1 fallback), `/registry/stats`,
 open writes `POST /watches` (body carries `profileId`),
 `DELETE /watches?id=&profile=`, `POST /alerts/seen?profile=`;
 Mini marts `GET /minimarts`, `GET /minimarts/image?key=`, open writes
-`POST /minimarts/shops` (`{link}`), `DELETE /minimarts/shops?username=`;
+`POST /minimarts/shops` (`{link, style?}`), `DELETE /minimarts/shops?username=`;
 guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`,
 `/watches/check`, `/prune`, `/enrich`, `/enrich/step` (Background Manual Vision
 hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open
@@ -1309,6 +1326,29 @@ external product images — verify via `preview_eval` DOM inspection; preview
       They are still uncommitted there and are NOT in production.
   - **Spotlight is not read:** `sweet-st` posts mostly Spotlight videos,
     which are not its story.
+  - **Q, a `presenter` shop, and product crops (engine `da52e01` = Worker
+    `1164af74`, 2026-11-14, HISTORY §69 addendum 10;
+    `migrate-2026-11-14-minimart-presenter.sql` applied).** Owner: "since
+    there is a person grabbing the products .. find a solution for it
+    either you eliminate him from the photo or find another way".
+    - Routes (ingest secret): `GET /minimarts/reader/crops?limit=` (presenter
+      offers whose picture has no crop: `crop_of != image_key`), `POST
+      /minimarts/reader/crops {crops: [{offerId, imageKey, image|null}]}`
+      (a JPEG, kept only while `imageKey` is still the offer's picture; null =
+      none stood, the card shows no picture). Ops action
+      `reader:minimarts-crops`.
+    - The reader crops only while it runs: with the PC off, Q's new cards
+      have no picture until it is back.
+    - Live 2026-11-14 19:42 UTC: 19 offers, 19 of 19 cropped (7 Haiku
+      calls, 97 s), no face in any (eye-checked).
+    - Open: **frames miss a video's end.** `frameTimes` cuts at 0.5, 1.5 …
+      so a 5.9 s video's last frame is 4.5 s; Q reveals its price at the
+      end, and corn shows 4 (the red "other shops" price) instead of 1.80.
+      A fix (presenter shops: a last frame near the end) needs a deploy.
+      Q's tiny decimals: goat 499 (499.80), Nutella 19 (19.80).
+    - Deployed from a fresh clone: local `main` held another session's
+      unpushed connector commit (Carrefour through the browser relay, now
+      `48742d5` after a rebase onto `da52e01`). It is still unpushed.
 
 - **Value Watch, 2026-11-03 (HISTORY §65):** shipped and indexed. All 6
   production watches are `indexed_value`. Each has a listing index (275–447

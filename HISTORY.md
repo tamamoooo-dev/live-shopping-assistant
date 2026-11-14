@@ -7421,6 +7421,91 @@ both accounts + 2 hours it could use mistral instead".
   `minimart_checks` rows, the picture clean-up (first due 7 days after an
   offer ends), and the backup account.
 
+**Addendum 10, 2026-11-14: عروض البركة closed, Q added as a "presenter"
+shop, and its cards show a product crop.** The owner: "عروض البركة is closed
+now ... we are going to replace it with q .. q is not mini market but their
+marketing style is similar to them so we will include it with mini mart",
+then, giving Q's account ("m7@omar1"): "since there is a person grabbing the
+products .. i want you to find a solution for it either you eliminate him
+from the photo or find another way".
+- `albarakaoffers` was switched off (`DELETE /minimarts/shops`, soft:
+  `active = 0`; it had no live offers). Q is `m7.omar1` ("محمد عمر /
+  كيو🛒", Jeddah; Snapchat usernames have no "@", the public page answered
+  for `m7.omar1`).
+- What Q posts (its 26 story snaps, 25 of them videos, 3–11 s): a
+  presenter holds one product per video; captions name it, and the price
+  appears near the end in big yellow digits with the decimals tiny
+  ("19" + ".80").
+- **A new shop style, `presenter`** (`minimart_shops.style`, set with
+  `POST /minimarts/shops {link, style: "presenter"}`, `style: null` turns it
+  off). Two rules follow from it:
+  1. **The last price revealed is the offer** (`lastRevealed`, both the
+     Haiku and the Mistral path). Q's videos first show other shops'
+     prices in red ("الي يوصل سعره ٢٢ ريال", "الي توصل سعرها ل ٦٥ ريال",
+     "الي ينباع ب ٨٠٠ ريال", once a screenshot of another app's prices), and
+     the price is drawn in ("49" → "499.80", "58" → "58.80", "5599" →
+     "5599.80"). Read as usual (5 frames a video, two Haiku copies), Q's 25
+     videos gave 33 offers from 23 priced videos; with the rule, 23 offers,
+     one per priced video, the revealed price (Comfort 9.80, goat 499.80, rice 58.80, iPhone
+     5599.80, Rufoof 8 for 3.80 …).
+  2. **The card shows a crop of the product, never the frame with the
+     person** (`src/minimartCrop.js`, `pc-reader/crop.mjs`). Painting him
+     out was not done: he holds the product, so removing him means inventing
+     the pixels behind his hands. The PC reader, after its reading rounds,
+     takes the presenter offers whose picture has no crop yet
+     (`GET /minimarts/reader/crops`), and per offer:
+     - Haiku boxes each package of the product in the offer's frame;
+     - crops are cut around all packages together, then each one alone (two
+       packs held apart with his face between them): a 3:4 window with room,
+       a closer 3:4 window, then the box itself on a 3:4 card filled with
+       its own blurred copy;
+     - Haiku checks every crop twice (the second copy in reverse order); a
+       crop stands only when BOTH copies see no part of a head or face
+       (hair, eyes, mouth, chin, beard, ear, however small or blurred; a
+       face on a poster counts) and see the product. The widest crop that
+       stands is used. A box refused for a chin or mouth at one edge is
+       tried again with that edge cut by 15%, then 30%.
+     - It posts the JPEG (`POST /minimarts/reader/crops`); the engine keeps
+       it next to the frame (`<frame>.crop.<offer>.jpg`) only while that
+       frame is still the offer's picture. No crop yet, or none stood: the
+       card has no picture. Crops leave R2 with their offers' pictures.
+- **Measured, 2026-11-14** (`brochure-engine/benchmarks/minimart-crop-2026-11-14/`,
+  frames and results kept out of the repository):
+  - First, boxes alone on 25 frames: product boxes mostly right, FACE
+    boxes not (one on a bottle, one on the price caption, two above the
+    face). So nothing relies on a face box; the yes/no check on the crop
+    itself is what keeps him out.
+  - All 113 frames of Q's videos, each treated as an offer's frame: v1 (one
+    box) 67 cropped; v2 (each package alone too) 69; v4 (edge trim, and a
+    bug fixed that left refused frames "unanswered") **88 cropped, no face
+    in any (every crop eye-checked, four borderline ones at full size)**;
+    24 of 25 videos have a crop (the 25th is an intro with no product). The
+    refused tight crops really did show a mouth, chin or beard at an edge.
+  - Cost: 37 Haiku calls for the 113 frames (~0.33 a frame).
+- Known misses on Q: Nutella's tiny ".80" was copied as "١٩.٠٠" by both
+  copies (19 instead of 19.80, 1 of 23 priced videos); KitKat's price is on
+  screen for about a second and fell between 5 test frames.
+- Shipped: engine `da52e01`, Worker `1164af74` (before it: `8ed398b3` =
+  `6987eaf`). `migrate-2026-11-14-minimart-presenter.sql` was applied
+  first. Deployed from a fresh clone of pushed main, because the local
+  `main` held another session's unpushed connector commit (Carrefour through
+  the browser relay); only `da52e01` was pushed. Tests: 114 files pass.
+- **Live, the same evening.** Q's story (25 videos) went through the PC
+  reader at 19:42 UTC (an earlier run had hit the main account's 5-hour
+  limit, partly the bench's calls on the same account) and gave 19 offers
+  (repeat posts stay one offer). The crop step took 7 Haiku calls and 97 s:
+  **19 of 19 cropped, none refused, no face in any** (each one eye-checked;
+  the goat's crop shows his neck under the collar, not his face). KitKat
+  was caught live (1.80 for 4). Wrong prices live:
+  - **Corn (ذرة حلوه) shows 4; Q's price is 1.80.** The video is 5.9 s, frames
+    are cut one a second (0.5 … 4.5 s), and the 1.80 appears in the last
+    partial second, so no frame showed it; the last priced frame was the
+    red "الي يوصل سعرها ب ٤ ريال" (other shops' price). The bench had
+    frames to the end and read 1.80. Q's videos ran at 6 frames each:
+    one of 6 s or less is cut at every second and loses up to 1.4 s at its
+    end, and a longer one is spread and loses about a twelfth.
+  - Goat 499 (499.80) and Nutella 19 (19.80): the tiny decimals.
+
 ## 70. Ops console revision (2026-11-12)
 
 Owner: "revise the engine ops .. find mistakes / error .. fix them .. study
