@@ -18,7 +18,7 @@
 // offers first seen after this browser last opened that shop, also shown as a
 // badge on the Brochures tab.
 
-import { t } from './i18n.js';
+import { t, getLang } from './i18n.js';
 import { addToCart } from './cart.js';
 
 const ENGINE_BASE = 'https://brochure-engine.tamamoooo.workers.dev';
@@ -95,7 +95,13 @@ function ago(iso) {
   return plural('minimarts.daysAgo', Math.floor(hours / 24));
 }
 
-const shopName = (shop, username) => shop?.title || username;
+// The owner's name for the shop in the page's language (the other language's
+// if only that one is set), else its Snapchat profile name (2026-11-14:
+// Q's profile reads "محمد عمر / كيو🛒", the owner named it كيو / Q).
+function shopName(shop, username) {
+  const owner = getLang() === 'ar' ? shop?.nameAr || shop?.nameEn : shop?.nameEn || shop?.nameAr;
+  return owner || shop?.title || username;
+}
 
 // The tile's name mark: the first two words of the shop's name, emoji left
 // out, on a hue fixed by the username (the scheme of Browse's monograms).
@@ -600,7 +606,7 @@ function renderManager(manager, data, refresh) {
       // refresh() rebuilt this panel; say what happened in the new one.
       const fresh = document.querySelector('.mm-add-note');
       if (fresh) {
-        const shop = out.shop?.title || out.shop?.username || link;
+        const shop = out.shop ? shopName(out.shop, out.shop.username) : link;
         fresh.textContent = out.status === 'blocked'
           ? t('minimarts.addedBlocked', { shop })
           : plural('minimarts.added', out.queued || 0, { shop });
