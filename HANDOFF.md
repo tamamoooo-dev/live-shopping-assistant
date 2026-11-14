@@ -4,6 +4,8 @@
 switched off; Q (كيو, `m7.omar1`) replaces it as a `presenter` shop: a person
 presents one product a video, so only the price shown last counts, and its
 cards show a crop of the product (made by the PC reader), never the person.
+A shop can carry the owner's own name (`nameAr` / `nameEn`, engine `78b4845`
+= Worker `c84bb5c2`); Q shows كيو / Q instead of its Snapchat name.
 
 2026-11-12 Mini marts after the first week (HISTORY §69 addendum 9): the PC
 reader has two Claude accounts (the backup needs the owner's one-time
@@ -815,7 +817,7 @@ V1 fallback), `/registry/stats`,
 open writes `POST /watches` (body carries `profileId`),
 `DELETE /watches?id=&profile=`, `POST /alerts/seen?profile=`;
 Mini marts `GET /minimarts`, `GET /minimarts/image?key=`, open writes
-`POST /minimarts/shops` (`{link, style?}`), `DELETE /minimarts/shops?username=`;
+`POST /minimarts/shops` (`{link, style?, nameAr?, nameEn?}`), `DELETE /minimarts/shops?username=`;
 guarded by `X-Ingest-Secret`: `POST /ingest?store=`, `/prices/backfill[?store=]`,
 `/watches/check`, `/prune`, `/enrich`, `/enrich/step` (Background Manual Vision
 hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open

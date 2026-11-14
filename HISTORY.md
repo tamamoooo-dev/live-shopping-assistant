@@ -7505,6 +7505,18 @@ from the photo or find another way".
     one of 6 s or less is cut at every second and loses up to 1.4 s at its
     end, and a longer one is spread and loses about a twelfth.
   - Goat 499 (499.80) and Nutella 19 (19.80): the tiny decimals.
+- **The owner's name for a shop.** The owner: "the mini mart name in
+  arabic is كيو in english is Q". The tile showed the Snapchat profile name
+  ("محمد عمر / كيو🛒"), which every story check refreshes, so the owner's
+  name is kept apart: `minimart_shops.name_ar` / `name_en`, set with `POST
+  /minimarts/shops {link, nameAr, nameEn}` (null or empty clears it, left
+  out is unchanged), served as `shop.nameAr` / `nameEn`. The app shows the
+  name in the page's language (the other one if only that is set, else the
+  profile name) on the tile, the shop's page, its cards and the shop list.
+  Engine `78b4845` = Worker `c84bb5c2` (migration
+  `migrate-2026-11-14-minimart-shop-names.sql` first); app `d9a885c`. Q set
+  to كيو / Q; checked live (English "Q") and in a local preview against
+  production (Arabic "كيو").
 
 ## 70. Ops console revision (2026-11-12)
 
