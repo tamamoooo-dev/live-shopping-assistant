@@ -355,7 +355,7 @@ export async function renderMinimartShop(container, username) {
   const seen = ensureSeen(data.generatedAt);
 
   // The shop's name over its cards (owner, 2026-11-05: "the card should be
-  // presented as they are .. no flyer style no categorization .. nothing").
+  // presented as they are .. no flyer style .. nothing"; the cards still are).
   const hero = el('div', 'browse-brand-hero');
   const meta = el('div', 'browse-brand-meta');
   meta.append(line('h1', null, shopName(shop, username)));
@@ -365,13 +365,60 @@ export async function renderMinimartShop(container, username) {
   hero.append(shopIcon(shop), meta);
 
   const grid = el('div', 'mm-cards');
-  for (const offer of offers) grid.append(offerCard(offer, isNew(offer, seen), shopName(shop, username)));
-  view.replaceChildren(hero, offers.length ? grid : line('div', 'bstore-empty', t('minimarts.shopEmpty')));
+  const groups = groupChips(offers, (shown) => {
+    grid.replaceChildren(...shown.map((offer) => offerCard(offer, isNew(offer, seen), shopName(shop, username))));
+    groupEmpty.hidden = shown.length > 0;
+  });
+  const groupEmpty = line('div', 'bstore-empty', t('minimarts.groupEmpty'));
+  groupEmpty.hidden = true;
+  groups.show();
+  view.replaceChildren(...(offers.length
+    ? [hero, ...(groups.row ? [groups.row] : []), grid, groupEmpty]
+    : [hero, line('div', 'bstore-empty', t('minimarts.shopEmpty'))]));
 
   // Opened: this shop's offers are no longer new (the cards keep their mark
   // until the next visit), and the tab badge drops them.
   markShopSeen(username, data.generatedAt);
   paintBadge(data);
+}
+
+// The owner's groups over a shop's cards (2026-11-15: "under each mini market
+// add for main categories frozen food .. food ( all food except frozen and
+// snacks ) drinks , and snacks"). All first, then the four, always shown;
+// Other (cleaning, tissues, phones …) only when the shop has some. An offer
+// the reader has not sorted yet, or could not, is under All only. No row
+// until the shop has a sorted offer. -> { row | null, show() }; `paint`
+// gets the offers to show.
+const OFFER_GROUPS = ['frozen', 'food', 'drinks', 'snacks'];
+function groupChips(offers, paint) {
+  const counts = new Map();
+  for (const o of offers) if (o.category) counts.set(o.category, (counts.get(o.category) || 0) + 1);
+  const sorted = [...OFFER_GROUPS, 'other'].some((g) => counts.get(g));
+  let active = 'all';
+  const show = () => paint(active === 'all' ? offers : offers.filter((o) => o.category === active));
+  if (!sorted) return { row: null, show };
+  const row = el('div', 'browse-chiprow mm-groups');
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', t('minimarts.groups'));
+  const ids = ['all', ...OFFER_GROUPS, ...(counts.get('other') ? ['other'] : [])];
+  const chips = ids.map((id) => {
+    const n = id === 'all' ? offers.length : counts.get(id) || 0;
+    const chip = el('button', `quick-chip${id === active ? ' is-active' : ''}${n ? '' : ' is-empty'}`);
+    chip.type = 'button';
+    chip.setAttribute('aria-pressed', String(id === active));
+    chip.append(document.createTextNode(t(`minimarts.group.${id}`)), el('span', 'qc-tag', String(n)));
+    chip.addEventListener('click', () => {
+      active = id;
+      chips.forEach((c, i) => {
+        c.classList.toggle('is-active', ids[i] === id);
+        c.setAttribute('aria-pressed', String(ids[i] === id));
+      });
+      show();
+    });
+    return chip;
+  });
+  row.append(...chips);
+  return { row, show };
 }
 
 // Whether a closed name is cut short. Its box changes size when the card is

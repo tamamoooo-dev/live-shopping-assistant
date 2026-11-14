@@ -1260,6 +1260,12 @@ button { font-family: inherit; }
 .mm-shops-btn[aria-expanded="true"] { background: var(--brand); color: #fff; }
 .mm-loading { color: var(--muted); font-size: 13.5px; padding: 8px 2px; }
 
+/* A shop's offer groups (2026-11-15): All, the owner's four, Other. */
+.mm-groups { margin: 0 0 4px; }
+.mm-groups .quick-chip { padding: 7px 13px; }
+.mm-groups .quick-chip .qc-tag { text-transform: none; letter-spacing: 0; }
+.mm-groups .quick-chip.is-empty:not(.is-active) { opacity: 0.55; box-shadow: none; }
+
 .mm-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
