@@ -7618,3 +7618,57 @@ skip 5" (5 = tighten sign-in; not done).
 - Found, not fixed: several console reads in a row trip D1's overload guard
   ("Too many resources consumed within a 10 second window"). Home takes
   ~4.5 s and Queue ~5.5 s on their own.
+
+## 71. Browse: Fresh and Frozen answer again, Lowest Ever removed, faster (2026-11-15)
+
+Owner: "find out why i do have a warning message wait for 1 minute in browse
+.. why is it slow .. i want to delete the lowest price section .. fresh
+section is not working".
+
+- The warning and the Fresh fault were one fault.
+  - Every listing of the Fresh and Frozen departments, and of each aisle
+    with a fresh/frozen counterpart (fruits, vegetables, chicken, meat, fish
+    and the frozen aisles), answered 500 (`error code: 1101`) in 0.4 s. The
+    app shows its one failure line for that: "Browse is unavailable right
+    now — try again in a minute". Other departments answered.
+  - Cause: the frozen-mark SQL wrote the offer's name pair out once per term
+    (41 terms, about 70 KB). A Fresh or Frozen listing carries the mark
+    twice, so its statement was 163 KB. D1 refuses a statement over 100 KB.
+    The name pair grew with the 2026-10-23 names work; no test measured the
+    statement.
+  - Fix (`storage/browseStore.js`): the name pair is written once and tested
+    as one column, `mark_names`. Same term lists, same test. Largest Browse
+    statement: 31 KB.
+- Slow. A cold `/browse` took 14.4 s live (15.3 s in the browser). D1 runs
+  one query at a time, so the Biggest Drops row waited the same 15 s.
+  - The tile-count query used the same oversized mark on every current
+    offer: about 3 s of the summary's 3.8 s on a local copy of the database.
+  - The 10,000-row candidates read served only the Lowest Ever rail.
+- Lowest Ever removed, at the owner's word. Engine `RAIL_IDS` is
+  `['drops']`; `rail=lowest-ever` answers 400 like the other retired rails.
+  App: one row on the Browse home page, one request for it; an old link to
+  the removed page opens the home page. A card keeps its "lowest in N
+  weeks" note. The "Lowest price" sort and the Search tab were not touched.
+  `browseStore.candidates` stays, with no reader.
+- Checked before the deploy, on a local copy of the database (8,731 current
+  offers, 2026-08): all 352 department and aisle listings (11,586 cards),
+  the tile counts, brand counts and brand facets identical before and
+  after. New test `storage/browseFrozenMark.test.mjs`: the listings on real
+  SQLite, the SQL mark against its JS twin (NULL names included), every
+  Browse statement under 50 KB; it fails on the old store at 166 KB.
+  Tests: 116 files pass.
+- Shipped: engine `f3d0065`, Worker `c2529f08` (rollback `ff28d996`); app
+  `33623d8`. No migration.
+- Seen live after the deploy:
+  - `dept=fresh` 200, 56 cards in 2.9 s; `dept=frozen` 200, 58 cards in
+    2.2 s; `aisle=fruits`, `aisle=chicken-poultry`, `aisle=frozen-poultry`
+    200, each card in its own aisle.
+  - Cold `/browse`: 2.05 s alone, 2.3 s sent together with the Biggest
+    Drops row (was 14.4 s). Tile counts unchanged (Fresh 721, Frozen 835).
+  - `rail=lowest-ever`: 400.
+- Not done: `wrangler d1 execute --remote` was refused in this session, so
+  no query was timed on the production database directly; the per-query
+  times are from the local copy.
+- Found, not fixed: `purgeBrowseCache` deletes the key `/browse`, but the
+  app reads `/browse?v=…`, a different key. After an ingest the app's
+  summary is not purged and ages out within the hour.

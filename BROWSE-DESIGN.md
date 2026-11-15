@@ -11,6 +11,11 @@
 > reuse over duplication, always. Search is frozen (HANDOFF rule 9) — Browse
 > changes nothing about Search, ranking, or matching.
 >
+> **2026-11-15:** the owner removed the Lowest Ever rail. Biggest Drops is the
+> one rail; a card keeps its "lowest in N weeks" note (HISTORY §71). Where
+> this document lists Lowest Ever as a rail, it describes the design before
+> that date.
+>
 > **Rev 3 changes (V1.1, 2026-07-16 — an intentional PRODUCT simplification,
 > not a redesign):**
 > (1) **Rails reduced to the two that earn their place**: Biggest Drops and

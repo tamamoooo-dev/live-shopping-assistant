@@ -1,5 +1,10 @@
 # Super Search — Project Handoff
 
+2026-11-15 Browse (HISTORY §71): the Fresh and Frozen pages answer again
+(their SQL statement was 163 KB, D1 refuses over 100 KB), the owner removed
+the Lowest Ever rail (Biggest Drops is the one rail), and a cold `/browse`
+takes 2 s, not 14 s. Engine `f3d0065` = Worker `c2529f08`, app `33623d8`.
+
 2026-11-14 Mini marts (HISTORY §69 addendum 10): عروض البركة closed and is
 switched off; Q (كيو, `m7.omar1`) replaces it as a `presenter` shop: a person
 presents one product a video, so only the price shown last counts, and its
@@ -524,8 +529,9 @@ V1.1 precision guards: per-brand `depts` allowlists, VETO_PREV/VETO_NEXT
 neighbor words, `noStrip`, min key length 3, NO fuzzy prefix repair —
 detection takes the offer's source/category for context; failure mode is
 "no brand", never "wrong brand") + `deals.js` (deal scoring, pure+tested —
-kept for Exceptional Deals' future return; V1.1 ships only the Biggest
-Drops + Lowest Ever rails, RAIL_IDS is the law). A brand listing's first
+kept for Exceptional Deals' future return; since 2026-11-15 Biggest Drops
+is the ONE rail — the owner removed Lowest Ever, and `browseStore.candidates`
+has no reader — RAIL_IDS is the law). A brand listing's first
 page carries `brand` + `families` (live offers per canonical aisle,
 `browseStore.brandFacets`). Ingest stamps two derived columns on offers:
 `identity` (deriveIdentity — the history join) and `brand_slug` (detectBrand);
@@ -839,7 +845,7 @@ hop), `/resolve`, `/registry/maintain`, `GET/POST /registry/review`. CORS open
 | `marketplace.js` | Unified grid (online + flyer cards, store badges, per-card Add-to-Cart on BOTH sources + watch bell on online), sources strip, THREE sort perspectives — Lowest price / Best value / **Featured** — ordered Roadmap stage (rule 9; Lowest price at 'primary' stageBand granularity) → family band → perspective key (price asc / unit value within dominant unit family / featuredScore); card clicks feed Featured's learning (`recordChoice`); card unit-price labels suppressed for >6×-off-median outliers |
 | `featured.js` | The Featured intelligence layer (HISTORY §36, frontend-only — a grid perspective, NOT matching, so nothing to mirror): category-aware curated signal KB (per-category weights; a signal absent from a category contributes nothing), expected-price soft penalty (median of primary matches, free zone 0.5×–2×, capped — never a filter), small deal signal, and bounded localStorage learning (`lsa.featured.learn.v1`, family-keyed so both languages learn together, `b:<brand>` dynamic ids; ranking-only, never touches product data). All boosts bounded by construction. ⚠️ محلى (sweetened) is dropped RAW pre-normalization — the ى→ي fold would read it as محلي 'local' |
 | `brochure.js` | **The only engine client** (rule 7): all engine URLs/maps/readers/watch+alert clients, `loadHotspots`, `loadBrowseSummary`/`browseOffers`, `cleanOfferName` (leading OCR-banner trim); never throws |
-| `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (dept tiles + brand pills as EQUAL peers, then Biggest Drops + Lowest Ever rails — V1.1 keeps only these two), listings w/ aisle chips + sorts (discount/price) + store filter + paging; **brand pages** open on an identity hero (deterministic monogram, bilingual name, offers·stores) + engine-fed product-family chips. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
+| `browsePage.js` | Browse pillar UI (`#/browse[/dept\|aisle\|brand\|brands\|rail/...]`): market floor (dept tiles + brand pills as EQUAL peers, then the Biggest Drops rail — the one rail since 2026-11-15), listings w/ aisle chips + sorts (discount/price) + store filter + paging; **brand pages** open on an identity hero (deterministic monogram, bilingual name, offers·stores) + engine-fed product-family chips. Composes marketplace's EXPORTED card primitives + `openFlyerOffer` — one card idiom, one tap-through (viewer deep-link w/ sheet) app-wide |
 | `brochures.js` | Brochures page (Mini marts first, then per-store sections, active/expired cards, covers); `#/brochures/minimarts/<username>` swaps the page for that shop's offers |
 | `minimartsSection.js` | Mini marts provider: a tile per shop (Browse's `.browse-brand-pill`; the engine's `logo`, else the shop's name written in the tile; count turns accent when offers are new) → the shop's page `#/brochures/minimarts/<username>` (name, then offer cards with the snap picture, tap = full view, three text lines: price + what it buys / name / "X each" + time, "New" and "Posted again" marks). "New" is per browser and per shop (`lsa.minimarts.seen.v2`), also the Brochures-tab badge. Shops panel (add by link, remove, status) only in owner mode (`lsa.minimarts.owner.v1`, turned on by `#/brochures?minimarts=manage`) |
 | `viewer.js` | In-app viewer: swipe, zoom (buttons + **pinch + double-tap**, focal-point anchored via `zoomAt`), preload, focus trap, PDF branch, `targetPageId`/`targetPageIndex` deep-jumps; **hotspot overlay** (page image in a JS-sized `.bv-imgwrap`, % boxes track zoom) + **product sheet** (crop, price, Add to Cart, similar-offers strip via `searchOffers`; scrim tap / swipe-down / Esc dismiss). Sheet hero + cart thumbnail are **SELF-HOSTED crops** from the STORED page image via the tapped spot's bbox (`cropFromPage`: canvas + `crossOrigin` on the CORS-open /asset → data-URL); D4D's CDN crop (`offer.imageUrl`) is only a fallback when no geometry is at hand (similar-strip, marketplace). ⚠️ `.ps-sheet` centering is margin-based on purpose — `fade-up`'s `both` fill overwrites transform-based centering |
@@ -1214,6 +1220,18 @@ external product images — verify via `preview_eval` DOM inspection; preview
   `browse/mapping.js` + `FROZEN_MARK_SQL` in `storage/browseStore.js`); they
   MUST classify identically or cards/counts/filters drift. Change both or
   neither.
+- **D1 refuses a SQL statement over 100,000 bytes**, and the Worker then
+  answers 500 (`error code: 1101`) in under half a second. Browse builds
+  its SQL from generated pieces (the canonical name, the saved
+  classification, the frozen mark), so a piece repeated per term or per
+  group grows fast: the frozen mark once wrote the name pair out per term,
+  and Fresh/Frozen listings reached 163 KB (HISTORY §71). The name pair is
+  written ONCE (`mark_names`); `storage/browseFrozenMark.test.mjs` holds
+  every Browse statement under 50 KB. Local SQLite has no such limit, so
+  only that test catches it before production.
+- **D1 runs one query at a time.** Browse requests sent together each wait
+  for the slowest one, so time a query alone (`curl -w`, a fresh `?v=` for a
+  cold `/browse`).
 
 ## 11. Open TODOs (priority order)
 
