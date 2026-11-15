@@ -438,7 +438,7 @@ export async function localLandingForOffer(offer) {
 
 // --- Browse (the product-discovery pillar, BROWSE-DESIGN.md) -------------------
 // GET /browse — the market floor in one payload: canonical departments/aisles
-// with live-offer counts plus the rails (Biggest Drops, Lowest Ever). Cached
+// with live-offer counts plus the Biggest Drops rail. Cached
 // for the page session (the substrate changes 3×/week; the engine edge-caches
 // it too). GET /browse/offers — the universal listing behind every Browse node.
 // Both best-effort like every engine read: null just means "Browse is resting".

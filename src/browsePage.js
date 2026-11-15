@@ -5,8 +5,8 @@ import { BRAND_ASSETS } from './identityAssets.js';
 // marketplace's exported card primitives (ONE card idiom, ONE tap-through):
 //
 //   #/browse                → the market floor: department tiles, brand row,
-//                             Biggest Drops + Lowest Ever rails (V1.1 keeps
-//                             only the rails that earn their place)
+//                             the Biggest Drops rail (the owner removed the
+//                             Lowest Ever rail on 2026-11-15)
 //   #/browse/dept/<id>      → a department (aisle chips + listing)
 //   #/browse/aisle/<id>     → one aisle's listing
 //   #/browse/brands         → every brand with live offers (A–Z of the market)
@@ -30,7 +30,7 @@ import { openWatchDialog } from './alertsPage.v2.js';
 import { historyQuery } from './viewer/insights.js';
 import { t, getLang } from './i18n.js';
 
-const RAILS = ['drops', 'lowest-ever'];
+const RAILS = ['drops'];
 const SORTS = ['discount', 'price'];
 const PAGE_SIZE = 24;
 const BRAND_BATCH = 60; // brands added per "More brands" tap on the home page
@@ -296,7 +296,7 @@ async function renderHome(host, token) {
     slot.appendChild(brandSection);
   }
 
-  // 3. The rails: Biggest Drops, then Lowest Ever.
+  // 3. The rail: Biggest Drops.
   for (const id of RAILS) {
     const rail = rails.get(id);
     if (rail) fillRail(rail);
