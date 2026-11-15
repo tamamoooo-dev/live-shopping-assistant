@@ -7724,3 +7724,24 @@ first found a third. Engine `a5605c1` (Worker `993f1bab`) then `7793202`
   Marinara, a fish hand grill, canned luncheon under deli, a breaded
   Tanmiah fillet. "DAC" dish liquid lemon went to Kitchen & dining, not
   cleaning.
+
+**Addendum 1 (2026-11-15, "Fix the rest").** Engine `4428247` + `673ba9e`
+(Worker `db7ac285`). The products the pass above left: explicit phrases
+for penne (pasta), a BBQ / hand grill (tools), "luncheon" (the can), DWL /
+dishwashing liquid, degreaser (cleaning); "breded", the misspelling on a
+live Tanmiah card, joins the processed-form frozen marks. Branded meat
+keeps its fresh aisle when the name has a butcher's cut or is nothing but
+the brand and the meat; smoked meat beside a brand goes to the deli.
+Measured on 11,172 live cards: exactly the intended cards move, nothing
+else. The re-filing route now also lists rows the rule already moved, so a
+row can leave review. Applied: 13 written (3 luncheon cans deli to canned
+food, Jif x2 to cleaning, Morning Delight x2 to deli, Al Abeer beef to
+meat, Urussa Chicken to chicken, DAC to dishwashing, the Tanmiah fillet to
+frozen chicken, Penne to pasta, the grill to tools); a second run moves 0;
+seen live on the Tools, Dishwashing and Prime Chicken pages. Prior values:
+`backups/refile-fresh-2026-11-15-pass2-before.json`. `4428247` was pushed
+with one stale assertion (it still expected Jif refused); deploy.mjs
+refused it and `673ba9e` corrected the test before anything was deployed.
+Still in More, refused: Herfy chicken rings, Bess Mix chicken in gravy,
+Al Kabeer kebabs, Dari squash cubes. Not judged: "Tomato Cherry Glass",
+"Garlic Fish", "Chicken Tikka 500g" (no brand, kept under Fresh).

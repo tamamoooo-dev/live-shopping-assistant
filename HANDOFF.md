@@ -5,8 +5,9 @@ again (its listing bound 175 parameters, D1 refuses over 100); a fresh aisle
 guessed from a word in the name is now challenged, so a strawberry toothpaste
 or chicken noodles no longer file under Fresh (65 live products re-filed, a
 refused one goes to More); the home summary is cached under a data
-generation that every write replaces. Engine `7793202` = Worker `d809b728`
-(rollback `993f1bab`, before that `c2529f08`).
+generation that every write replaces. A third pass ("Fix the rest") filed
+the 13 leftovers. Engine `673ba9e` = Worker `db7ac285` (rollback `d809b728`,
+then `993f1bab`, then `c2529f08`).
 
 2026-11-15 Browse (HISTORY §71): the Fresh and Frozen pages answer again
 (their SQL statement was 163 KB, D1 refuses over 100 KB), the owner removed
@@ -1234,12 +1235,16 @@ external product images — verify via `preview_eval` DOM inspection; preview
   outside fresh and frozen wins; a brand whose archive consensus is another
   department wins; a flavour-capable word beside a brand is refused to
   review (More). Kept: no brand, a brand whose consensus is fresh, a frozen
-  mark in the name, a meat name that says fresh. A lost guess carries
+  mark in the name, a meat name that says fresh, names a butcher's cut
+  (bone-in, breast, minced, fillet) or is nothing but the brand and the
+  meat ("Urussa Chicken"); smoked meat goes to the deli. A lost guess carries
   `challenge: 'fresh_name_word'`. To teach it a product, add the phrase to
   `knowledge/classificationTerms.js`, then `POST /enrich/refile-fresh`
   (ingest secret; lists what would move, writes only with `?apply=1`).
-  Refused on purpose, and so in More: branded meat with no "fresh" in the
-  name (Urussa Chicken, Al Abeer beef bone-in).
+  The route also lists rows the rule already moved (their saved field
+  carries the mark), so a refused row can come back out of More. Refused on
+  purpose, and so in More: "chicken in gravy", chicken rings, kebabs beside
+  a brand. "Luncheon" with no retailer category is filed as the can.
 - **Per-store /prices/backfill calls can transiently fail** with an HTML
   error page when hammered back-to-back (seen 2026-07-16: 7 of 18 stores);
   idempotent — re-run the failed stores with a few seconds' pacing.
