@@ -1,5 +1,13 @@
 # Super Search — Project Handoff
 
+2026-11-15 Browse, second pass (HISTORY §72): the More department answers
+again (its listing bound 175 parameters, D1 refuses over 100); a fresh aisle
+guessed from a word in the name is now challenged, so a strawberry toothpaste
+or chicken noodles no longer file under Fresh (65 live products re-filed, a
+refused one goes to More); the home summary is cached under a data
+generation that every write replaces. Engine `7793202` = Worker `d809b728`
+(rollback `993f1bab`, before that `c2529f08`).
+
 2026-11-15 Browse (HISTORY §71): the Fresh and Frozen pages answer again
 (their SQL statement was 163 KB, D1 refuses over 100 KB), the owner removed
 the Lowest Ever rail (Biggest Drops is the one rail), and a cold `/browse`
@@ -1204,11 +1212,34 @@ external product images — verify via `preview_eval` DOM inspection; preview
   stable identity and rewrites the cached id itself.)
 - A first request to a **freshly created** workers.dev subdomain can return
   `error code: 1042` for a few seconds — retry, don't debug.
-- **/browse is cached twice**: 1h at the edge (Cache API; the guarded write
-  paths purge it per-colo after ingest/backfill) AND up to 1h in the BROWSER
-  (`max-age=3600`). Right after an ingest, a user who visited recently can
-  see the previous floor for up to ~1h — accepted for a 3×/week substrate;
-  don't "fix" by shortening the TTL without re-checking D1 read volume.
+- **/browse is cached twice**: 1 h at the edge and 2 minutes in the browser
+  (`max-age=120, s-maxage=3600`). The edge entry is stored under the
+  summary's shape and a DATA GENERATION (`cache/browse-generation.txt` in
+  the object store); every write path that changes Browse calls
+  `markBrowseChanged(ctx)`, which replaces the generation, so the next
+  request anywhere rebuilds. Never go back to deleting a cache entry: the
+  app asks `/browse?v=…`, a different key from `/browse`, and a Cache API
+  delete reaches one location only (that was the stale hour, HISTORY §72).
+  A new write path that changes what Browse shows must call
+  `markBrowseChanged`. Changing the summary's shape = raise
+  `BROWSE_SUMMARY_SHAPE`.
+- **D1 refuses more than 100 bound parameters**, with the same instant 500.
+  The More listing bound every mapped category of every source (175). Lists
+  that are our own constants are written into the statement as quoted
+  literals (`inList` in `storage/browseStore.js`); only request values are
+  bound. `storage/browseFrozenMark.test.mjs` holds binds to 40.
+- **A fresh aisle from a name word is challenged**
+  (`knowledge/classification.js` `freshGuessChallenge`, only when the
+  retailer gave no category): an explicit product phrase for an aisle
+  outside fresh and frozen wins; a brand whose archive consensus is another
+  department wins; a flavour-capable word beside a brand is refused to
+  review (More). Kept: no brand, a brand whose consensus is fresh, a frozen
+  mark in the name, a meat name that says fresh. A lost guess carries
+  `challenge: 'fresh_name_word'`. To teach it a product, add the phrase to
+  `knowledge/classificationTerms.js`, then `POST /enrich/refile-fresh`
+  (ingest secret; lists what would move, writes only with `?apply=1`).
+  Refused on purpose, and so in More: branded meat with no "fresh" in the
+  name (Urussa Chicken, Al Abeer beef bone-in).
 - **Per-store /prices/backfill calls can transiently fail** with an HTML
   error page when hammered back-to-back (seen 2026-07-16: 7 of 18 stores);
   idempotent — re-run the failed stores with a few seconds' pacing.

@@ -7672,3 +7672,55 @@ section is not working".
 - Found, not fixed: `purgeBrowseCache` deletes the key `/browse`, but the
   app reads `/browse?v=…`, a different key. After an ingest the app's
   summary is not purged and ages out within the hour.
+
+## 72. Browse: More answers, flavour words leave Fresh, the summary refreshes (2026-11-15)
+
+The owner: "fix the two things you noticed" (a strawberry toothpaste under
+Fresh Food; the home page not refreshing after new flyers). Measuring the
+first found a third. Engine `a5605c1` (Worker `993f1bab`) then `7793202`
+(Worker `d809b728`); no app change.
+
+- **More was down.** The More department answered 500 on every visit: its
+  listing bound 175 parameters (every mapped category of every source) and
+  D1 refuses over 100; so since the saved-classification source was added on
+  2026-10-23. Category lists are our own constants and are now written into
+  the statement; the most any Browse statement binds is 9. On the local
+  database copy all 352 listings are identical before and after. Live: More
+  answers 200 with 60 cards.
+- **Fresh by a name word.** With no retailer category the classifier places
+  a product by a word in its name, and the words for fresh food are also
+  flavours and ingredients. Of the 688 live Fresh cards 110 were placed that
+  way and about 60 were not fresh food (Tic Tac, a toothpaste, meat
+  grinders, noodles, cat food, canned tomatoes). A fresh guess is now
+  challenged (`freshGuessChallenge`; the rule is in HANDOFF §10). Measured
+  on 11,172 live cards: 63 leave Fresh, none enters by the rule, nothing
+  outside Fresh moves by it.
+- **Re-filing.** `POST /enrich/refile-fresh` rewrites one saved field
+  (the classification) of current offers the rule moves, nothing else. The
+  first dry run on production showed canned chopped tomatoes heading to
+  Juices (the Arabic reading says "in tomato juice"); what the challenge
+  itself names now outranks every later name-word step (`7793202`).
+  Applied: 140 scanned, 65 written: 29 to review (More), 11 canned food,
+  4 appliances, 4 noodles, 4 kitchen, 3 snacks, 2 pets, 2 bread, and one
+  each to dental, candies, bath, dried fruits, sauces, frozen. A second run
+  moves 0. The first apply call answered 500 with nothing written (the
+  database was busy straight after the dry run); the retry went through.
+  Each row's field as it was is kept in
+  `Desktop/claude/backups/refile-fresh-2026-11-15-before.json`
+  (`savedBefore`), enough to put any row back.
+- **Summary cache.** The write paths deleted the cache entry `/browse`, but
+  the app reads `/browse?v=…`, stored under that URL, so nothing was ever
+  cleared; and a Cache API delete reaches one location only. The summary is
+  now cached under its shape and a data generation kept in the object
+  store, which each such write replaces (`markBrowseChanged`). Browser
+  2 minutes, edge an hour.
+- Checked live: the Biorepair Kids toothpaste is under Dental and gone from
+  Fruits; Tic Tac is gone from Fruits; `/browse` 200 in 2.9 s cold.
+- Tests: 117 files pass (new `knowledge/freshGuess.test.mjs`, 51
+  assertions; `browseFrozenMark.test.mjs` also holds binds to 40).
+- Left in More on purpose (refused, not guessed): Urussa Chicken, Al Abeer
+  beef bone-in, Morning Delight smoked beef slices, Dari squash cubes,
+  Herfy chicken rings. Still wrong under Fresh, not touched: Penne Chicken
+  Marinara, a fish hand grill, canned luncheon under deli, a breaded
+  Tanmiah fillet. "DAC" dish liquid lemon went to Kitchen & dining, not
+  cleaning.
