@@ -965,7 +965,8 @@ export function createMarketplace(root, stores, query = '', opts = {}) {
         toggleStoreFilter(FLYERS_FILTER);
       }
     });
-    strip.appendChild(flyerChip);
+    // This week's flyers lead the strip (the owner's order, 2026-11-16).
+    strip.prepend(flyerChip);
   }
   root.appendChild(strip);
 

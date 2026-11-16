@@ -43,7 +43,8 @@ const BROCHURES_SOURCE = {
   label: t('search.source.brochures'),
   color: '#8b5cf6',
 };
-const SEARCH_SOURCES = [...ONLINE_STORES, BROCHURES_SOURCE];
+// This week's flyers come first (the owner's order, 2026-11-16).
+const SEARCH_SOURCES = [BROCHURES_SOURCE, ...ONLINE_STORES];
 const STORE_BY_ID = ONLINE_STORE_BY_ID;
 const SOURCE_BY_ID = Object.fromEntries(SEARCH_SOURCES.map((s) => [s.id, s]));
 

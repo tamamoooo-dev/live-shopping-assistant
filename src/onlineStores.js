@@ -12,17 +12,21 @@ import { luluProvider } from './providers/lulu.js';
 import { carrefourProvider } from './providers/carrefour.js';
 import { noonProvider } from './providers/noon.js';
 import { ninjaProvider } from './providers/ninja.js';
+import { hungerstationProvider } from './providers/hungerstation.js';
 import {
   rankItems, relevance, isRelevant, isPrimaryMatch,
 } from './match.js';
 
+// The owner's order (2026-11-16): Amazon, Panda, Tamimi, Danube, Carrefour,
+// Lulu, HungerStation, Noon, Ninja. Search puts this week's flyers first.
 export const ONLINE_STORES = [
-  { id: 'panda', kind: 'online', label: 'Panda', color: '#16a34a', provider: pandaProvider },
   { id: 'amazon', kind: 'online', label: 'Amazon', color: '#f59e0b', provider: amazonProvider },
+  { id: 'panda', kind: 'online', label: 'Panda', color: '#16a34a', provider: pandaProvider },
   { id: 'tamimi', kind: 'online', label: 'Tamimi', color: '#0ea5e9', provider: tamimiProvider },
   { id: 'danube', kind: 'online', label: 'Danube', color: '#ef4444', provider: danubeProvider },
-  { id: 'lulu', kind: 'online', label: 'Lulu', color: '#6366f1', provider: luluProvider },
   { id: 'carrefour', kind: 'online', label: 'Carrefour', color: '#0e5aa7', provider: carrefourProvider },
+  { id: 'lulu', kind: 'online', label: 'Lulu', color: '#6366f1', provider: luluProvider },
+  { id: 'hungerstation', kind: 'online', label: 'HungerStation', color: '#7c2d12', provider: hungerstationProvider },
   { id: 'noon', kind: 'online', label: 'Noon', color: '#eab308', provider: noonProvider },
   { id: 'ninja', kind: 'online', label: 'Ninja', color: '#ec4899', provider: ninjaProvider },
 ];

@@ -99,6 +99,12 @@
       "kind": "logo",
       "domain": "ananinja.com"
     },
+    "hungerstation": {
+      "file": "icons/stores/hungerstation.webp",
+      "source": "https://www.google.com/s2/favicons?domain=hungerstation.com&sz=128",
+      "kind": "logo",
+      "domain": "hungerstation.com"
+    },
     "marksave": {
       "file": "icons/stores/marksave.webp",
       "source": "https://www.google.com/s2/favicons?domain=markandsave.com&sz=128",
