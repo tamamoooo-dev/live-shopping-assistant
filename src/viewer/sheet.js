@@ -12,7 +12,7 @@ import { saleCompact, sizeOptionsPresentation } from '../salePresentation.js';
 //   (alertsPage dialog → engine watches) · similar-offers strip (/offers).
 //   "Available elsewhere" comparison lands in Phase 4 via renderCompare.
 
-import { searchOffers, storeLabel, storeColor, cleanOfferName, pricesForQuery } from '../brochure.js';
+import { searchOffers, storeLabel, storeColor, cleanOfferName, pricesForQuery, valueLinesForQuery } from '../brochure.js';
 import { addToCart, inCart } from '../cart.js';
 import { openWatchDialog } from '../alertsPage.v2.js';
 import { productFamily, productType } from '../match.js';
@@ -21,7 +21,8 @@ import { structureOfferName } from './productName.js';
 import { priceStatus } from './priceStatus.js';
 import { t, tn, getLang } from '../i18n.js';
 import { discountMarkHtml } from '../discountStatus.js';
-import { sameProductRows, valueOf } from './sameProduct.js';
+import { sameProductRows, valueOf, lineQuery } from './sameProduct.js';
+import { valueHistory } from './valueHistory.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
 // Hero + cart thumbnails are cropped FROM THE STORED PAGE IMAGE (engine /asset,
@@ -76,6 +77,31 @@ function fmtDate(iso) {
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+// A day and month ("14 Sep"), the year only when it is not this year.
+function fmtDay(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const opts = { day: 'numeric', month: 'short' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  // In the app's language; Arabic keeps the Gregorian flyer dates and Western
+  // digits, as the prices beside them.
+  return d.toLocaleDateString(getLang() === 'ar' ? 'ar-u-ca-gregory-nu-latn' : 'en-GB', opts);
+}
+
+// The engine's value figure as the card prints it: "1kg 15.98", "1L 4.50",
+// "2.10 each". Never computed here, only formatted.
+const vnum = (v) => {
+  const n = Number(v);
+  return (n >= 100 ? String(Math.round(n)) : n < 0.1 ? n.toFixed(3) : n.toFixed(2)).replace(/.00$/, '');
+};
+const valueText = (v) => (!v ? ''
+  : v.unit === 'kg' ? t('market.valueKg', { value: vnum(v.value) })
+    : v.unit === 'l' ? t('market.valueL', { value: vnum(v.value) })
+      : t('market.valueEach', { value: vnum(v.value) }));
+const perUnit = (v) => t(v && v.unit === 'kg' ? 'sheet.perKg' : v && v.unit === 'l' ? 'sheet.perL' : 'sheet.perPiece');
+const fmtNum = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
 
 const PEEK_PX = 330; // enough for hero + price + actions, one-handed
 const DISMISS_V = 0.55; // px/ms downward fling that closes from any detent
@@ -413,6 +439,10 @@ export function createSheet(host, ctx) {
           </button>
         </div>
         <div class="ps-insights" hidden></div>
+        <div class="ps-vhist" hidden>
+          <h4 class="ps-vhist-title"></h4>
+          <div class="ps-vhist-body"></div>
+        </div>
         <div class="ps-history" hidden>
           <h4>${esc(t('sheet.priceHistory'))}</h4>
           <div class="ps-history-body"></div>
@@ -533,7 +563,44 @@ export function createSheet(host, ctx) {
 
     loadIntelligence(offer, seed);
     loadCompare(offer, seed);
+    loadValueHistory(offer);
     loadRelated(offer);
+  }
+
+  /* --- lowest value recorded: the exact product, any size (valueHistory.js) ------ */
+  // Every saved flyer price of this product, priced per kg / L / piece by the
+  // engine (GET /prices/lines); the same-product rule of the store comparison
+  // decides which lines count. Shown only when this offer has a value itself.
+  async function loadValueHistory(offer) {
+    if (!sheet || priceStatus(offer) !== 'priced' || !valueOf(offer)) return;
+    const q = lineQuery(offer);
+    if (!q) return;
+    const doc = await valueLinesForQuery(q);
+    if (!sheet || !doc) return;
+    const vh = valueHistory(offer, doc.offers);
+    const box = sheet.querySelector('.ps-vhist');
+    const bodyEl = sheet.querySelector('.ps-vhist-body');
+    if (!vh || !box || !bodyEl) return;
+    const cur = t('market.currencyShort');
+    const detail = (p, withStore) => {
+      if (!p.line) return esc(t('sheet.thisOfferTag'));
+      const l = p.line;
+      const bits = [withStore ? storeLabel(l.store) : '', l.size || '', `${fmtNum(l.price)} ${cur}`, fmtDay(l.validFrom)];
+      // Each bit isolated, so a Latin store name and an Arabic date keep their order.
+      return bits.filter(Boolean).map((b) => `<bdi>${esc(b)}</bdi>`).join(' · ');
+    };
+    const row = (label, p, withStore) => `
+      <div class="ps-h-row"><span>${esc(label)}</span><b class="ps-vh-val"><span dir="auto">${esc(valueText(p))}</span><small>${detail(p, withStore)}</small></b></div>`;
+    const pct = Math.round(((vh.mine.value - vh.anywhere.value) / vh.anywhere.value) * 100);
+    const badge = !vh.anywhere.line || pct < 1
+      ? `<span class="ps-h-badge is-good">${esc(t('sheet.lowestValueBadge'))}</span>`
+      : `<span class="ps-h-badge">${esc(t('sheet.vsLow', { pct: `+${pct}%` }))}</span>`;
+    sheet.querySelector('.ps-vhist-title').textContent = t('sheet.lowestValueTitle', { per: perUnit(vh.mine) });
+    bodyEl.innerHTML = `${row(t('sheet.lowestHere', { store: storeLabel(offer.store) }), vh.here, false)}${
+      row(t('sheet.lowestAnywhere'), vh.anywhere, true)}
+      <div class="ps-h-row"><span>${esc(t('sheet.thisOffer'))}</span><b><span dir="auto">${esc(valueText(vh.mine))}</span> ${badge}</b></div>
+      <p class="ps-vh-note">${esc(t('sheet.lowestValueNote', { n: vh.count + 1, date: fmtDay(vh.since) }))}</p>`;
+    box.hidden = false;
   }
 
   /* --- "Available elsewhere" (same product, other stores, this week) ------------ */
@@ -553,16 +620,6 @@ export function createSheet(host, ctx) {
     const priced = priceStatus(offer) === 'priced';
     const all = priced ? sameProductRows(offer, (data && data.offers) || []) : [];
     const rows = all.slice(0, 4);
-    const vnum = (v) => {
-      const n = Number(v);
-      return (n >= 100 ? String(Math.round(n)) : n < 0.1 ? n.toFixed(3) : n.toFixed(2)).replace(/.00$/, '');
-    };
-    const valueText = (v) => (!v ? ''
-      : v.unit === 'kg' ? t('market.valueKg', { value: vnum(v.value) })
-        : v.unit === 'l' ? t('market.valueL', { value: vnum(v.value) })
-          : t('market.valueEach', { value: vnum(v.value) }));
-    const perUnit = (v) => t(v && v.unit === 'kg' ? 'sheet.perKg' : v && v.unit === 'l' ? 'sheet.perL' : 'sheet.perPiece');
-    const fmt = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
     const rowEls = rows.map(({ offer: o, value, pct }) => {
       const badge = pct <= -2
         ? `<span class="ps-h-badge is-good">−${Math.abs(pct)}%</span>`
@@ -580,7 +637,7 @@ export function createSheet(host, ctx) {
           ${size ? `<small class="ps-cmp-size" dir="auto">${esc(size)}</small>` : ''}
         </span>
         <span class="ps-cmp-nums">
-          <b class="ps-cmp-price">${fmt(o.price)} <small>${esc(t('market.currencyShort'))}</small></b>
+          <b class="ps-cmp-price">${fmtNum(o.price)} <small>${esc(t('market.currencyShort'))}</small></b>
           ${value ? `<small class="ps-cmp-value" dir="auto">${esc(valueText(value))}</small>` : ''}
         </span>
         ${badge}`;

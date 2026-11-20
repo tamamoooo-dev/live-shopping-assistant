@@ -62,6 +62,32 @@ ok('sizes and counts in any digits are not product words',
   same(o('a', 'lulu', 'almarai', 'Almarai Long Life Milk Full Fat 12×1L ١٢', 50, { value: 4.2, unit: 'l' }),
     o('b', 'danube', 'almarai', 'ALMARAI UHT FF MILK 4X1LTR', 18, { value: 4.5, unit: 'l' })));
 
+// Measured 2026-11-20 on the pairs the engine's Product Registry joins and the
+// word rule refused (owner's case: Tamimi / Prime / Farm Kiri jars).
+const kiriTamimi = o('t:k', 'tamimi', 'kiri', 'KIRI CREAM CHEESE, 500 GRAMS', 22.99, { value: 45.98, unit: 'kg' });
+ok('Kiri Cream Cheese = Kiri Spread Creamy Cheese Analogue = Kiri Cheese Creamy Jar',
+  same(kiriTamimi, kiri) &&
+  same(kiriTamimi, o('p:k', 'prime', 'kiri', 'KIRI CHEESE CREAMY JAR 500GM', 21, { value: 42, unit: 'kg' })));
+ok('"spread" only on CREAM cheese: a cheddar tin is not the cheddar spread jar',
+  !same(o('a', 'lulu', 'kraft', 'Kraft Cheddar Cheese 6x100g', 40, { value: 66, unit: 'kg' }),
+    o('b', 'prime', 'kraft', 'Kraft Cheddar Cheese Spread 480 GM', 25, { value: 52, unit: 'kg' })));
+ok('"analogue" only on cheese: Analogue Cream is not a one-word "Cream" range',
+  same(o('a', 'amarket', 'almarai', 'ALMARAI ANALOGUE CREAM CAN', 4, { value: 23, unit: 'kg' }),
+    o('b', 'tamimi', 'almarai', 'ALMARAI ANALOGUE CREAM, 170 GRAMS', 4, { value: 23, unit: 'kg' })));
+ok('butter is not spreadable butter',
+  !same(o('a', 'lulu', 'lurpak', 'Lurpak Butter Unsalted 400g', 30, { value: 75, unit: 'kg' }),
+    o('b', 'farm', 'lurpak', 'Lurpak Spreadable Butter Unsalted 400g', 30, { value: 75, unit: 'kg' })));
+ok('plurals meet: Squares / Square, Tomatoes / Tomato, Tissues / Tissue',
+  same(o('a', 'prime', 'puck', 'Puck Cream Cheese Squares 432GM', 20, { value: 46, unit: 'kg' }),
+    o('b', 'carrefour', 'puck', 'PUCK SQUARE CREAM CHEESE 432G', 20, { value: 46, unit: 'kg' })) &&
+  same(o('a', 'danube', 'goody', 'Goody Sieved Tomato', 5, { value: 10, unit: 'kg' }),
+    o('b', 'farm', 'goody', 'GOODY SIEVED TOMATOES', 5, { value: 10, unit: 'kg' })));
+ok('EV is extra virgin', same(o('a', 'carrefour', 'afia', 'AFIA ORGANIC EV OLIVE OIL 500ML', 30, { value: 60, unit: 'l' }),
+  o('b', 'farm', 'afia', 'AFIA ORGANIC OLIVE OIL EXTRA VIRGIN', 30, { value: 60, unit: 'l' })));
+ok('light cooking cream is still not cooking cream',
+  !same(o('a', 'lulu', 'puck', 'Puck Cooking Cream 500ml', 9, { value: 18, unit: 'l' }),
+    o('b', 'danube', 'puck', 'Puck Light Cooking Cream 500ml', 9, { value: 18, unit: 'l' })));
+
 // --- value, not shelf price ---------------------------------------------------------
 // The owner's case: a 200 ml at a lower SHELF price is not cheaper when its
 // price per litre is higher.

@@ -690,6 +690,27 @@ export async function markAlertsSeen() {
   }
 }
 
+// --- lowest value recorded (brochure card) -----------------------------------
+// Every saved flyer price for a query, priced per kg / L / piece by the engine
+// (GET /prices/lines). The card keeps the same-product lines and picks the
+// lowest (viewer/valueHistory.js). Null when the engine is unreachable: a
+// missing history never breaks the card. Session-cached per query.
+const linesCache = new Map();
+export async function valueLinesForQuery(query) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return null;
+  if (!linesCache.has(q)) {
+    linesCache.set(
+      q,
+      fetch(`${ENGINE_BASE}/prices/lines?q=${encodeURIComponent(q)}&limit=2000`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => (j && Array.isArray(j.offers) ? j : null))
+        .catch(() => null),
+    );
+  }
+  return linesCache.get(q);
+}
+
 // --- price history (Pillar 3, read-only) -------------------------------------
 // The full price picture for ANY query — the engine derives it from the
 // catalog-wide, offers-harvested history (stage-gated to the query's best

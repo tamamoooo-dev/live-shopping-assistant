@@ -31,6 +31,8 @@ const FOLDS = [
   [/ whole milk /g, ' full fat milk '],
   [/ lf /g, ' low fat '],
   [/ analog /g, ' analogue '],
+  [/ evoo /g, ' extra virgin olive oil '],
+  [/ ev /g, ' extra virgin '],
   [/ طويله الاجل /g, ' طويل الاجل '],
 ];
 
@@ -38,7 +40,7 @@ const FOLDS = [
 // filler. Sizes and counts go with the digits.
 const NOISE = new Set([
   'pack', 'pk', 'pcs', 'pc', 'piece', 'pieces', 'x', 'carton', 'ctn', 'bottle', 'bottles', 'jar', 'can', 'cans',
-  'tin', 'tins', 'box', 'bag', 'pouch', 'tub', 'cup', 'promo', 'promotion', 'offer', 'special', 'price', 'free',
+  'tin', 'tins', 'box', 'bag', 'pouch', 'tub', 'cup', 'squeeze', 'squeezy', 'squez', 'bottled', 'promo', 'promotion', 'offer', 'special', 'price', 'free',
   'value', 'saver', 'economy', 'family', 'size', 'new', 'each', 'per', 'with', 'and', 'the', 'of', 'in', 'for',
   'g', 'gm', 'gms', 'gr', 'grm', 'gram', 'grams', 'kg', 'kgs', 'kilo', 'ml', 'l', 'lt', 'ltr', 'ltrs', 'litre',
   'liter', 'litres', 'liters', 'oz', 'approx',
@@ -54,8 +56,26 @@ function stem(token) {
   return token
     .replace(/ies$/, 'y')
     .replace(/able$/, '')
-    .replace(/(?<=[a-z]{3})(es|s)$/, '')
+    // "boxes" -> box, but "squares" -> square, not "squar" (measured
+    // 2026-11-20: Puck "Cream Cheese Squares" / "Square Cream Cheese").
+    .replace(/(?<=[a-z]{2}(?:ss|x|z|ch|sh|o))es$/, '')
+    .replace(/(?<=[a-z]{3}[^s])s$/, '')
     .replace(/(?<=[a-z]{3})y$/, '');
+}
+
+// Label words that do not change WHICH cheese it is, measured 2026-11-20 on the
+// pairs the engine's Product Registry joins at one size and the word rule
+// refused: Kiri / Puck / Nadec "Cream Cheese" is the same jar as "Cream Cheese
+// Spread Analogue". "Analogue" is the legal name of a vegetable-fat cheese,
+// printed by some stores and left out by others; "spread" is the jar itself,
+// but only for CREAM cheese: a Kraft Cheddar Cheese tin is not the Kraft
+// Cheddar Cheese Spread jar. Never beyond cheese: "Analogue Cream" is not
+// "Cream", and Lurpak butter and Lurpak Spreadable are two products.
+function withoutCheeseLabels(words) {
+  if (!words.has('cheese')) return words;
+  words.delete('analogue');
+  if (words.has('cream')) words.delete('spread');
+  return words;
 }
 
 function folded(text) {
@@ -93,7 +113,7 @@ export function coreWords(text, brand = new Set()) {
     if (w.length < 2 || NOISE.has(w) || NOISE.has(raw) || brand.has(w) || brand.has(raw)) continue;
     out.add(w);
   }
-  return out;
+  return withoutCheeseLabels(out);
 }
 
 // --- conflicts (ported from the engine's Value Watch) ------------------------------
@@ -153,7 +173,8 @@ const FLAVOURS = {
   berry: ['توت', 'berry', 'blueberry', 'raspberry'], peach: ['خوخ', 'peach'], pineapple: ['اناناس', 'pineapple'],
   grape: ['عنب', 'grape'], cheese: ['بالجبن', 'بالجبنه'], salt: ['بالملح', 'salted'],
 };
-const wordPattern = (w) => new RegExp(String.raw`\s(?:[وف]?[بلك]?(?:ال)?)` + foldPhrase(w).trim() + String.raw`(?=\s)`, 'u');
+// An English flavour may be plural ("Sieved Tomatoes" is tomato).
+const wordPattern = (w) => new RegExp(String.raw`\s(?:[وف]?[بلك]?(?:ال)?)` + foldPhrase(w).trim() + String.raw`(?:e?s)?(?=\s)`, 'u');
 const FLAVOUR_WORDS = Object.entries(FLAVOURS).map(([flavour, words]) => [flavour, words.map(wordPattern)]);
 const flavoursOf = (text) => FLAVOUR_WORDS.filter(([, words]) => words.some((w) => w.test(text))).map(([f]) => f);
 
@@ -271,4 +292,28 @@ export function sameProductRows(anchor, offers, { limit = Infinity } = {}) {
   }
   rows.sort((x, y) => (x.by === 'value' ? x.value.value - y.value.value : x.offer.price - y.offer.price));
   return rows.slice(0, limit);
+}
+
+// The search that finds every saved line of this product: its brand word as
+// printed plus its longest product word. Every same-product line must contain
+// that word (the product words are identical), so a short query loses nothing
+// the rule above would accept, and stays well under the engine's row cap.
+// Words a fold may have produced ("long life" from UHT) are not used: the
+// other line may print the short form.
+const FOLD_WORDS = new Set(FOLDS.flatMap(([re, to]) => {
+  const from = new Set(re.source.replace(/[^a-z؀-ۿ]+/gi, ' ').trim().split(' '));
+  return to.trim().split(' ').filter((w) => !from.has(w));
+}));
+export function lineQuery(offer) {
+  if (!offer) return null;
+  const text = offer.name && /[a-z]/i.test(offer.name) ? offer.name : offer.nameAr || offer.name || '';
+  const plain = ` ${normalizeText(text)} `;
+  const bw = brandWords(offer);
+  const brand = plain.split(' ').find((w) => w.length >= 3 && (bw.has(w) || bw.has(stem(w)))) || null;
+  const core = [...coreWords(text, bw)]
+    .filter((w) => w.length >= 3 && !FOLD_WORDS.has(w) && plain.includes(` ${w}`))
+    .sort((a, b) => b.length - a.length);
+  const words = brand ? [brand, core[0]] : core.slice(0, 2);
+  const q = words.filter(Boolean).join(' ');
+  return q.split(' ').length >= 2 ? q : null;
 }

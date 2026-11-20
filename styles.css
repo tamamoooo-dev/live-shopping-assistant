@@ -3065,8 +3065,8 @@ html[lang="ar"] .watch-row.is-compact .watch-name { text-align: right; }
 .ps-insight.is-warn { background: var(--warn-soft); color: var(--warn); }
 .ps-insight.is-info { background: var(--brand-soft); color: var(--brand); }
 .ps-insight-ic { flex: 0 0 auto; }
-.ps-history, .ps-compare { margin: 12px 0 2px; }
-.ps-history h4, .ps-compare h4, .ps-related h4 {
+.ps-history, .ps-compare, .ps-vhist { margin: 12px 0 2px; }
+.ps-history h4, .ps-compare h4, .ps-related h4, .ps-vhist h4 {
   margin: 0 0 7px;
   font-size: 12px;
   font-weight: 800;
@@ -3097,6 +3097,11 @@ html[lang="ar"] .watch-row.is-compact .watch-name { text-align: right; }
 }
 .ps-h-badge.is-good { background: var(--good-soft); color: var(--good); }
 .ps-h-trend { color: var(--muted); font-weight: 700; }
+.ps-vh-val { display: flex; flex-direction: column; align-items: flex-end; text-align: end; gap: 1px; }
+.ps-vh-val > span { color: var(--brand); font-weight: 800; }
+.ps-vh-val small { font-size: 11.5px; }
+.ps-vhist .ps-h-row b > span[dir] { color: var(--brand); }
+.ps-vh-note { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); }
 
 /* --- sheet comparison ("Available elsewhere") -------------------------------- */
 .ps-cmp-row {
