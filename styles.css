@@ -3389,3 +3389,62 @@ html[lang="ar"] .watch-row.is-compact .watch-name { text-align: right; }
 .knowledge-explorer { border-block:1px solid #8592aa44; padding:10px 0; }
 .knowledge-explorer h3 { font-size:16px; margin:5px 0; }
 
+
+/* Brochure product card (viewer sheet), the owner's layout (2026-11-20):
+   beside the picture, filling its height —
+     [brand] [sold as] [size]      three boxes; an unknown one stays an empty box
+     the one-line name ▸
+     [price] [discount] [value]    three boxes; only the price has a tiny currency
+   Left/right are physical in both languages. */
+.ps-sheet-v2 .ps-hero { align-items: stretch; }
+.ps-sheet-v2 .ps-headline {
+  display: flex; flex-direction: column; justify-content: space-between; gap: 6px;
+  min-height: 116px;
+}
+.ps-sheet-v2 .ps-facts, .ps-sheet-v2 .ps-line3 {
+  direction: ltr; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px; align-items: stretch; min-width: 0;
+}
+.ps-sheet-v2 .ps-facts > span, .ps-sheet-v2 .ps-line3 > span {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  min-width: 0; min-height: 36px; padding: 3px 5px; box-sizing: border-box;
+  border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line);
+  overflow: hidden; overflow-wrap: anywhere; line-height: 1.15; unicode-bidi: plaintext;
+  font-variant-numeric: tabular-nums;
+}
+.ps-sheet-v2 .ps-facts > span { font-size: 12.5px; font-weight: 800; }
+.ps-fact-brand { color: var(--muted); }
+.ps-fact-sold { color: var(--brand); }
+.ps-fact-size { color: var(--text); }
+.ps-title-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ps-title-row .ps-name { flex: 0 1 auto; min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+.ps-title-row.is-open .ps-name { white-space: normal; overflow-wrap: anywhere; }
+.ps-name-more {
+  flex: none; width: 24px; height: 22px; padding: 0; border: 0; background: none;
+  color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.ps-name-more[hidden] { display: none; }
+.ps-name-more::before {
+  content: ""; border-block: 6px solid transparent; border-inline-start: 8px solid currentColor;
+  transition: transform 0.15s ease;
+}
+.ps-title-row.is-open .ps-name-more::before { transform: rotate(90deg); }
+.ps-title-row.is-open[dir="rtl"] .ps-name-more::before { transform: rotate(-90deg); }
+.ps-sheet-v2 .ps-line3 > span { min-height: 40px; }
+/* Price box: the old price small and crossed out in the text colour, the sale
+   price in red with a very small currency after it (owner, 2026-11-20). */
+.ps-sheet-v2 .ps-line3 .ps-price { flex-direction: column; gap: 1px; padding-block: 2px; }
+.ps-price .ps-was {
+  font-size: 10.5px; font-weight: 700; color: var(--text); line-height: 1;
+  text-decoration: line-through; text-decoration-thickness: 1.5px;
+}
+.ps-price .ps-now {
+  display: flex; align-items: baseline; gap: 1.5px; white-space: nowrap;
+  font-size: 19px; font-weight: 900; letter-spacing: -0.3px; color: var(--bad); line-height: 1.05;
+}
+.ps-price.is-long .ps-now { font-size: 16px; }
+.ps-price.is-xlong .ps-now { font-size: 13.5px; }
+.ps-price .ps-cur { font-size: 8.5px; font-weight: 800; letter-spacing: 0; opacity: 0.9; }
+.ps-pct .discount-num { font-size: 15px; }
+.ps-pct .discount-num::after { content: "%"; }
+.ps-sheet-v2 .ps-line3 .ps-value { font-size: 12.5px; font-weight: 800; color: var(--brand); }

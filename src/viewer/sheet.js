@@ -1,4 +1,4 @@
-import { salePresentation, sizeOptionsPresentation } from '../salePresentation.js';
+import { saleCompact, sizeOptionsPresentation } from '../salePresentation.js';
 // viewer/sheet.js — the product bottom sheet: the viewer's central shopping
 // panel. Opens on a hotspot tap at HALF height, drags between three detents
 // (peek / half / full) with velocity snapping, hands scrolling to the body at
@@ -19,7 +19,7 @@ import { isRelevant, relevance, productFamily, productType, eachPriceLabel } fro
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 import { structureOfferName } from './productName.js';
 import { priceStatus } from './priceStatus.js';
-import { t, tn } from '../i18n.js';
+import { t, tn, getLang } from '../i18n.js';
 import { discountMarkHtml } from '../discountStatus.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
@@ -320,24 +320,53 @@ export function createSheet(host, ctx) {
     // Unit price then per-item price, the same order and the same pairing the
     // search cards use — "how good is this" before "what does one cost".
     const sale = offer.saleQuantity;
-    const meta = [
+    // The owner's three-line card (2026-11-20). Line 1: brand (left) · how it
+    // is sold (middle) · size (right). Line 2: the name in the app's language,
+    // one line, ▸ when cut. Line 3: price (left) · discount (middle) · value
+    // (right). Only the price carries a tiny currency, in red under the
+    // crossed-out old price. Left/right are physical in both languages.
+    const ar = getLang() === 'ar';
+    const shownName = (ar ? nameAr || name : name || nameAr) || sn.brand || sn.fallback || t('sheet.product');
+    const brandText = (ar ? offer.brandNameAr || offer.brandNameEn : offer.brandNameEn || offer.brandNameAr) || sn.brand || '';
+    const basisUnit = offer.priceBasis?.unit || null;
+    const multi = sale?.count > 1;
+    const soldText = multi ? saleCompact(sale, '')[0]
+      : basisUnit === 'kg' ? t('market.soldPerKg') : basisUnit === 'l' ? t('market.soldPerL')
+        : basisUnit === 'piece' ? t('market.soldPerPiece')
+          // The engine's "bought whole" flag on a single package (the flyer's
+          // "PC حبة"). The container word itself (jar, box, bag) is not in the
+          // offer data, so it is never guessed from the name or category.
+          : offer.sellingMode === 'discrete' && (offer.packageContents?.pack ?? 1) === 1 ? t('market.soldPerPiece') : '';
+    const sizeSlot = multi
+      ? String((ar ? sale.packageSizeAr : sale.packageSizeEn) || sale.packageSize || '').trim()
+      : basisUnit && !/[\d٠-٩۰-۹]/u.test(sizeText || '') ? '' : sizeText || '';
+    const vnum = (v) => {
+      const n = Number(v);
+      return (n >= 100 ? String(Math.round(n)) : n < 0.1 ? n.toFixed(3) : n.toFixed(2)).replace(/\.00$/, '');
+    };
+    const values = [];
+    if (multi && sale.packagePrice != null) {
+      values.push(ar ? saleCompact(sale, vnum(sale.packagePrice))[1] : t('market.valueEach', { value: vnum(sale.packagePrice) }));
+    }
+    if (Number(each?.value) > 0 && !(multi && each.pack === sale.count)) values.push(t('market.valueEach', { value: vnum(each.value) }));
+    if (unit) {
+      const v = vnum(unit.value);
+      values.push(unit.unit === 'kg' ? t('market.valueKg', { value: v }) : unit.unit === 'L' ? t('market.valueL', { value: v })
+        : unit.unit === 'pc' ? t('market.valueEach', { value: v }) : '');
+    }
+    const valueList = [...new Set(values.filter(Boolean))];
+    // What no longer has a slot: the review warning and per-size unit prices.
+    const notes = [
       offer.quantityReviewRequired ? t('market.saleReview') : '',
-      ...salePresentation(sale, sale?.packagePrice != null ? `${fmt(sale.packagePrice)} SAR` : ''),
       ...sizeOptionsPresentation(offer.sizeOptions, value=>`${fmt(value)} SAR`),
-      unit ? `${fmt(Math.round(unit.value * 100) / 100)} SAR/${unit.unit}` : '',
-      sale?.count > 1 && each?.pack === sale.count ? '' : eachPriceLabel(each),
     ].filter(Boolean).join(' · ');
-    const attrs = [
-      sn.brand ? `<span class="ps-attr"><span class="ps-attr-k">${esc(t('sheet.brand'))}</span>${esc(sn.brand)}</span>` : '',
-      sizeText ? `<span class="ps-attr"><span class="ps-attr-k">${esc(t('sheet.size'))}</span>${esc(sizeText)}</span>` : '',
-    ].filter(Boolean).join('');
+    const slot = (cls, text) => `<span class="${cls}" dir="auto"${text ? ` title="${esc(text)}"` : ''}>${esc(text || '')}</span>`;
 
     sheet.innerHTML = `
       <div class="ps-grab" aria-hidden="true"></div>
       <header class="ps-head">
         <button type="button" class="ps-back" ${stack.length > 1 ? '' : 'hidden'} aria-label="${esc(t('sheet.back'))}">‹</button>
         <span class="ps-store" style="--chip:${storeColor(offer.store)}">${esc(storeLabel(offer.store))}</span>
-        ${discountMarkHtml(offer)}
         ${until ? `<span class="ps-until${ended ? ' is-ended' : ''}">${esc(until)}</span>` : ''}
         <button type="button" class="ps-close" aria-label="${esc(t('sheet.close'))}">✕</button>
       </header>
@@ -349,21 +378,23 @@ export function createSheet(host, ctx) {
               : '<div class="ps-noimg" aria-hidden="true">🛒</div>'
           }</div>
           <div class="ps-headline">
-            <h3 class="ps-name" dir="auto">${esc(title)}</h3>
-            ${name && nameAr ? `<p class="ps-name-ar" dir="rtl">${esc(nameAr)}</p>` : ''}
-            ${attrs ? `<p class="ps-attrs">${attrs}</p>` : ''}
-            ${meta ? `<p class="ps-meta">${esc(meta)}</p>` : ''}
-            <div class="ps-pricerow">${
-              priced
-                ? `
-              <span class="ps-price">${fmt(offer.price)} <small>${esc(offer.currency || 'SAR')}</small></span>
-              ${offer.oldPrice ? `<span class="ps-old">${fmt(offer.oldPrice)}</span>` : ''}
-              ${discount ? `<span class="ps-off">−${discount}%</span>` : ''}`
-                // No price yet: the row stays blank — the crop already shows the
-                // printed price (user decision 2026-09-24: no "Price pending").
-                : ''
-            }
+            <div class="ps-facts">${slot('ps-fact-brand', brandText)}${slot('ps-fact-sold', soldText)}${slot('ps-fact-size', sizeSlot)}</div>
+            <div class="ps-title-row" dir="${/^[^A-Za-z؀-ۿ]*[؀-ۿ]/.test(shownName) ? 'rtl' : 'ltr'}">
+              <h3 class="ps-name" dir="auto">${esc(shownName)}</h3>
+              <button type="button" class="ps-name-more" hidden aria-expanded="false" aria-label="${esc(t('market.moreDetails'))}"></button>
             </div>
+            <div class="ps-line3">${
+              // No price yet: the line stays blank — the crop already shows the
+              // printed price (user decision 2026-09-24: no "Price pending").
+              priced
+                ? `<span class="ps-price${({ 6: ' is-long', 7: ' is-long is-xlong' })[Number(offer.price).toFixed(2).length] || (Number(offer.price) >= 10000 ? ' is-long is-xlong' : '')}">${
+                  discount ? `<s class="ps-was" aria-label="${esc(t('market.wasPrice', { price: fmt(offer.oldPrice) }))}">${Number(offer.oldPrice).toFixed(2)}</s>` : ''
+                }<b class="ps-now">${Number(offer.price).toFixed(2)}<small class="ps-cur">${esc(t('market.currencyShort'))}</small></b></span>
+              <span class="ps-pct">${discount ? discountMarkHtml(offer) : ''}</span>
+              <span class="ps-value" dir="auto" title="${esc(valueList.join(' · '))}">${esc(valueList[0] || '')}</span>`
+                : ''
+            }</div>
+            ${notes ? `<p class="ps-meta">${esc(notes)}</p>` : ''}
           </div>
         </div>
         <div class="ps-actions">
@@ -397,6 +428,26 @@ export function createSheet(host, ctx) {
       </div>`;
     body = sheet.querySelector('.ps-body');
     setDetent(detent, { animate: false });
+
+    // ▸ only when the one-line name is cut; it opens the whole name.
+    const titleRow = sheet.querySelector('.ps-title-row');
+    const nameEl = titleRow.querySelector('.ps-name');
+    const moreBtn = titleRow.querySelector('.ps-name-more');
+    // Measured whenever the name's box settles (the sheet slides in, fonts
+    // land, the window turns), not once: a single early check missed it.
+    const syncMore = () => {
+      if (!nameEl.isConnected || titleRow.classList.contains('is-open')) return;
+      moreBtn.hidden = !(nameEl.scrollWidth > nameEl.clientWidth + 1);
+    };
+    if (typeof ResizeObserver === 'function') new ResizeObserver(syncMore).observe(nameEl);
+    requestAnimationFrame(syncMore);
+    setTimeout(syncMore, 320);
+    document.fonts?.ready.then(syncMore);
+    moreBtn.addEventListener('click', () => {
+      const open = !titleRow.classList.contains('is-open');
+      titleRow.classList.toggle('is-open', open);
+      moreBtn.setAttribute('aria-expanded', String(open));
+    });
 
     // Self-hosted hero swap (cached per entry).
     if (entry.spot && entry.pageSrc) {
