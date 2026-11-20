@@ -823,10 +823,17 @@ export function parseSize(name, sizeField) {
       // The multiplier must come right AFTER the measurement (engine mirror,
       // ported 2026-10-08): searching the whole name read the "x" of "Impex"
       // before "6.5Ltr" as "× 6", making a 6.5 L air fryer a 39 L six-pack.
+      // A bare count word ("6's", "12 pcs") multiplies only AFTER the measure
+      // ("Water 330ml 40's"); right BEFORE it, the measure is the whole
+      // package: "Kiri Portions 24's (400g)" is 24 portions in 400 g. "6 PACK
+      // 360ML" stays a six-pack (engine mirror, 2026-11-20).
       const tail = hay.slice(m.index + m[0].length);
+      const before = /\b(\d+)\s*(pcs|pc|pack|s)\s*[,-]?\s*$/.exec(hay.slice(0, m.index));
       const pm =
         new RegExp(`^\\s*[x×*]\\s*(\\d+)${B}`, 'u').exec(tail) ||
-        /\b(\d+)\s*(?:pcs|pc|pack|s)\b/.exec(hay);
+        (before
+          ? (before[2] === 'pack' ? before : null)
+          : /\b(\d+)\s*(?:pcs|pc|pack|s)\b/.exec(tail));
       const pack = bonus || (pm ? Math.max(1, parseInt(pm[1], 10)) : 1);
       return { unit: u.base, each, pack, total: each * pack, src: 'measure' };
     }

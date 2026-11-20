@@ -467,6 +467,12 @@ ok('bonus pack -> per-piece price shown', unitPrice({ name: 'Uno Towels 10+2 Fre
 ok("weak 6's suffix -> no per-piece price", unitPrice({ name: "Indomie Noodles 6's", price: 6 }) === null);
 ok('weak x suffix -> no per-piece price', unitPrice({ name: 'Batteries 12x', price: 24 }) === null);
 ok('weak count still parses for comparability', parseSize("Indomie Noodles 6's").total === 6);
+// A count right BEFORE a measure names the pieces inside it (engine mirror,
+// 2026-11-20); after the measure it still multiplies.
+ok("24's (400g) is 400 g, not 24 × 400 g", parseSize("Kiri Portions Cheese 24's (400g)", "24's (400g)").total === 400);
+ok('24 PCS, 400 G is 400 g', parseSize('Kiri Spreadable Cream Cheese 24 PCS, 400 G').total === 400);
+ok("330ml 40's is 40 bottles", parseSize("Nestle Pure Life Water 330ml 40's", '330ml').total === 13200);
+ok('6 PACK 360ML is a six-pack', parseSize('KINZA COLA DRINK 6 PACK 360ML').total === 2160);
 ok('measured sizes unaffected by the ladder', unitPrice({ name: 'Milk 2L', price: 8 }).value === 4);
 
 // --- unit price from a PRICE BASIS (2026-08-02) ---
