@@ -15,12 +15,13 @@ import { saleCompact, sizeOptionsPresentation } from '../salePresentation.js';
 import { searchOffers, storeLabel, storeColor, cleanOfferName, pricesForQuery } from '../brochure.js';
 import { addToCart, inCart } from '../cart.js';
 import { openWatchDialog } from '../alertsPage.v2.js';
-import { isRelevant, relevance, productFamily, productType, eachPriceLabel } from '../match.js';
+import { productFamily, productType } from '../match.js';
 import { buildInsights, historyQuery, offerSize, fmtMoney } from './insights.js';
 import { structureOfferName } from './productName.js';
 import { priceStatus } from './priceStatus.js';
 import { t, tn, getLang } from '../i18n.js';
 import { discountMarkHtml } from '../discountStatus.js';
+import { sameProductRows, valueOf } from './sameProduct.js';
 
 /* --- self-hosted product crop --------------------------------------------------- */
 // Hero + cart thumbnails are cropped FROM THE STORED PAGE IMAGE (engine /asset,
@@ -536,54 +537,52 @@ export function createSheet(host, ctx) {
   }
 
   /* --- "Available elsewhere" (same product, other stores, this week) ------------ */
-  // Built from the SAME cached /offers call the similar strip uses (the search
-  // engine's flyer offers) — zero extra requests. Honest gating: a row must be
-  // genuinely name-relevant to the product AND size-comparable (a 200 ml can
-  // never "beat" a 2 L). Live online prices stay one tap away via Search.
+  // Built from the SAME cached /offers call the similar strip uses — zero extra
+  // requests. Exact by rule (sameProduct.js): same brand, same product words,
+  // same variant, any size; ranked by the engine's price per kg / L / piece,
+  // never by shelf price (owner, 2026-11-20: a 200 ml was "cheaper" than a
+  // 500 ml). Live online prices stay one tap away via Search.
   async function loadCompare(offer, seed) {
     if (!seed || !sheet) return;
-    const data = await searchOffers(seed, 24);
+    const data = await searchOffers(seed, 50);
     if (!sheet) return;
     const box = sheet.querySelector('.ps-compare');
     const bodyEl = sheet.querySelector('.ps-compare-body');
     if (!box || !bodyEl) return;
-    const mySize = offerSize(offer).size;
-    const rows = (((data && data.offers) || []))
-      .filter((o) => o.id !== offer.id && o.store !== offer.store)
-      .filter((o) => {
-        const nm = `${cleanOfferName(o.name) || ''} ${cleanOfferName(o.nameAr) || ''}`.trim();
-        const item = { name: nm };
-        if (!nm || !isRelevant(item, seed) || relevance(item, seed) <= 0) return false;
-        const sz = offerSize(o).size;
-        if (mySize && sz) {
-          return sz.unit === mySize.unit && Math.abs(sz.total - mySize.total) / mySize.total <= 0.25;
-        }
-        return true; // both unsized (or reference unsized): relevance decides
-      })
-      .sort((a, b) => a.price - b.price)
-      .slice(0, 4);
-
-    const fmt = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
-    // An unpriced product has nothing to compare against: other stores' prices
-    // are listed as they are, with no delta and no "cheaper at" line.
+    // An unpriced product has nothing to compare against.
     const priced = priceStatus(offer) === 'priced';
-    const rowEls = rows.map((o) => {
-      const delta = Math.round((o.price - offer.price) * 100) / 100;
-      const badge = !priced
-        ? ''
-        : delta < -0.01
-          ? `<span class="ps-h-badge is-good">−${fmt(Math.abs(delta))}</span>`
-          : delta > 0.01
-            ? `<span class="ps-h-badge">+${fmt(delta)}</span>`
-            : `<span class="ps-h-badge">${esc(t('sheet.samePrice'))}</span>`;
+    const all = priced ? sameProductRows(offer, (data && data.offers) || []) : [];
+    const rows = all.slice(0, 4);
+    const vnum = (v) => {
+      const n = Number(v);
+      return (n >= 100 ? String(Math.round(n)) : n < 0.1 ? n.toFixed(3) : n.toFixed(2)).replace(/.00$/, '');
+    };
+    const valueText = (v) => (!v ? ''
+      : v.unit === 'kg' ? t('market.valueKg', { value: vnum(v.value) })
+        : v.unit === 'l' ? t('market.valueL', { value: vnum(v.value) })
+          : t('market.valueEach', { value: vnum(v.value) }));
+    const perUnit = (v) => t(v && v.unit === 'kg' ? 'sheet.perKg' : v && v.unit === 'l' ? 'sheet.perL' : 'sheet.perPiece');
+    const fmt = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
+    const rowEls = rows.map(({ offer: o, value, pct }) => {
+      const badge = pct <= -2
+        ? `<span class="ps-h-badge is-good">−${Math.abs(pct)}%</span>`
+        : pct >= 2
+          ? `<span class="ps-h-badge">+${pct}%</span>`
+          : `<span class="ps-h-badge">${esc(t('sheet.sameValue'))}</span>`;
+      const size = offerSize(o).label || '';
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'ps-cmp-row';
       row.innerHTML = `
-        ${discountMarkHtml(o)}
         <span class="ps-rel-store" style="--chip:${storeColor(o.store)}">${esc(storeLabel(o.store))}</span>
-        <span class="ps-cmp-name" dir="auto">${esc(cleanOfferName(o.name) || cleanOfferName(o.nameAr) || '')}</span>
-        <b class="ps-cmp-price">${fmt(o.price)} <small>${esc(o.currency || 'SAR')}</small></b>
+        <span class="ps-cmp-what">
+          <span class="ps-cmp-name" dir="auto">${esc(cleanOfferName(o.name) || cleanOfferName(o.nameAr) || '')}</span>
+          ${size ? `<small class="ps-cmp-size" dir="auto">${esc(size)}</small>` : ''}
+        </span>
+        <span class="ps-cmp-nums">
+          <b class="ps-cmp-price">${fmt(o.price)} <small>${esc(t('market.currencyShort'))}</small></b>
+          ${value ? `<small class="ps-cmp-value" dir="auto">${esc(valueText(value))}</small>` : ''}
+        </span>
         ${badge}`;
       row.addEventListener('click', () => open({ offer: o }));
       return row;
@@ -598,23 +597,40 @@ export function createSheet(host, ctx) {
     if (rowEls.length) {
       bodyEl.replaceChildren(...rowEls, more);
       box.hidden = false;
-      // The headline intelligence: this exact product cheaper somewhere else.
+      // The headline: this exact product is better value somewhere else, or
+      // nowhere else this week. Said only when the comparison is by value or
+      // by the very same size.
       const best = rows[0];
-      if (priced && best && best.price < offer.price - 0.01) {
-        const ins = sheet.querySelector('.ps-insights');
-        if (ins) {
-          const line = document.createElement('div');
+      const ins = sheet.querySelector('.ps-insights');
+      if (ins) {
+        const line = document.createElement('div');
+        if (best.pct <= -3) {
           line.className = 'ps-insight is-good';
           line.innerHTML = `<span class="ps-insight-ic" aria-hidden="true">💸</span><span dir="auto">${esc(
-            t('sheet.cheaperAt', { store: storeLabel(best.store), price: fmtMoney(best.price) }),
+            best.by === 'value'
+              ? t('sheet.betterValueAt', { store: storeLabel(best.offer.store), value: valueText(best.value), pct: Math.abs(best.pct), per: perUnit(best.value) })
+              : t('sheet.cheaperAt', { store: storeLabel(best.offer.store), price: fmtMoney(best.offer.price) }),
           )}</span>`;
+        } else if (all.every((r) => r.pct >= 0)) {
+          line.className = 'ps-insight is-good';
+          line.innerHTML = `<span class="ps-insight-ic" aria-hidden="true">🏷️</span><span dir="auto">${esc(
+            t(best.by === 'value' ? 'sheet.bestValueHere' : 'sheet.bestPriceHere', { n: all.length, per: perUnit(valueOf(offer)) }),
+          )}</span>`;
+        }
+        if (line.className) {
+          // Marked so the history lines (loaded in parallel) keep it.
+          line.classList.add('is-compare');
           ins.prepend(line);
           ins.hidden = false;
         }
       }
     } else {
-      // Nothing comparable in the flyers — still offer the full search.
-      bodyEl.replaceChildren(more);
+      // Nothing that is provably the same product: say so, and still offer
+      // the full search.
+      const none = document.createElement('p');
+      none.className = 'ps-cmp-none';
+      none.textContent = t('sheet.noExactMatch');
+      bodyEl.replaceChildren(none, more);
       box.hidden = false;
     }
   }
@@ -627,7 +643,9 @@ export function createSheet(host, ctx) {
     const { lines, history } = buildInsights({ offer, prices, storeLabel });
     const box = sheet.querySelector('.ps-insights');
     if (box && lines.length) {
+      // The store-comparison line may have landed first: keep it on top.
       box.replaceChildren(
+        ...box.querySelectorAll('.is-compare'),
         ...lines.map((l) => {
           const row = document.createElement('div');
           row.className = `ps-insight is-${l.tone}`;
@@ -655,7 +673,7 @@ export function createSheet(host, ctx) {
         <div class="ps-h-row"><span>${esc(t('sheet.thisOffer'))}</span><b>${esc(fmtMoney(offer.price))} ${vs}</b></div>`
         : '';
       histBody.innerHTML = `
-        <div class="ps-h-row"><span>${esc(t('sheet.lowestRecorded'))}</span><b>${esc(fmtMoney(history.lowest.price))}${
+        <div class="ps-h-row"><span>${esc(t('sheet.lowestRecorded'))}${history.label ? ` <small dir="auto">(${esc(history.label)})</small>` : ''}</span><b>${esc(fmtMoney(history.lowest.price))}${
           history.lowest.store ? ` <small>${esc(t('sheet.atStore', { store: storeLabel(history.lowest.store) }))}</small>` : ''
         }</b></div>${thisOffer}
         <div class="ps-h-row"><span>${esc(t('sheet.recordedOver'))}</span><b>${esc(tn('sheet.weeks', weeksCount))} <small class="ps-h-trend">${trendGlyph} ${esc(trendWord)}</small></b></div>`;

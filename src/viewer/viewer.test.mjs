@@ -738,7 +738,12 @@ function recordingHandlers(log) {
   // An unpriced product is never positioned against its history ("lowest
   // price" would be a lie computed from a null), but the history still shows.
   const farFuture = '2099-12-31';
-  const prices = { lowest: { price: 15, store: 'lulu', week: '2026-08-01' }, weeks: 6, trend: 'down', variants: [] };
+  // History is per SIZE: the 1 kg record answers the 1 kg products.
+  const kgLow = { price: 15, store: 'lulu', week: '2026-08-01' };
+  const prices = {
+    lowest: kgLow, weeks: 6, trend: 'down',
+    variants: [{ key: 'g:1000', sizeUnit: 'g', sizeTotal: 1000, label: '1 kg', lowest: kgLow, weeks: 6, trend: 'down' }],
+  };
   for (const u of [U1, U2]) {
     const ins = buildInsights({ offer: { ...u, validTo: farFuture }, prices });
     ok(`${u.priceStatus}: the history is still served`, ins.history?.lowest.price === 15 && ins.history.weeks === 6);
@@ -757,6 +762,24 @@ function recordingHandlers(log) {
     above.history.delta === 3 && above.history.pct === 20 && above.history.atLowest === false &&
       above.lines.map((l) => l.icon).join() === '📉,↘');
   console.log('unpriced flyer products ✅');
+}
+
+{
+  // Price history compares the SAME size only (owner, 2026-11-20: the Kiri
+  // 500 g card showed the 200 g jar's 11.99 as "lowest recorded").
+  const farFuture = '2099-12-31';
+  const v = (key, total, price) => ({ key, sizeUnit: 'g', sizeTotal: total, label: `${total} g`, lowest: { price, store: 'farm', week: '2026-07-14' }, weeks: 2, trend: null });
+  const doc = { lowest: { price: 11.99, store: 'farm' }, weeks: 4, variants: [v('g:1000', 1000, 19.99), v('g:200', 200, 11.99)] };
+  const kiri500 = { id: 'k', name: 'KIRI SPREAD CREAMY CHEESE ANALOGUE 500GR', price: 7.99, oldPrice: 21.99, validTo: farFuture };
+  const none = buildInsights({ offer: kiri500, prices: doc });
+  ok('a 500 g product with only 200 g / 1 kg history shows no history', none.history === null && none.lines.length === 0);
+  const near = buildInsights({ offer: { ...kiri500, name: 'Kiri Spread 480g' }, prices: { ...doc, variants: [v('g:500', 500, 9.5)] } });
+  ok('within 6% of the size is the same size (480 g ↔ 500 g)', near.history?.lowest.price === 7.99 && near.history.atLowest === true);
+  const far = buildInsights({ offer: { ...kiri500, name: 'Kiri Spread 400g' }, prices: { ...doc, variants: [v('g:500', 500, 9.5)] } });
+  ok('25% apart is another size (400 g ≠ 500 g)', far.history === null);
+  ok('this week below every record IS the lowest recorded', near.history.lowest.store === undefined || near.history.lowest.price === 7.99);
+  ok('the printed discount is not repeated as an insight (the card shows it)', !near.lines.some((l) => l.icon === '🔥'));
+  console.log('price history: same size only ✅');
 }
 
 if (fail) {

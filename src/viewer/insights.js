@@ -51,8 +51,11 @@ export function offerSize(offer) {
   return { size: sz, label: offer.sizeReading ? offerSizeLabel(offer) : offer.saleQuantity ? offer.size : sizeLabel(sz), unit: up, each };
 }
 
-// The history variant that actually matches THIS product's size (never mix a
-// 200 ml history into a 2 L product): exact key first, then within ±25%.
+// The history variant that actually matches THIS product's size. Prices are
+// compared as they are, so only the SAME size may be compared: exact key
+// first, then within 6% (stores round: 1.5 L vs 1500 ml, 185 g vs 180 g — the
+// engine's Value Watch tolerance). ±25% let a 400 g history judge a 500 g
+// price (owner, 2026-11-20). An unsized product only meets the unsized record.
 export function matchVariant(prices, size) {
   if (!prices || !Array.isArray(prices.variants) || !prices.variants.length) return null;
   if (size && size.unit && size.total) {
@@ -62,12 +65,12 @@ export function matchVariant(prices, size) {
       const m = /^(\w+):([\d.]+)$/.exec(v.key || '');
       if (!m || m[1] !== size.unit) return false;
       const total = Number(m[2]);
-      return total > 0 && Math.abs(total - size.total) / size.total <= 0.25;
+      return total > 0 && Math.abs(total - size.total) / size.total <= 0.06;
     });
     if (close) return close;
     return null; // sized product + no sized match: showing another size would lie
   }
-  return prices.variants[0] || null;
+  return prices.variants.find((v) => v.key === 'unsized' || !v.sizeUnit) || null;
 }
 
 const daysUntil = (ymd) => {
@@ -91,7 +94,9 @@ export function buildInsights({ offer, prices, storeLabel = (s) => s }) {
   const lines = [];
   const { size } = offerSize(offer);
   const variant = matchVariant(prices, size);
-  const low = variant ? variant.lowest : prices && prices.lowest;
+  // Never the whole doc's lowest: that is the cheapest SIZE, not this one
+  // (the Kiri 500 g card showed the 200 g jar's 11.99 as "lowest recorded").
+  let low = variant ? variant.lowest : null;
 
   // Historical position — the headline intelligence.
   let history = null;
@@ -102,6 +107,11 @@ export function buildInsights({ offer, prices, storeLabel = (s) => s }) {
     // history, but no price of its own to position against it — so none of
     // the "this price" lines below apply to it.
     const priced = priceStatus(offer) === 'priced';
+    // This week's price below every recorded one IS the lowest recorded: the
+    // block must not say "lowest 11.99" beside "this offer 7.99".
+    if (priced && offer.price < low.price) {
+      low = { ...low, price: offer.price, oldPrice: offer.oldPrice ?? null, store: offer.store, week: null };
+    }
     const delta = priced ? offer.price - low.price : null;
     const pct = priced ? Math.round((delta / low.price) * 100) : null;
     history = {
@@ -138,11 +148,7 @@ export function buildInsights({ offer, prices, storeLabel = (s) => s }) {
   if (left === 0) lines.push({ icon: '⏳', tone: 'warn', text: t('insights.endsToday') });
   else if (left === 1) lines.push({ icon: '⏳', tone: 'warn', text: t('insights.endsTomorrow') });
 
-  // A big printed discount is worth calling out even without history.
-  if (offer.oldPrice && offer.oldPrice > offer.price) {
-    const off = Math.round(((offer.oldPrice - offer.price) / offer.oldPrice) * 100);
-    if (off >= 30) lines.push({ icon: '🔥', tone: 'good', text: t('insights.bigDrop', { off }) });
-  }
+  // (The printed discount is not repeated here: the card's own % box shows it.)
 
   return { lines: lines.slice(0, 3), history };
 }
