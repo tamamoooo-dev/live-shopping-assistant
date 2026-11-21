@@ -7745,3 +7745,70 @@ refused it and `673ba9e` corrected the test before anything was deployed.
 Still in More, refused: Herfy chicken rings, Bess Mix chicken in gravy,
 Al Kabeer kebabs, Dari squash cubes. Not judged: "Tomato Cherry Glass",
 "Garlic Fish", "Chicken Tikka 500g" (no brand, kept under Fresh).
+
+## 73. Flyer price archive: every old flyer price kept before pages go (2026-11-17)
+
+**Ask (owner).** R2 holds 3.55 GB, mostly brochure pages. Before deleting old
+brochures, make sure their data is indexed — e.g. "تندرينا تونا 185": every
+price since the beginning, with its date and store. Then the old brochures may
+be deleted. The school buckets are not to be touched (they were not).
+
+**Measured.** Bucket `brochure-engine`: 459,638 objects, 3.55 GB — page images
+2.03 GB (11,849 files, 760 editions), Vision evidence 0.94 GB, weekly D1
+backups 0.36 GB, Mini marts 0.15 GB, August archives 0.04 GB. Only 4
+`brochure-data/` snapshots existed: the 706 editions pruned in July–September
+lost their pages without one. `offers` rows are deleted 14 days after expiry
+with no copy, and `price_history` keeps only first sightings and price
+changes under identities that split on OCR text — live `/prices` showed
+Tenderina 185 g twice.
+
+**Recovered** (scratch analysis, then `backups/price-archive-2026-11-17/`):
+offers from the 7 weekly D1 backups (2026-10-08 → 11-15), the three August
+`d1-retention` archives, the 2026-08-26 desktop dump and the 4 snapshots
+(202,264 priced offers); then the gap weeks (W29, W34–W37) from
+`product_sightings` (14,380 exact offers), `price_history` points no archived
+offer explains (26,081 matched to an offer by crop URL, 24,646 kept as
+history rows) and Vision evidence names (46,099 records fetched through
+`/asset/`, since the Cloudflare API allows ~4 reads/s). Check: in October and
+November, where every offer survives, only 36 of ~70k history points were
+unmatched. Total 267,371 dated prices, every week from W25 to W45 at
+10k–17k. Tenderina 185 g: 23 flyer prices in 6 stores, 2026-07-14 →
+2026-10-27 (was 2).
+
+**Per brochure** (hotspot products with a saved price): of 659 expired
+editions with pages, 538 (1.41 GB) are complete; 99 (0.37 GB) are not —
+about 4,000 products whose price exists only in the page image (1,800 lost
+with pruned offers, ~2,400 never in D4D's priced feed); 22 have no hotspot
+products. Those keep their pages.
+
+**Built** (engine `ea41f57`, app `7072775`, both pushed): `offer_archive` +
+FTS trigram index (self-creating), the archive copy inside
+`pruneExpiredOffers`' batch, `GET /prices/archive` and `/stats`, guarded
+`POST /prices/archive/import`, a retention pass deleting pages 15 days after
+expiry once every hotspot product is archived (snapshot first), and تونا =
+tuna in both matcher mirrors. 119 test files pass. **Not deployed**:
+`node deploy.mjs` was refused by Claude's auto-mode check; steps in
+HANDOFF §11. A cold copy of the rows is in R2 `price-archive/2026-11-17/`.
+
+**Found on the way.** `GET /asset/<key>` serves any key in the bucket,
+including `backups/d1/…` (watches, alerts, every table) to anyone who
+guesses a path.
+
+**Deployed and run (2026-11-17, owner's go-ahead).** `node deploy.mjs` →
+Worker `337a14c5` (rollback `db7ac285`). `import.mjs` loaded 267,318 rows; 53
+were refused because they carry nothing searchable (no name in either
+language, no size, no category — only a price and a crop link). Live
+`/prices/archive?q=تندرينا تونا 185` and `Tenderina tuna 185g` both return the
+23 prices of the dry run. `prune-pages.mjs` ran the engine's retention 9
+times: 260 brochures lost their pages (2,847 images; page images 2.03 →
+1.55 GB). The first run's later steps (price pending, history, watch runs)
+hit "D1 DB is overloaded" and were skipped for that run; no errors after,
+and live `/prices` answered 200 throughout. 207 brochures keep their pages,
+not 99 as estimated: the local estimate excused any product ever marked
+rejected, pending or superseded in a weekly backup, the engine excuses only
+`rejected` rows still in `price_pending`. Re-run with the engine's rule the
+estimate gives 268 (close to the 260 pruned); the 127 extra keepers hold
+~3,100 products rejected by the price fallback whose rows have since been
+pruned — their price exists only on the page, so keeping them is right.
+The import's `inserted` (2,538,058) and the prune's `archived` count include
+the FTS trigger's writes; they are not row counts.

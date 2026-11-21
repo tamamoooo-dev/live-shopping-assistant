@@ -1271,6 +1271,27 @@ external product images — verify via `preview_eval` DOM inspection; preview
 
 ## 11. Open TODOs (priority order)
 
+- **Flyer price archive, 2026-11-17 (HISTORY §73): LIVE.** Engine `ea41f57`
+  = Worker `337a14c5` (rollback `db7ac285`). `offer_archive` holds 267,318
+  flyer prices (2026-06-20 → 11-11, 19 stores); `GET /prices/archive?q=`
+  finds تندرينا تونا 185 = 23 prices, 6 stores. Every expired offer is now
+  copied there in the same batch that deletes it. 260 old brochures lost
+  their pages (2,847 images, 2.03 → 1.55 GB); 207 keep them because some
+  product has no saved price — mostly products the price fallback rejected
+  whose `price_pending` row has since been pruned (the engine only excuses
+  rows it can still see), so the page is the only record. 20 more have no
+  hotspot products. Open:
+  - `/prices/archive/import`'s `inserted` and the offers prune's `archived`
+    count FTS index writes too (~9.5× the real rows) — reporting only.
+  - FIXED 2026-11-18: `GET /asset/<key>` served any bucket key, incl.
+    `backups/d1/`; now only `brochures/<store>/<region>/<edition>/` meta.json,
+    original.pdf and page images (engine `30ec2d8` = Worker `d5d6750f`,
+    rollback `337a14c5`).
+  - 4 of 15 `imageClassificationReviews.js` evidence links point at pages
+    pruned 2026-11-17 (404); the aisle decisions are unaffected.
+  Rows + scripts: `Desktop/claude/backups/price-archive-2026-11-17/`;
+  cold copy R2 `price-archive/2026-11-17/`.
+
 - **Mini marts, 2026-11-04 (HISTORY §69):** live; t.sshoco's story read 5/5
   priced posters right and skipped 2 unpriced photos. Open items:
   - **Reading v4 (Mistral, now the fallback; engine `f07d02f` = Worker `c519921c`, 2026-11-05):** the
