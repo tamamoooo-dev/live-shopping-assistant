@@ -7,11 +7,12 @@
 // brochure is still held (brochureId + pageIndex snapshotted at add time);
 // once an edition expires out of the engine the link simply hides.
 
-import { cartItems, setQty, removeFromCart, clearCart, togglePurchased, CART_EVENT } from './cart.js';
+import { cartItems, setQty, removeFromCart, clearCart, togglePurchased, importItems, CART_EVENT } from './cart.js';
 import { loadBrochures, storeLabel, storeColor } from './brochure.js';
 import { openBrochureViewer } from './viewer.js?v=20260924.2';
 import { t, tn, getLang } from './i18n.js';
-import { cartShareText, shareText } from './cartShare.js';
+import { cartSummary, shareLink } from './cartShare.js';
+import { cartLink, linkPayload, unpackList } from './cartLink.js';
 import { mountQuickAdd } from './cartQuickAdd.js';
 
 const esc = (s) =>
@@ -25,7 +26,10 @@ const hasPrice = (it) => typeof it.price === 'number' && Number.isFinite(it.pric
 const itemName = (it) =>
   (getLang() === 'ar' ? it.nameAr || it.name : it.name || it.nameAr) || t('cart.flyerProduct');
 
+const storeNameOf = (it) => it.storeName || storeLabel(it.store);
+
 let listRoot = null;
+let sharedRoot = null;
 
 export function initCartPage() {
   const root = document.getElementById('cart-root');
@@ -35,6 +39,9 @@ export function initCartPage() {
     // an open category survive cart changes; only the list below redraws.
     root.removeAttribute('aria-live');
     root.replaceChildren();
+    sharedRoot = document.createElement('div');
+    sharedRoot.className = 'cart-shared-root';
+    root.append(sharedRoot);
     mountQuickAdd(root);
     listRoot = document.createElement('div');
     listRoot.className = 'cart-list';
@@ -46,7 +53,61 @@ export function initCartPage() {
       if (!document.getElementById('page-cart').hidden) render(listRoot);
     });
   }
+  showShared(sharedRoot, linkPayload());
   render(listRoot);
+}
+
+// --- a shared list, opened from a link (#/cart?l=…) ------------------------------
+// Shown above the cart until the visitor adds it or closes it; nothing is
+// added without their tap.
+let sharedRevision = 0;
+async function showShared(box, packed) {
+  const current = ++sharedRevision;
+  if (!packed) return box.replaceChildren();
+  let items = null;
+  try {
+    items = await unpackList(packed);
+  } catch {
+    /* a cut or edited link: say so below */
+  }
+  if (current !== sharedRevision) return;
+  const done = () => {
+    box.replaceChildren();
+    // Back to the plain cart address, so a reload does not offer it again.
+    history.replaceState(null, '', `${location.pathname}${location.search}#/cart`);
+  };
+  if (!items) {
+    box.innerHTML = `
+      <section class="cart-shared is-bad" role="alert">
+        <p>${esc(t('cart.shared.bad'))}</p>
+        <div class="cart-shared-actions"><button type="button" class="cart-shared-close">${esc(t('cart.shared.close'))}</button></div>
+      </section>`;
+    box.querySelector('.cart-shared-close').addEventListener('click', done);
+    return;
+  }
+  const summary = cartSummary(items, { storeName: storeNameOf });
+  box.innerHTML = `
+    <section class="cart-shared" aria-labelledby="cart-shared-title">
+      <h2 id="cart-shared-title" class="cart-shared-title">📩 ${esc(t('cart.shared.title'))}</h2>
+      ${summary.groups.map((g) => `
+        <div class="cart-shared-group">
+          <h3 dir="auto">${esc(g.label)}</h3>
+          <ul>${g.lines.map((line) => `<li dir="auto">${esc(line)}</li>`).join('')}</ul>
+        </div>`).join('')}
+      <p class="cart-shared-sum">${summary.footer.map(esc).join('<br>')}</p>
+      <p class="cart-shared-note">${esc(t('cart.shared.note'))}</p>
+      <div class="cart-shared-actions">
+        <button type="button" class="cart-shared-add">${esc(t('cart.shared.addAll'))}</button>
+        <button type="button" class="cart-shared-close">${esc(t('cart.shared.close'))}</button>
+      </div>
+    </section>`;
+  box.querySelector('.cart-shared-close').addEventListener('click', done);
+  box.querySelector('.cart-shared-add').addEventListener('click', () => {
+    importItems(items);
+    done();
+    box.innerHTML = `<p class="cart-shared-added" role="status">${esc(t('cart.shared.added'))}</p>`;
+    setTimeout(() => { if (box.firstElementChild?.classList.contains('cart-shared-added')) box.replaceChildren(); }, 2500);
+  });
 }
 
 function render(root) {
@@ -133,8 +194,11 @@ function render(root) {
   root.querySelector('.cart-clear').addEventListener('click', () => {
     if (window.confirm(t('cart.confirmClear'))) clearCart();
   });
+  // Packed now, so a tap goes straight to the share sheet (Safari wants the
+  // share call close to the tap).
+  const link = cartLink(items).catch(() => null);
   const shareBtn = root.querySelector('.cart-share');
-  shareBtn.addEventListener('click', () => share(shareBtn));
+  shareBtn.addEventListener('click', () => share(shareBtn, link, items));
 
   for (const row of root.querySelectorAll('.cart-item')) {
     const id = row.dataset.id;
@@ -183,12 +247,17 @@ function itemRow(it) {
     </article>`;
 }
 
-// Share the cart as text: the phone's share sheet, else the clipboard with a
-// short "Copied" on the button (the root is aria-live, so it is announced).
-async function share(btn) {
-  const text = cartShareText(cartItems(), { storeName: (it) => it.storeName || storeLabel(it.store) });
+// Share the cart as a link (cartLink.js): the phone's share sheet, else the
+// link is copied, with a short "Link copied" on the button (the list root is
+// aria-live, so it is announced).
+async function share(btn, link, items) {
   btn.disabled = true;
-  const result = await shareText(text, t('cart.shareText.title'));
+  const url = await link;
+  const count = items.reduce((n, it) => n + (it.qty || 1), 0);
+  const title = t('cart.shareText.title');
+  const result = url
+    ? await shareLink({ title, text: `🛒 ${title} — ${tn('cart.shareText.count', count)}`, url })
+    : 'failed';
   btn.disabled = false;
   if (result !== 'copied' && result !== 'failed') return;
   const label = btn.querySelector('.cart-share-label');

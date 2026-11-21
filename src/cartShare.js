@@ -1,12 +1,12 @@
-// cartShare.js — the cart as a plain-text message, for the cart page's Share
-// button: one line per item (name · size — price), grouped by store the way
-// the page groups them, then the item count and the total. The text follows
-// the app's language (i18n.js); nothing leaves the device except through the
-// user's own share sheet or clipboard.
+// cartShare.js — sharing the cart. The Share button sends a LINK that carries
+// the list (cartLink.js; owner, 2026-11-21: "I want it to be a link"), through
+// the phone's share sheet (Web Share API: WhatsApp, SMS, mail …), or copies
+// the link where there is none.
 //
-// Sharing prefers the Web Share API (the phone's share sheet: WhatsApp, SMS,
-// mail …) and falls back to copying the text to the clipboard where there is
-// none. No share link is built: the list never goes into a URL.
+// cartSummary() is the list in words — grouped by store the way the cart page
+// groups it, one line per item (name · size — price), then the item count and
+// the total — in the app's language. The cart page shows it to whoever opens
+// a shared link, before they add the items to their own cart.
 
 import { t, tn, getLang } from './i18n.js';
 
@@ -55,14 +55,15 @@ function itemLine(it, ar) {
   return `${mark} ${name}${size ? ` · ${size}` : ''} — ${price}`;
 }
 
-// items: the cart (cart.js cartItems()); storeName(item) → the store's label.
-export function cartShareText(items, { storeName = (it) => it.storeName || it.store } = {}) {
+// items: cart items; storeName(item) → the store's label.
+// → { count, groups: [{ label, lines: [string] }], footer: [string] }
+export function cartSummary(items, { storeName = (it) => it.storeName || it.store } = {}) {
   const ar = getLang() === 'ar';
-  const groups = new Map();
+  const byStore = new Map();
   for (const it of items) {
     const key = it.store || '';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(it);
+    if (!byStore.has(key)) byStore.set(key, []);
+    byStore.get(key).push(it);
   }
 
   let count = 0;
@@ -70,11 +71,11 @@ export function cartShareText(items, { storeName = (it) => it.storeName || it.st
   let toBuy = 0;
   let unpriced = 0;
   let bought = false;
-  const lines = [`🛒 ${t('cart.shareText.title')}`];
-  for (const list of groups.values()) {
+  const groups = [];
+  for (const list of byStore.values()) {
     // Same order as the page: still-to-buy first, ticked items last.
     const sorted = list.slice().sort((a, b) => (a.purchased ? 1 : 0) - (b.purchased ? 1 : 0));
-    lines.push('', sorted[0].store ? storeName(sorted[0]) : t('cart.myList'));
+    const lines = [];
     for (const it of sorted) {
       const qty = it.qty || 1;
       count += qty;
@@ -85,22 +86,24 @@ export function cartShareText(items, { storeName = (it) => it.storeName || it.st
       } else unpriced += qty;
       lines.push(itemLine(it, ar));
     }
+    groups.push({ label: sorted[0].store ? storeName(sorted[0]) : t('cart.myList'), lines });
   }
-  lines.push('', tn('cart.shareText.count', count));
+  const footer = [tn('cart.shareText.count', count)];
   // The total covers priced lines only, and says how many it leaves out.
   if (items.some(hasPrice)) {
     const currency = items.find(hasPrice).currency;
-    lines.push(`${t('cart.total')}: ${money(total, currency)}${unpriced ? ` (${tn('cart.unpriced', unpriced)})` : ''}`);
+    footer.push(`${t('cart.total')}: ${money(total, currency)}${unpriced ? ` (${tn('cart.unpriced', unpriced)})` : ''}`);
     // Ticked items are already in the trolley; say what is left to spend.
-    if (bought) lines.push(`${t('cart.toBuy')}: ${money(toBuy, currency)}`);
+    if (bought) footer.push(`${t('cart.toBuy')}: ${money(toBuy, currency)}`);
   }
-  return lines.join('\n');
+  return { count, groups, footer };
 }
 
+// Share a link: the phone's share sheet, else copy the link.
 // → 'shared' | 'copied' | 'cancelled' | 'failed'
-export async function shareText(text, title) {
+export async function shareLink({ title, text, url }) {
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-    const data = { title, text };
+    const data = { title, text, url };
     if (typeof navigator.canShare !== 'function' || navigator.canShare(data)) {
       try {
         await navigator.share(data);
@@ -112,7 +115,7 @@ export async function shareText(text, title) {
       }
     }
   }
-  return (await copyText(text)) ? 'copied' : 'failed';
+  return (await copyText(url)) ? 'copied' : 'failed';
 }
 
 async function copyText(text) {

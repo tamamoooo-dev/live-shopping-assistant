@@ -58,6 +58,22 @@ export function addToCart(item) {
   write(items);
 }
 
+// A shared list (cartLink.js) added in one go: an item already in the cart
+// gets the shared quantity on top; the rest are added as they came.
+export function importItems(list) {
+  const items = read();
+  const now = Date.now();
+  list.forEach((item, i) => {
+    if (!item || !item.id) return;
+    const qty = Math.max(1, Math.min(99, Math.round(item.qty) || 1));
+    const held = items.find((it) => it.id === item.id);
+    if (held) held.qty = Math.min(99, (held.qty || 1) + qty);
+    // Newest first on the page: keep the shared order by stepping back in time.
+    else items.push({ ...item, qty, addedAt: new Date(now - i).toISOString() });
+  });
+  write(items);
+}
+
 export function setQty(id, qty) {
   const items = read();
   const item = items.find((it) => it.id === id);

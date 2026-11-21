@@ -1,12 +1,20 @@
-// The cart's shared text, in the language the app is in. i18n.js reads the
-// language once at load, so Arabic runs in a child process of this file.
+// The cart in words (shown to whoever opens a shared link), in the language
+// the app is in, and the share/copy fallback. i18n.js reads the language once
+// at load, so Arabic runs in a child process of this file.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const lang = process.env.CART_SHARE_LANG || 'en';
 globalThis.localStorage = { getItem: () => lang, setItem() {} };
-const { cartShareText } = await import('./cartShare.js');
+const { cartSummary, shareLink } = await import('./cartShare.js');
+
+// The summary laid out as lines: title, each store group, then the footer.
+const TITLE = lang === 'ar' ? '🛒 قائمة المشتريات' : '🛒 Shopping list';
+function cartShareText(list, opts) {
+  const { groups, footer } = cartSummary(list, opts);
+  return [TITLE, '', ...groups.flatMap((g) => [g.label, ...g.lines, '']), ...footer].join('\n');
+}
 
 const items = [
   { id: 'a', store: 'panda', storeName: 'Panda', name: 'Almarai Fresh Milk', nameAr: 'حليب المراعي طازج', size: '1 L', price: 6.95, qty: 1, currency: 'SAR' },
@@ -70,6 +78,27 @@ if (lang === 'en') {
     ['🛒 Shopping list', '', 'My list', '• Bread × 2', '• Almarai laban', '', '3 items'].join('\n'),
     'a list with no prices has no total line',
   );
+
+  assert.equal(cartSummary(list).count, 4, 'count adds up quantities');
+
+  // Sharing a link: the share sheet, else the clipboard.
+  const url = 'https://example.test/app/#/cart?l=zAB';
+  const calls = [];
+  const setNav = (nav) => Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
+  setNav({ share: async (d) => { calls.push(d); }, canShare: () => true });
+  assert.equal(await shareLink({ title: 'T', text: 'x', url }), 'shared');
+  assert.deepEqual(calls[0], { title: 'T', text: 'x', url }, 'the link goes to the share sheet as url');
+  setNav({ share: async () => { throw Object.assign(Error('no'), { name: 'AbortError' }); } });
+  assert.equal(await shareLink({ title: 'T', text: 'x', url }), 'cancelled', 'closing the sheet does nothing');
+  let copied = null;
+  setNav({ share: async () => { throw Object.assign(Error('no'), { name: 'NotAllowedError' }); },
+    clipboard: { writeText: async (v) => { copied = v; } } });
+  assert.equal(await shareLink({ title: 'T', text: 'x', url }), 'copied');
+  assert.equal(copied, url, 'a refused share copies the link itself');
+  copied = null;
+  setNav({ clipboard: { writeText: async (v) => { copied = v; } } });
+  assert.equal(await shareLink({ title: 'T', text: 'x', url }), 'copied', 'no share sheet: copy');
+  assert.equal(copied, url);
 
   const ar = execFileSync(process.execPath, [fileURLToPath(import.meta.url)], {
     env: { ...process.env, CART_SHARE_LANG: 'ar' },
