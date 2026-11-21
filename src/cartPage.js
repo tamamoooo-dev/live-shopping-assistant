@@ -11,6 +11,7 @@ import { cartItems, setQty, removeFromCart, clearCart, togglePurchased, CART_EVE
 import { loadBrochures, storeLabel, storeColor } from './brochure.js';
 import { openBrochureViewer } from './viewer.js?v=20260924.2';
 import { t, tn } from './i18n.js';
+import { cartShareText, shareText } from './cartShare.js';
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -81,7 +82,13 @@ function render(root) {
       <span class="cart-total">${esc(t('cart.toBuy'))} <strong>${fmt(grand)} SAR</strong>${
         boughtCount ? `<small class="cart-bought">· ${esc(tn('cart.inTrolley', boughtCount))}</small>` : ''
       }</span>
-      <button type="button" class="cart-clear">${esc(t('cart.clear'))}</button>
+      <span class="cart-toolbar-actions">
+        <button type="button" class="cart-share" aria-label="${esc(t('cart.shareAria'))}">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M7.5 7.5L12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+          <span class="cart-share-label">${esc(t('cart.share'))}</span>
+        </button>
+        <button type="button" class="cart-clear">${esc(t('cart.clear'))}</button>
+      </span>
     </div>
     ${sections.join('')}
     <p class="cart-note">${esc(t('cart.note'))}</p>`;
@@ -89,6 +96,8 @@ function render(root) {
   root.querySelector('.cart-clear').addEventListener('click', () => {
     if (window.confirm(t('cart.confirmClear'))) clearCart();
   });
+  const shareBtn = root.querySelector('.cart-share');
+  shareBtn.addEventListener('click', () => share(shareBtn));
 
   for (const row of root.querySelectorAll('.cart-item')) {
     const id = row.dataset.id;
@@ -133,6 +142,24 @@ function itemRow(it) {
         <button type="button" class="cart-plus" aria-label="${esc(t('cart.increase'))}">+</button>
       </div>
     </article>`;
+}
+
+// Share the cart as text: the phone's share sheet, else the clipboard with a
+// short "Copied" on the button (the root is aria-live, so it is announced).
+async function share(btn) {
+  const text = cartShareText(cartItems(), { storeName: (it) => it.storeName || storeLabel(it.store) });
+  btn.disabled = true;
+  const result = await shareText(text, t('cart.shareText.title'));
+  btn.disabled = false;
+  if (result !== 'copied' && result !== 'failed') return;
+  const label = btn.querySelector('.cart-share-label');
+  label.textContent = t(result === 'copied' ? 'cart.copied' : 'cart.copyFailed');
+  btn.classList.add(result === 'copied' ? 'is-copied' : 'is-failed');
+  setTimeout(() => {
+    if (!btn.isConnected) return;
+    label.textContent = t('cart.share');
+    btn.classList.remove('is-copied', 'is-failed');
+  }, 1800);
 }
 
 // Re-open the held brochure on the item's page. Held-ness is checked at click

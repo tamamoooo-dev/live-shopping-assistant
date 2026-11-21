@@ -375,6 +375,14 @@ const STRINGS = {
     'cart.decrease': 'Decrease quantity',
     'cart.increase': 'Increase quantity',
     'cart.flyerExpired': 'Flyer expired',
+    'cart.share': 'Share',
+    'cart.shareAria': 'Share the cart as a text message',
+    'cart.copied': 'Copied ✓',
+    'cart.copyFailed': 'Couldn’t copy',
+    'cart.shareText.title': 'Shopping list',
+    'cart.shareText.count.one': '{count} item',
+    'cart.shareText.count.other': '{count} items',
+    'cart.shareText.sar': 'SAR',
 
     // Marketplace (unified results grid + sources strip)
     'market.tapForPrice': 'Tap to see price',
@@ -974,6 +982,14 @@ const STRINGS = {
     'cart.decrease': 'إنقاص الكمية',
     'cart.increase': 'زيادة الكمية',
     'cart.flyerExpired': 'انتهت النشرة',
+    'cart.share': 'مشاركة',
+    'cart.shareAria': 'مشاركة السلة كرسالة نصية',
+    'cart.copied': 'تم النسخ ✓',
+    'cart.copyFailed': 'تعذّر النسخ',
+    'cart.shareText.title': 'قائمة المشتريات',
+    'cart.shareText.count.one': 'منتج واحد',
+    'cart.shareText.count.other': 'عدد المنتجات: {count}',
+    'cart.shareText.sar': 'ريال',
 
     // Marketplace (unified results grid + sources strip)
     'market.tapForPrice': 'اضغط لعرض السعر',

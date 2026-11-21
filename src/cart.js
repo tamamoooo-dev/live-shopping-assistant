@@ -44,8 +44,10 @@ export function inCart(id) {
   return read().some((it) => it.id === id);
 }
 
-// item: { id, store, name, nameAr, price, oldPrice, currency, image,
+// item: { id, store, name, nameAr, size, price, oldPrice, currency, image,
 //         sourceUrl, brochureId, pageIndex, validTo }
+// (`size` is the label the card showed, for the shared text; older items and
+// mini-mart items, whose name already carries it, have none.)
 // Same id twice = bump quantity (the natural "add again" gesture).
 export function addToCart(item) {
   if (!item || !item.id) return;

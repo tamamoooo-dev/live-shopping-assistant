@@ -160,6 +160,7 @@ function cartItemFor(l) {
     store: l.store.id,
     name: l.source === 'flyer' ? l.offer.name || l.name : l.name,
     nameAr: l.source === 'flyer' ? l.offer.nameAr || null : null,
+    size: sizeLabel(l.size) || null,
     price: l.price,
     oldPrice: l.oldPrice ?? null,
     currency: l.currency || 'SAR',

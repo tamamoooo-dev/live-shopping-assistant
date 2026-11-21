@@ -516,6 +516,7 @@ export function createSheet(host, ctx) {
         store: offer.store,
         name,
         nameAr,
+        size: sizeSlot || null,
         price: offer.price,
         oldPrice: offer.oldPrice,
         currency: offer.currency || 'SAR',

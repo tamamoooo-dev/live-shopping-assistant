@@ -2386,6 +2386,24 @@ html[lang="ar"] .watch-row.is-compact .watch-name { text-align: right; }
   cursor: pointer;
 }
 .cart-clear:hover { border-color: var(--bad, #dc2626); }
+.cart-toolbar { flex-wrap: wrap; }
+.cart-toolbar-actions { display: inline-flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+.cart-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: var(--pill);
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.cart-share:disabled { opacity: 0.6; cursor: default; }
+.cart-share.is-copied { background: var(--good, #16a34a); border-color: var(--good, #16a34a); }
+.cart-share.is-failed { background: var(--bad, #dc2626); border-color: var(--bad, #dc2626); }
 .cart-store {
   background: var(--surface);
   border-radius: var(--radius);

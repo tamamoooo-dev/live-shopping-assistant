@@ -669,11 +669,17 @@ export function cardBody(spec) {
   return body;
 }
 
+// A flyer offer's size line (card + cart): a reading or a stored package,
+// never a sale's pack.
+function flyerSizeLabel(offer) {
+  const showSize = offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'));
+  return showSize ? offerSizeLabel(offer) : '';
+}
+
 // A flyer offer's body (search grid + Browse): the size line follows the same
 // rule as before — a reading or a stored package, never a sale's pack.
 export function flyerCardBody(offer, name, { brand = '', up = null, more = [] } = {}) {
   const altName = name === offer.nameAr ? offer.name : offer.nameAr;
-  const showSize = offer.sizeReading || (offer.size && !offer.saleQuantity && Object.hasOwn(offer, 'packageContents'));
   return cardBody({
     store: { id: offer.store, label: storeLabel(offer.store) },
     validTo: offer.validTo,
@@ -684,7 +690,7 @@ export function flyerCardBody(offer, name, { brand = '', up = null, more = [] } 
     price: offer.price,
     oldPrice: offer.oldPrice ?? null,
     currency: offer.currency || 'SAR',
-    size: showSize ? offerSizeLabel(offer) : '',
+    size: flyerSizeLabel(offer),
     up,
     each: offer.eachPrice || null,
     sale: offer.saleQuantity || null,
@@ -722,6 +728,7 @@ export function flyerCartEntry(offer) {
     store: offer.store,
     name: offer.name || null,
     nameAr: offer.nameAr || null,
+    size: flyerSizeLabel(offer) || null,
     price: offer.price,
     oldPrice: offer.oldPrice ?? null,
     currency: offer.currency || 'SAR',
