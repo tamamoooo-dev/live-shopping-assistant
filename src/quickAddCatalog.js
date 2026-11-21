@@ -11,11 +11,20 @@ export const QUICK_DEPARTMENTS = [
   { id: 'fresh', icon: '🥬', en: 'Fresh Food', ar: 'الطازج', items: [
     ['tomatoes', 'Tomatoes', 'طماطم'], ['cucumbers', 'Cucumbers', 'خيار'], ['onions', 'Onions', 'بصل'],
     ['potatoes', 'Potatoes', 'بطاطس'], ['garlic', 'Garlic', 'ثوم'], ['lemons', 'Lemons', 'ليمون'],
-    ['lettuce', 'Lettuce', 'خس'], ['carrots', 'Carrots', 'جزر'], ['bananas', 'Bananas', 'موز'],
-    ['apples', 'Apples', 'تفاح'], ['oranges', 'Oranges', 'برتقال'], ['grapes', 'Grapes', 'عنب'],
-    ['watermelon', 'Watermelon', 'بطيخ'], ['whole-chicken', 'Whole chicken', 'دجاج كامل'],
+    ['lettuce', 'Lettuce', 'خس'], ['carrots', 'Carrots', 'جزر'],
+    ['whole-chicken', 'Whole chicken', 'دجاج كامل'],
     ['chicken-breast', 'Chicken breast', 'صدور دجاج'], ['minced-meat', 'Minced meat', 'لحم مفروم'],
     ['lamb', 'Lamb', 'لحم غنم'], ['fish', 'Fish', 'سمك'], ['shrimp', 'Shrimp', 'روبيان'],
+  ] },
+  // Fruits get their own tab (owner, 2026-11-21); ids kept from Fresh Food.
+  { id: 'fruits', icon: '🍎', en: 'Fruits', ar: 'الفواكه', items: [
+    ['bananas', 'Bananas', 'موز'], ['apples', 'Apples', 'تفاح'], ['oranges', 'Oranges', 'برتقال'],
+    ['mandarins', 'Mandarins', 'يوسفي'], ['grapes', 'Grapes', 'عنب'], ['watermelon', 'Watermelon', 'بطيخ'],
+    ['melon', 'Melon', 'شمام'], ['strawberries', 'Strawberries', 'فراولة'], ['mangoes', 'Mangoes', 'مانجو'],
+    ['pomegranates', 'Pomegranates', 'رمان'], ['pears', 'Pears', 'كمثرى'], ['peaches', 'Peaches', 'خوخ'],
+    ['apricots', 'Apricots', 'مشمش'], ['plums', 'Plums', 'برقوق'], ['kiwi', 'Kiwi', 'كيوي'],
+    ['pineapple', 'Pineapple', 'أناناس'], ['guava', 'Guava', 'جوافة'], ['figs', 'Figs', 'تين'],
+    ['cherries', 'Cherries', 'كرز'], ['avocado', 'Avocado', 'أفوكادو'], ['rutab', 'Rutab (fresh dates)', 'رطب'],
   ] },
   { id: 'dairy-eggs', icon: '🥛', en: 'Dairy & Eggs', ar: 'الألبان والبيض', items: [
     ['fresh-milk', 'Fresh milk', 'حليب طازج'], ['long-life-milk', 'Long-life milk', 'حليب طويل الأجل'],

@@ -11,6 +11,13 @@ for (const d of QUICK_DEPARTMENTS) {
   for (const it of d.items) assert.ok(it.en && it.ar && /[؀-ۿ]/.test(it.ar), `${it.id} has an Arabic name`);
 }
 
+// Fruits have their own tab, right after Fresh Food, and left Fresh Food.
+const fruits = QUICK_DEPARTMENTS.find((d) => d.id === 'fruits');
+assert.equal(QUICK_DEPARTMENTS[1], fruits, 'Fruits is the second tab');
+assert.ok(['bananas', 'apples', 'mangoes', 'pomegranates'].every((id) => fruits.items.some((it) => it.id === id)));
+assert.ok(!QUICK_DEPARTMENTS[0].items.some((it) => it.id === 'bananas'), 'no fruit left under Fresh Food');
+assert.equal(listEntry('رمان').id, 'list:pomegranates', 'Arabic fruit name is the fruit');
+
 // An everyday item, typed in either language (with or without ال), is that item.
 const milkEn = listEntry('fresh milk');
 const milkAr = listEntry('الحليب الطازج');
