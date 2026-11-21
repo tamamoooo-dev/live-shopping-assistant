@@ -2480,32 +2480,33 @@ html[lang="ar"] .watch-row.is-compact .watch-name { text-align: right; }
 }
 .cart-quick-status { margin: 0; min-height: 0; font-size: 12.5px; font-weight: 700; color: var(--good); }
 .cart-quick-status:empty { display: none; }
+/* All categories in view at once (owner, 2026-11-21): a grid — three per
+   row on a phone (4 rows), more on wider screens; a tap opens the list below. */
 .cart-quick-depts {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 2px 2px 4px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.cart-quick-depts::-webkit-scrollbar { display: none; }
-.cart-quick-dept {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 6px;
-  padding: 7px 12px;
+}
+.cart-quick-dept {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 6px 8px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
+  line-height: 1.2;
+  text-align: start;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--pill);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
+.cart-quick-dept-icon { flex: 0 0 auto; font-size: 15px; }
 .cart-quick-dept[aria-pressed="true"] { color: var(--brand); background: var(--brand-soft); border-color: var(--brand-ring); }
-.cart-quick-dept-icon { font-size: 15px; }
 .cart-quick-items { display: flex; flex-wrap: wrap; gap: 7px; }
 .cart-quick-item {
   display: inline-flex;
