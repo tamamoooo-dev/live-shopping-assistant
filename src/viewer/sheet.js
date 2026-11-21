@@ -521,6 +521,11 @@ export function createSheet(host, ctx) {
         oldPrice: offer.oldPrice,
         currency: offer.currency || 'SAR',
         image: thumb || offer.imageUrl,
+        // Where the picture sits on the page, so a shared cart link can carry
+        // it (cartLink.js) — a data: crop is too big for a link.
+        crop: thumb && entry.spot && entry.pageSrc
+          ? { src: entry.pageSrc, x: entry.spot.x, y: entry.spot.y, w: entry.spot.w, h: entry.spot.h }
+          : null,
         sourceUrl: offer.sourceUrl,
         brochureId: ctx.brochure.id,
         pageIndex: ctx.currentSourceIndex(),

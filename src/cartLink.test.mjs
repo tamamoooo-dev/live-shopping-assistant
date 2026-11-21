@@ -22,9 +22,47 @@ assert.deepEqual(
   {
     id: 'panda:123:4', store: 'panda', storeName: 'Panda', name: 'Almarai Fresh Milk', nameAr: 'حليب المراعي طازج',
     size: '1 L', price: 6.95, oldPrice: 8.5, currency: 'SAR', qty: 2, purchased: false,
-    brochureId: 'b-77', pageIndex: 0, icon: null, image: null, sourceUrl: null, validTo: null,
+    brochureId: 'b-77', pageIndex: 0, icon: null, image: null, crop: null, sourceUrl: null, validTo: null,
   },
-  'a flyer item keeps name, store, size, prices, qty and page 0; pictures and links are left out',
+  'a flyer item keeps name, store, size, prices, qty and page 0; a data: picture with no crop box stays home',
+);
+
+// Pictures: a web picture travels as its address; a cut flyer picture as its
+// place on the page (asset key + box).
+const ENGINE = 'https://brochure-engine.tamamoooo.workers.dev';
+const web = { ...flyer, id: 'w', image: 'https://cdn.test/offers/123.jpg', crop: null };
+const cut = {
+  ...flyer, id: 'c', image: 'data:image/jpeg;base64,/9j/AAAA',
+  crop: { src: `${ENGINE}/asset/brochures/panda/central/2026-W47/page03.webp`, x: 0.123456, y: 0.5, w: 0.25, h: 0.2 },
+};
+const both = { ...cut, id: 'b', image: 'https://cdn.test/offers/9.jpg' };
+const pics = await unpackList(await packList([web, cut, both]));
+assert.equal(pics[0].image, 'https://cdn.test/offers/123.jpg', 'a web picture keeps its address');
+assert.equal(pics[0].crop, null);
+assert.equal(pics[1].image, null, 'the data: picture itself does not travel');
+assert.deepEqual(pics[1].crop, { key: 'brochures/panda/central/2026-W47/page03.webp', x: 0.1235, y: 0.5, w: 0.25, h: 0.2 },
+  'its place on the page does');
+assert.deepEqual([pics[2].image, pics[2].crop], ['https://cdn.test/offers/9.jpg', null], 'a web picture is enough');
+for (const [bad, why] of [
+  ['http://cdn.test/a.jpg', 'http'], ['javascript:alert(1)', 'script'], ['data:image/png;base64,AA', 'data'],
+  [`https://cdn.test/${'a'.repeat(700)}.jpg`, 'too long'],
+]) {
+  assert.equal((await unpackList(await packList([{ ...web, image: bad }])))[0].image, null, `no ${why} picture`);
+  assert.equal(unpackItems([1, [['x', null, null, 'X', ...Array(10).fill(null), bad]]])[0].image, null, `refused on the way in: ${why}`);
+}
+for (const [crop, why] of [
+  [['brochures/../secret', 0, 0, 0.5, 0.5], 'path climbing'],
+  [['other/a.webp', 0, 0, 0.5, 0.5], 'outside brochures/'],
+  [['brochures/a.webp', 0, 0, 0, 0.5], 'empty box'],
+  [['brochures/a.webp', -1, 0, 0.5, 0.5], 'off the page'],
+  [['brochures/a.webp', 0, 0, 0.5], 'short'],
+  ['brochures/a.webp', 'not a box'],
+]) {
+  assert.equal(unpackItems([1, [['x', null, null, 'X', ...Array(11).fill(null), crop]]])[0].crop, null, `crop refused: ${why}`);
+}
+assert.equal(
+  unpackItems([1, [['x', 'constructor', null, 'X']]])[0].store, null,
+  'a store id that is a built-in object key is dropped',
 );
 assert.deepEqual(
   [back[1].name, back[1].nameAr, back[1].icon, back[1].qty, back[1].store, back[1].price],

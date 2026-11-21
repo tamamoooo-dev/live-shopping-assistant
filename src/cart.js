@@ -46,8 +46,10 @@ export function inCart(id) {
 
 // item: { id, store, name, nameAr, size, price, oldPrice, currency, image,
 //         sourceUrl, brochureId, pageIndex, validTo }
-// (`size` is the label the card showed, for the shared text; older items and
-// mini-mart items, whose name already carries it, have none.)
+// (`size` is the label the card showed; older items and mini-mart items,
+// whose name already carries it, have none. `crop` — { src, x, y, w, h }, the
+// flyer page and box a data: picture was cut from — lets a shared link carry
+// that picture as its place on the page; see cartLink.js.)
 // Same id twice = bump quantity (the natural "add again" gesture).
 export function addToCart(item) {
   if (!item || !item.id) return;
@@ -71,6 +73,15 @@ export function importItems(list) {
     // Newest first on the page: keep the shared order by stepping back in time.
     else items.push({ ...item, qty, addedAt: new Date(now - i).toISOString() });
   });
+  write(items);
+}
+
+// Fill in fields on a held item (e.g. a picture's crop box found later).
+export function updateItem(id, fields) {
+  const items = read();
+  const item = items.find((it) => it.id === id);
+  if (!item) return;
+  Object.assign(item, fields);
   write(items);
 }
 
