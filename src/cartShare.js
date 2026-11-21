@@ -40,14 +40,19 @@ function money(n, currency) {
   return `${fmt(n)} ${!currency || currency === 'SAR' ? t('cart.shareText.sar') : currency}`;
 }
 
+// A quick-add line (cartQuickAdd.js) has no price.
+const hasPrice = (it) => typeof it.price === 'number' && Number.isFinite(it.price);
+
 function itemLine(it, ar) {
   const qty = it.qty || 1;
   const name = (ar ? it.nameAr || it.name : it.name || it.nameAr) || t('cart.flyerProduct');
   // The size snapshotted at add time; skipped when the name already says it.
   const size = it.size && !nameHasSize(name, it.size) ? it.size : '';
+  const mark = it.purchased ? '✓' : '•';
+  if (!hasPrice(it)) return `${mark} ${name}${size ? ` · ${size}` : ''}${qty > 1 ? ` × ${qty}` : ''}`;
   const price =
     qty > 1 ? `${qty} × ${fmt(it.price)} = ${money(it.price * qty, it.currency)}` : money(it.price, it.currency);
-  return `${it.purchased ? '✓' : '•'} ${name}${size ? ` · ${size}` : ''} — ${price}`;
+  return `${mark} ${name}${size ? ` · ${size}` : ''} — ${price}`;
 }
 
 // items: the cart (cart.js cartItems()); storeName(item) → the store's label.
@@ -55,32 +60,40 @@ export function cartShareText(items, { storeName = (it) => it.storeName || it.st
   const ar = getLang() === 'ar';
   const groups = new Map();
   for (const it of items) {
-    if (!groups.has(it.store)) groups.set(it.store, []);
-    groups.get(it.store).push(it);
+    const key = it.store || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(it);
   }
 
   let count = 0;
   let total = 0;
   let toBuy = 0;
+  let unpriced = 0;
   let bought = false;
   const lines = [`🛒 ${t('cart.shareText.title')}`];
   for (const list of groups.values()) {
     // Same order as the page: still-to-buy first, ticked items last.
     const sorted = list.slice().sort((a, b) => (a.purchased ? 1 : 0) - (b.purchased ? 1 : 0));
-    lines.push('', storeName(sorted[0]));
+    lines.push('', sorted[0].store ? storeName(sorted[0]) : t('cart.myList'));
     for (const it of sorted) {
       const qty = it.qty || 1;
       count += qty;
-      total += it.price * qty;
-      if (it.purchased) bought = true;
-      else toBuy += it.price * qty;
+      if (hasPrice(it)) {
+        total += it.price * qty;
+        if (it.purchased) bought = true;
+        else toBuy += it.price * qty;
+      } else unpriced += qty;
       lines.push(itemLine(it, ar));
     }
   }
-  const currency = items[0]?.currency;
-  lines.push('', tn('cart.shareText.count', count), `${t('cart.total')}: ${money(total, currency)}`);
-  // Ticked items are already in the trolley; say what is left to spend.
-  if (bought) lines.push(`${t('cart.toBuy')}: ${money(toBuy, currency)}`);
+  lines.push('', tn('cart.shareText.count', count));
+  // The total covers priced lines only, and says how many it leaves out.
+  if (items.some(hasPrice)) {
+    const currency = items.find(hasPrice).currency;
+    lines.push(`${t('cart.total')}: ${money(total, currency)}${unpriced ? ` (${tn('cart.unpriced', unpriced)})` : ''}`);
+    // Ticked items are already in the trolley; say what is left to spend.
+    if (bought) lines.push(`${t('cart.toBuy')}: ${money(toBuy, currency)}`);
+  }
   return lines.join('\n');
 }
 

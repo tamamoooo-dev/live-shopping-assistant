@@ -10,8 +10,9 @@
 import { cartItems, setQty, removeFromCart, clearCart, togglePurchased, CART_EVENT } from './cart.js';
 import { loadBrochures, storeLabel, storeColor } from './brochure.js';
 import { openBrochureViewer } from './viewer.js?v=20260924.2';
-import { t, tn } from './i18n.js';
+import { t, tn, getLang } from './i18n.js';
 import { cartShareText, shareText } from './cartShare.js';
+import { mountQuickAdd } from './cartQuickAdd.js';
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -19,20 +20,33 @@ const esc = (s) =>
   );
 const fmt = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(2));
 
-let wired = false;
+// A quick-add line (cartQuickAdd.js) has no store and no price.
+const hasPrice = (it) => typeof it.price === 'number' && Number.isFinite(it.price);
+const itemName = (it) =>
+  (getLang() === 'ar' ? it.nameAr || it.name : it.name || it.nameAr) || t('cart.flyerProduct');
+
+let listRoot = null;
 
 export function initCartPage() {
   const root = document.getElementById('cart-root');
   if (!root) return;
-  if (!wired) {
-    wired = true;
+  if (!listRoot) {
+    // The Quick add panel is built once and never re-rendered, so typing and
+    // an open category survive cart changes; only the list below redraws.
+    root.removeAttribute('aria-live');
+    root.replaceChildren();
+    mountQuickAdd(root);
+    listRoot = document.createElement('div');
+    listRoot.className = 'cart-list';
+    listRoot.setAttribute('aria-live', 'polite');
+    root.append(listRoot);
     // Re-render on any cart change while the page is visible (badge and page
     // share the one event; re-rendering a hidden page is harmless but skipped).
     window.addEventListener(CART_EVENT, () => {
-      if (!document.getElementById('page-cart').hidden) render(root);
+      if (!document.getElementById('page-cart').hidden) render(listRoot);
     });
   }
-  render(root);
+  render(listRoot);
 }
 
 function render(root) {
@@ -50,36 +64,59 @@ function render(root) {
 
   // Group by store, keeping each group's items in recency order but sinking
   // purchased ones to the bottom (the live shopping list stays on top).
+  // Quick-add lines (no store) form their own "My list" group.
   const groups = new Map();
   for (const it of items) {
-    if (!groups.has(it.store)) groups.set(it.store, []);
-    groups.get(it.store).push(it);
+    const key = it.store || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(it);
   }
 
   // Totals count only what's still TO BUY — ticked items are already in the
-  // trolley; the number you see is the number left to spend.
+  // trolley; the number you see is the number left to spend. Lines with no
+  // price are counted, never guessed into the total.
   let grand = 0;
   let boughtCount = 0;
+  let openCount = 0;
+  let pricedOpen = 0;
+  let unpriced = 0;
   const sections = [];
   for (const [store, list] of groups) {
     list.sort((a, b) => (a.purchased ? 1 : 0) - (b.purchased ? 1 : 0));
     const open = list.filter((it) => !it.purchased);
     boughtCount += list.length - open.length;
-    const subtotal = open.reduce((n, it) => n + it.price * (it.qty || 1), 0);
+    let subtotal = 0;
+    let groupCount = 0;
+    for (const it of open) {
+      const qty = it.qty || 1;
+      groupCount += qty;
+      if (hasPrice(it)) { subtotal += it.price * qty; pricedOpen += 1; }
+      else unpriced += qty;
+    }
+    openCount += groupCount;
     grand += subtotal;
+    const head = store
+      ? `<span class="cart-store-chip" style="--chip:${storeColor(store)}">${esc(list[0].storeName || storeLabel(store))}</span>
+          <span class="cart-store-sub">${fmt(subtotal)} SAR</span>`
+      : `<span class="cart-store-chip cart-list-chip">${esc(t('cart.myList'))}</span>
+          <span class="cart-store-sub">${groupCount ? esc(tn('cart.shareText.count', groupCount)) : ''}</span>`;
     sections.push(`
       <section class="cart-store">
         <header class="cart-store-head">
-          <span class="cart-store-chip" style="--chip:${storeColor(store)}">${esc(list[0].storeName || storeLabel(store))}</span>
-          <span class="cart-store-sub">${fmt(subtotal)} SAR</span>
+          ${head}
         </header>
         ${list.map((it) => itemRow(it)).join('')}
       </section>`);
   }
 
+  const total = pricedOpen
+    ? `${esc(t('cart.toBuy'))} <strong>${fmt(grand)} SAR</strong>`
+    : `<strong>${esc(tn('cart.shareText.count', openCount))}</strong>`;
   root.innerHTML = `
     <div class="cart-toolbar">
-      <span class="cart-total">${esc(t('cart.toBuy'))} <strong>${fmt(grand)} SAR</strong>${
+      <span class="cart-total">${total}${
+        pricedOpen && unpriced ? `<small class="cart-bought">· ${esc(tn('cart.unpriced', unpriced))}</small>` : ''
+      }${
         boughtCount ? `<small class="cart-bought">· ${esc(tn('cart.inTrolley', boughtCount))}</small>` : ''
       }</span>
       <span class="cart-toolbar-actions">
@@ -91,7 +128,7 @@ function render(root) {
       </span>
     </div>
     ${sections.join('')}
-    <p class="cart-note">${esc(t('cart.note'))}</p>`;
+    ${items.some(hasPrice) ? `<p class="cart-note">${esc(t('cart.note'))}</p>` : ''}`;
 
   root.querySelector('.cart-clear').addEventListener('click', () => {
     if (window.confirm(t('cart.confirmClear'))) clearCart();
@@ -113,8 +150,12 @@ function render(root) {
 
 function itemRow(it) {
   const qty = it.qty || 1;
-  const line = it.price * qty;
-  const name = it.name || it.nameAr || t('cart.flyerProduct');
+  const name = itemName(it);
+  const price = hasPrice(it)
+    ? `<strong>${fmt(it.price)} ${esc(it.currency || 'SAR')}</strong>
+          ${it.oldPrice ? `<s>${fmt(it.oldPrice)}</s>` : ''}
+          ${qty > 1 ? `<span class="cart-line">× ${qty} = ${fmt(it.price * qty)}</span>` : ''}`
+    : `<span class="cart-noprice">${esc(t('cart.noPrice'))}</span>`;
   return `
     <article class="cart-item${it.purchased ? ' is-purchased' : ''}" data-id="${esc(it.id)}">
       <button type="button" class="cart-check" role="checkbox" aria-checked="${!!it.purchased}"
@@ -122,14 +163,12 @@ function itemRow(it) {
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg>
       </button>
       <div class="cart-thumb">${
-        it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : '<span aria-hidden="true">🛒</span>'
+        it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : `<span aria-hidden="true">${esc(it.icon || '🛒')}</span>`
       }</div>
       <div class="cart-info">
         <p class="cart-name" dir="auto">${esc(name)}</p>
         <p class="cart-price">
-          <strong>${fmt(it.price)} ${esc(it.currency || 'SAR')}</strong>
-          ${it.oldPrice ? `<s>${fmt(it.oldPrice)}</s>` : ''}
-          ${qty > 1 ? `<span class="cart-line">× ${qty} = ${fmt(line)}</span>` : ''}
+          ${price}
         </p>
         <p class="cart-actions">
           ${it.brochureId ? `<button type="button" class="cart-flyer">${esc(t('cart.viewFlyer'))}</button>` : ''}

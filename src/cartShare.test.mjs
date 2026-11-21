@@ -52,6 +52,25 @@ if (lang === 'en') {
     'the store label comes from the page',
   );
 
+  // Quick-add lines: no store, no price — a "My list" group, left out of the
+  // total and counted beside it.
+  const list = [
+    { id: 'list:bread', store: null, name: 'Bread', nameAr: 'خبز', price: null, qty: 2 },
+    { id: 'list:x', store: null, name: 'Almarai laban', nameAr: null, price: null, qty: 1 },
+    items[0],
+  ];
+  assert.equal(
+    cartShareText(list),
+    ['🛒 Shopping list', '', 'My list', '• Bread × 2', '• Almarai laban', '', 'Panda',
+      '• Almarai Fresh Milk · 1 L — 6.95 SAR', '', '4 items', 'Total: 6.95 SAR (3 without a price)'].join('\n'),
+    'unpriced lines: own group, no price, counted beside the total',
+  );
+  assert.equal(
+    cartShareText(list.slice(0, 2)),
+    ['🛒 Shopping list', '', 'My list', '• Bread × 2', '• Almarai laban', '', '3 items'].join('\n'),
+    'a list with no prices has no total line',
+  );
+
   const ar = execFileSync(process.execPath, [fileURLToPath(import.meta.url)], {
     env: { ...process.env, CART_SHARE_LANG: 'ar' },
     encoding: 'utf8',
@@ -77,6 +96,15 @@ if (lang === 'en') {
       'للشراء: 54.95 ريال',
     ].join('\n'),
     'Arabic: Arabic names first, Arabic labels and currency',
+  );
+  assert.equal(
+    cartShareText([
+      { id: 'list:bread', store: null, name: 'Bread', nameAr: 'خبز', price: null, qty: 1 },
+      items[0],
+    ]),
+    ['🛒 قائمة المشتريات', '', 'قائمتي', '• خبز', '', 'Panda', '• حليب المراعي طازج · 1 L — 6.95 ريال',
+      '', 'عدد المنتجات: 2', 'الإجمالي: 6.95 ريال (منتج واحد بدون سعر)'].join('\n'),
+    'Arabic: My list group and the unpriced count',
   );
   console.log('cart share ar ok');
 }

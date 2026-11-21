@@ -357,9 +357,9 @@ const STRINGS = {
 
     // Cart page
     'cart.title': 'Cart',
-    'cart.lead': 'Products you picked from this week’s brochures — grouped by store, totalled for the till.',
+    'cart.lead': 'Your shopping list: add anything quickly, or pick offers from this week’s brochures — grouped by store, totalled for the till.',
     'cart.empty': 'Your cart is empty',
-    'cart.emptyHint': 'Open a brochure and tap any product to add it here.',
+    'cart.emptyHint': 'Add products above, or open a brochure and tap any product to add it here.',
     'cart.browse': 'Browse brochures',
     'cart.total': 'Total',
     'cart.toBuy': 'To buy',
@@ -383,6 +383,17 @@ const STRINGS = {
     'cart.shareText.count.one': '{count} item',
     'cart.shareText.count.other': '{count} items',
     'cart.shareText.sar': 'SAR',
+    'cart.myList': 'My list',
+    'cart.noPrice': 'No price',
+    'cart.unpriced.one': '{count} without a price',
+    'cart.unpriced.other': '{count} without a price',
+    'cart.quick.title': 'Quick add',
+    'cart.quick.placeholder': 'Add anything — milk, rice, bread…',
+    'cart.quick.inputLabel': 'Add a product to the list',
+    'cart.quick.add': 'Add',
+    'cart.quick.addTyped': 'Add “{name}”',
+    'cart.quick.added': 'Added: {name} ✓',
+    'cart.quick.addItem': 'Add {name} to the list',
 
     // Marketplace (unified results grid + sources strip)
     'market.tapForPrice': 'Tap to see price',
@@ -964,9 +975,9 @@ const STRINGS = {
 
     // Cart page
     'cart.title': 'السلة',
-    'cart.lead': 'المنتجات التي اخترتها من نشرات هذا الأسبوع — مجمَّعة حسب المتجر، ومحسوبة الإجمالي للدفع.',
+    'cart.lead': 'قائمة مشترياتك: أضف أي منتج بسرعة، أو اختر عروضًا من نشرات هذا الأسبوع — مجمَّعة حسب المتجر، ومحسوبة الإجمالي للدفع.',
     'cart.empty': 'سلتك فارغة',
-    'cart.emptyHint': 'افتح نشرة واضغط أي منتج لإضافته هنا.',
+    'cart.emptyHint': 'أضف منتجات من الأعلى، أو افتح نشرة واضغط أي منتج لإضافته هنا.',
     'cart.browse': 'تصفّح النشرات',
     'cart.total': 'الإجمالي',
     'cart.toBuy': 'للشراء',
@@ -990,6 +1001,17 @@ const STRINGS = {
     'cart.shareText.count.one': 'منتج واحد',
     'cart.shareText.count.other': 'عدد المنتجات: {count}',
     'cart.shareText.sar': 'ريال',
+    'cart.myList': 'قائمتي',
+    'cart.noPrice': 'بدون سعر',
+    'cart.unpriced.one': 'منتج واحد بدون سعر',
+    'cart.unpriced.other': '{count} بدون سعر',
+    'cart.quick.title': 'إضافة سريعة',
+    'cart.quick.placeholder': 'أضف أي منتج — حليب، أرز، خبز…',
+    'cart.quick.inputLabel': 'أضف منتجًا إلى القائمة',
+    'cart.quick.add': 'أضف',
+    'cart.quick.addTyped': 'أضف «{name}»',
+    'cart.quick.added': 'تمت الإضافة: {name} ✓',
+    'cart.quick.addItem': 'أضف {name} إلى القائمة',
 
     // Marketplace (unified results grid + sources strip)
     'market.tapForPrice': 'اضغط لعرض السعر',
